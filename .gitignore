@@ -1,0 +1,42 @@
+# env & secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# node
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+*.log
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# cloudflare
+.wrangler/
+.dev.vars
+
+# fly
+fly.toml.local
+
+# os
+.DS_Store
+Thumbs.db
+
+# ide
+.vscode/
+.idea/
+*.swp
