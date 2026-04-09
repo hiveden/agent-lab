@@ -1,0 +1,12 @@
+name = "agent-lab-web"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# Local dev: bindings are consumed via getPlatformProxy() (next-on-pages dev).
+# Secrets live in .dev.vars (gitignored).
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agent-lab-dev"
+database_id = "local-placeholder"

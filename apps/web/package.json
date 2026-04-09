@@ -1,0 +1,32 @@
+{
+  "name": "@agent-lab/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 8788 -H 127.0.0.1",
+    "build": "next build",
+    "pages:build": "next-on-pages",
+    "preview": "pnpm pages:build && wrangler pages dev .vercel/output/static --compatibility-date=2025-04-01 --compatibility-flag=nodejs_compat --port 8788",
+    "deploy": "pnpm pages:build && wrangler pages deploy .vercel/output/static",
+    "db:init": "bash scripts/init-local-db.sh",
+    "db:query": "wrangler d1 execute agent-lab-dev --local --command"
+  },
+  "dependencies": {
+    "@agent-lab/types": "workspace:*",
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.7",
+    "@cloudflare/workers-types": "^4.20250404.0",
+    "@types/node": "^20.17.30",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "wrangler": "^3.114.1"
+  }
+}

@@ -1,0 +1,871 @@
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { ItemStatus, ItemWithState } from '@/lib/types';
+import NavRail from './components/NavRail';
+import ItemsList, { type GradeFilter } from './components/ItemsList';
+import ChatView, { type ChatMsg } from './components/ChatView';
+import TraceDrawer from './components/TraceDrawer';
+import CommandPalette, {
+  type PaletteAction,
+} from './components/CommandPalette';
+import PendingChangesBanner from './components/PendingChangesBanner';
+import { buildMockTrace, type MockTrace } from './traceMock';
+
+const LS = {
+  listW: 'agent-lab.radar.list-w',
+  traceW: 'agent-lab.radar.trace-w',
+  traceOpen: 'agent-lab.radar.trace-open',
+  filter: 'agent-lab.radar.filter',
+  selectedId: 'agent-lab.radar.selected-id',
+};
+
+function loadLS<T>(key: string, fallback: T, parse?: (s: string) => T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    if (v == null) return fallback;
+    return parse ? parse(v) : (JSON.parse(v) as T);
+  } catch {
+    return fallback;
+  }
+}
+
+function rid() {
+  return 'm_' + Math.random().toString(36).slice(2, 10);
+}
+
+interface SessionState {
+  session_id: string | null;
+  messages: ChatMsg[];
+}
+
+export default function RadarWorkspace() {
+  // Data
+  const [items, setItems] = useState<ItemWithState[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  // UI state
+  const [filter, setFilter] = useState<GradeFilter>(() =>
+    loadLS(LS.filter, 'all' as GradeFilter, (s) => s as GradeFilter),
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    loadLS<string | null>(LS.selectedId, null, (s) => (s === 'null' ? null : s)),
+  );
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [listWidth, setListWidth] = useState(() =>
+    loadLS(LS.listW, 340, (s) => parseInt(s, 10) || 340),
+  );
+  const [traceWidth, setTraceWidth] = useState(() =>
+    loadLS(LS.traceW, 440, (s) => parseInt(s, 10) || 440),
+  );
+  const [traceOpen, setTraceOpen] = useState(() =>
+    loadLS(LS.traceOpen, false, (s) => s === 'true'),
+  );
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Pending state changes (batch)
+  const [pending, setPending] = useState<Record<string, ItemStatus>>({});
+  const [applyBusy, setApplyBusy] = useState(false);
+
+  // Per-item chat sessions
+  const [sessions, setSessions] = useState<Record<string, SessionState>>({});
+  const [chatBusy, setChatBusy] = useState(false);
+
+  // Trace currently visible in drawer + highlight span
+  const [activeTrace, setActiveTrace] = useState<MockTrace | null>(null);
+  const [highlightSpanId, setHighlightSpanId] = useState<string | null>(null);
+  const [expandAllSignal, setExpandAllSignal] = useState(0);
+  const [collapseAllSignal, setCollapseAllSignal] = useState(0);
+
+  // Persist UI state
+  useEffect(() => {
+    localStorage.setItem(LS.listW, String(listWidth));
+  }, [listWidth]);
+  useEffect(() => {
+    localStorage.setItem(LS.traceW, String(traceWidth));
+  }, [traceWidth]);
+  useEffect(() => {
+    localStorage.setItem(LS.traceOpen, String(traceOpen));
+  }, [traceOpen]);
+  useEffect(() => {
+    localStorage.setItem(LS.filter, filter);
+  }, [filter]);
+  useEffect(() => {
+    localStorage.setItem(LS.selectedId, selectedId ?? 'null');
+  }, [selectedId]);
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 1800);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Load items — reusable
+  const reloadItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/items?agent_id=radar&limit=400');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { items: ItemWithState[] };
+      setItems(body.items ?? []);
+      setLoadErr(null);
+    } catch (e) {
+      setLoadErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadItems();
+  }, [reloadItems]);
+
+  // Effective status (merges pending over saved)
+  const effectiveStatus = useCallback(
+    (it: ItemWithState): ItemStatus => pending[it.id] ?? it.status,
+    [pending],
+  );
+
+  // Filtered list
+  const filteredItems = useMemo(() => {
+    return items.filter((it) => {
+      if (filter === 'all') return true;
+      return it.grade === filter;
+    });
+  }, [items, filter]);
+
+  // Clamp focusedIndex to filtered range
+  useEffect(() => {
+    if (focusedIndex >= filteredItems.length) {
+      setFocusedIndex(Math.max(0, filteredItems.length - 1));
+    }
+  }, [filteredItems.length, focusedIndex]);
+
+  const selectedItem = useMemo(
+    () => items.find((it) => it.id === selectedId) ?? null,
+    [items, selectedId],
+  );
+
+  const selectItemByIndex = useCallback(
+    (idx: number) => {
+      const it = filteredItems[idx];
+      if (!it) return;
+      setFocusedIndex(idx);
+      setSelectedId(it.id);
+      // Clear drawer trace (will be replaced by next reply)
+      setActiveTrace(null);
+      setHighlightSpanId(null);
+    },
+    [filteredItems],
+  );
+
+  // Load session history when an item is selected the first time
+  useEffect(() => {
+    if (!selectedId) return;
+    if (sessions[selectedId]) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/chat/sessions/${selectedId}`);
+        if (!res.ok) return;
+        const j = (await res.json()) as {
+          session_id: string | null;
+          messages: Array<{ id: string; role: string; content: string }>;
+        };
+        if (!alive) return;
+        const msgs: ChatMsg[] = (j.messages ?? [])
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
+        setSessions((prev) => ({
+          ...prev,
+          [selectedId]: { session_id: j.session_id, messages: msgs },
+        }));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, sessions]);
+
+  // Send message (chat + mock trace)
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!selectedId || !selectedItem) return;
+      if (chatBusy) return;
+      setChatBusy(true);
+
+      const userMsg: ChatMsg = { id: rid(), role: 'user', content: text };
+      const asstMsg: ChatMsg = {
+        id: rid(),
+        role: 'assistant',
+        content: '',
+        pending: true,
+      };
+
+      setSessions((prev) => {
+        const cur = prev[selectedId] ?? { session_id: null, messages: [] };
+        return {
+          ...prev,
+          [selectedId]: {
+            ...cur,
+            messages: [...cur.messages, userMsg, asstMsg],
+          },
+        };
+      });
+
+      let acc = '';
+      let sessionId =
+        sessions[selectedId]?.session_id ?? null;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            item_id: selectedId,
+            session_id: sessionId,
+            message: text,
+          }),
+        });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === '[DONE]') continue;
+            try {
+              const j = JSON.parse(data) as {
+                type?: string;
+                content?: string;
+                session_id?: string;
+              };
+              if (j.type === 'session' && typeof j.session_id === 'string') {
+                sessionId = j.session_id;
+                continue;
+              }
+              if (typeof j.content === 'string') {
+                acc += j.content;
+                setSessions((prev) => {
+                  const cur = prev[selectedId];
+                  if (!cur) return prev;
+                  return {
+                    ...prev,
+                    [selectedId]: {
+                      session_id: sessionId,
+                      messages: cur.messages.map((m) =>
+                        m.id === asstMsg.id
+                          ? { ...m, content: acc, pending: true }
+                          : m,
+                      ),
+                    },
+                  };
+                });
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch (err) {
+        acc = `[错误] ${String(err)}`;
+      }
+
+      // Build mock trace and attach to the assistant message
+      const trace = buildMockTrace({
+        userMessage: text,
+        reply: acc,
+        itemTitle: selectedItem.title,
+        itemUrl: selectedItem.url,
+        itemWhy: selectedItem.why,
+        sessionId,
+        mock: true,
+      });
+
+      setSessions((prev) => {
+        const cur = prev[selectedId];
+        if (!cur) return prev;
+        return {
+          ...prev,
+          [selectedId]: {
+            session_id: sessionId,
+            messages: cur.messages.map((m) =>
+              m.id === asstMsg.id
+                ? { ...m, content: acc, pending: false, trace }
+                : m,
+            ),
+          },
+        };
+      });
+      setActiveTrace(trace);
+      setHighlightSpanId(null);
+      setChatBusy(false);
+    },
+    [selectedId, selectedItem, chatBusy, sessions],
+  );
+
+  // Pending state batch operations
+  const markPending = useCallback(
+    (id: string, status: ItemStatus) => {
+      setPending((prev) => {
+        // Toggle off if repeating the same next state
+        if (prev[id] === status) {
+          const { [id]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [id]: status };
+      });
+    },
+    [],
+  );
+
+  const discardPending = useCallback(() => setPending({}), []);
+
+  const applyPending = useCallback(async () => {
+    const entries = Object.entries(pending);
+    if (entries.length === 0) return;
+    setApplyBusy(true);
+    // Fire all PATCH in parallel
+    const results = await Promise.allSettled(
+      entries.map(([id, status]) =>
+        fetch(`/api/items/${id}/state`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }),
+      ),
+    );
+    // Optimistically update items in place
+    setItems((prev) =>
+      prev.map((it) => {
+        const next = pending[it.id];
+        return next ? { ...it, status: next } : it;
+      }),
+    );
+    setPending({});
+    setApplyBusy(false);
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    setToast(failed ? `Applied (${failed} failed)` : 'Changes applied');
+  }, [pending]);
+
+  // ─── Trigger Radar push flow ───────────────────────────────────────────
+  // Calls /api/cron/radar/trigger → Agent /cron/push,reads SSE progress events
+  // live and builds a growing trace that displays in the right drawer.
+  const [pushBusy, setPushBusy] = useState(false);
+
+  const triggerRadarPush = useCallback(
+    async (limit = 30) => {
+      if (pushBusy) return;
+      setPushBusy(true);
+      setToast('Triggering Radar collection…');
+
+      // Start with an empty push trace and open drawer immediately
+      const trace: MockTrace = {
+        spans: [],
+        totalTokens: 0,
+        totalMs: 0,
+        mock: false,
+        source: 'push',
+      };
+      setActiveTrace({ ...trace });
+      setTraceOpen(true);
+      setHighlightSpanId(null);
+
+      // Kind mapping for backend span kinds → frontend MockSpan SpanKind
+      const mapKind = (k: string): 'tool' | 'llm' | 'system' | 'ctx' | 'stream' => {
+        if (k === 'tool') return 'tool';
+        if (k === 'llm') return 'llm';
+        if (k === 'system') return 'system';
+        return 'ctx';
+      };
+
+      const t0 = Date.now();
+      let receivedResult: {
+        inserted: number;
+        skipped: number;
+        total: number;
+      } | null = null;
+
+      try {
+        const res = await fetch('/api/cron/radar/trigger', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ limit }),
+        });
+        if (!res.ok || !res.body) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === '[DONE]') continue;
+            let ev: Record<string, unknown>;
+            try {
+              ev = JSON.parse(data) as Record<string, unknown>;
+            } catch {
+              continue;
+            }
+            const type = ev.type as string | undefined;
+
+            if (type === 'span') {
+              const id = String(ev.id ?? '');
+              const kind = mapKind(String(ev.kind ?? 'system'));
+              const title = String(ev.title ?? '');
+              const status =
+                (ev.status as 'running' | 'done' | 'failed' | undefined) ??
+                'running';
+              const ms = typeof ev.ms === 'number' ? (ev.ms as number) : 0;
+              const detail = ev.detail as Record<string, unknown> | undefined;
+
+              const sections = detail
+                ? [
+                    {
+                      label: 'detail',
+                      body: JSON.stringify(detail, null, 2),
+                    },
+                  ]
+                : [];
+
+              trace.spans = (() => {
+                const existing = trace.spans.find((s) => s.id === id);
+                if (existing) {
+                  return trace.spans.map((s) =>
+                    s.id === id
+                      ? {
+                          ...s,
+                          title,
+                          status,
+                          ms: ms || s.ms,
+                          sections: sections.length ? sections : s.sections,
+                        }
+                      : s,
+                  );
+                }
+                return [
+                  ...trace.spans,
+                  {
+                    id,
+                    kind,
+                    title,
+                    status,
+                    ms,
+                    sections,
+                  },
+                ];
+              })();
+              trace.totalMs = trace.spans.reduce((a, s) => a + s.ms, 0);
+              setActiveTrace({ ...trace, spans: [...trace.spans] });
+            } else if (type === 'result') {
+              receivedResult = {
+                inserted: Number(ev.inserted ?? 0),
+                skipped: Number(ev.skipped ?? 0),
+                total: Number(ev.total ?? 0),
+              };
+              trace.totalMs = Number(ev.total_ms ?? Date.now() - t0);
+              setActiveTrace({ ...trace, spans: [...trace.spans] });
+            } else if (type === 'error') {
+              setToast(`Push failed: ${String(ev.message ?? 'unknown')}`);
+            }
+          }
+        }
+      } catch (e) {
+        setToast(`Push failed: ${String(e)}`);
+      } finally {
+        setPushBusy(false);
+      }
+
+      if (receivedResult) {
+        setToast(
+          `✓ Collected: ${receivedResult.inserted} new · ${receivedResult.skipped} duplicate`,
+        );
+        // Refetch items list to surface new rows
+        await reloadItems();
+      }
+    },
+    [pushBusy, reloadItems],
+  );
+
+  // Keyboard layer
+  useEffect(() => {
+    function isTyping(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (!t) return false;
+      return (
+        t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.isContentEditable
+      );
+    }
+
+    function onKey(e: KeyboardEvent) {
+      // Cmd+K always works
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+      if (paletteOpen) return;
+
+      // Escape: trace → deselect → nothing
+      if (e.key === 'Escape') {
+        if (traceOpen) {
+          setTraceOpen(false);
+          return;
+        }
+        if (selectedId && !isTyping(e)) {
+          setSelectedId(null);
+          return;
+        }
+      }
+
+      if (isTyping(e)) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'j') {
+        e.preventDefault();
+        if (filteredItems.length === 0) return;
+        const next = Math.min(focusedIndex + 1, filteredItems.length - 1);
+        setFocusedIndex(next);
+        const it = filteredItems[next];
+        if (it) {
+          setSelectedId(it.id);
+          setActiveTrace(null);
+        }
+      } else if (key === 'k') {
+        e.preventDefault();
+        if (filteredItems.length === 0) return;
+        const next = Math.max(focusedIndex - 1, 0);
+        setFocusedIndex(next);
+        const it = filteredItems[next];
+        if (it) {
+          setSelectedId(it.id);
+          setActiveTrace(null);
+        }
+      } else if (key === 't') {
+        e.preventDefault();
+        if (selectedId) setTraceOpen((v) => !v);
+      } else if (key === '/') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      } else if (key === '?') {
+        e.preventDefault();
+        setToast('⌘K search · J/K navigate · T trace · W/D/X mark · Esc back');
+      } else if (key === 'w' || key === 'd' || key === 'x') {
+        e.preventDefault();
+        const it = filteredItems[focusedIndex];
+        if (!it) return;
+        const next: ItemStatus =
+          key === 'w' ? 'watching' : key === 'd' ? 'discussed' : 'dismissed';
+        markPending(it.id, next);
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    paletteOpen,
+    traceOpen,
+    selectedId,
+    filteredItems,
+    focusedIndex,
+    markPending,
+  ]);
+
+  // Palette actions
+  const actions: PaletteAction[] = useMemo(() => {
+    const list: PaletteAction[] = [
+      {
+        id: 'trigger-radar',
+        label: pushBusy
+          ? 'Radar collection running…'
+          : 'Trigger Radar collection',
+        hint: 'Agent',
+        run: () => void triggerRadarPush(30),
+        enabled: !pushBusy,
+      },
+      {
+        id: 'filter-all',
+        label: 'Filter: all',
+        hint: 'Filter',
+        run: () => setFilter('all'),
+      },
+      {
+        id: 'filter-fire',
+        label: 'Filter: fire only',
+        hint: 'Filter',
+        run: () => setFilter('fire'),
+      },
+      {
+        id: 'filter-bolt',
+        label: 'Filter: bolt only',
+        hint: 'Filter',
+        run: () => setFilter('bolt'),
+      },
+      {
+        id: 'filter-bulb',
+        label: 'Filter: bulb only',
+        hint: 'Filter',
+        run: () => setFilter('bulb'),
+      },
+      {
+        id: 'toggle-trace',
+        label: traceOpen ? 'Close trace panel' : 'Open trace panel',
+        hint: 'View',
+        run: () => setTraceOpen((v) => !v),
+        enabled: !!selectedId,
+      },
+      {
+        id: 'expand-all',
+        label: 'Expand all spans',
+        hint: 'View',
+        run: () => setExpandAllSignal((n) => n + 1),
+        enabled: traceOpen,
+      },
+      {
+        id: 'collapse-all',
+        label: 'Collapse all spans',
+        hint: 'View',
+        run: () => setCollapseAllSignal((n) => n + 1),
+        enabled: traceOpen,
+      },
+      {
+        id: 'deselect',
+        label: 'Deselect current item',
+        hint: 'View',
+        run: () => setSelectedId(null),
+        enabled: !!selectedId,
+      },
+      {
+        id: 'mark-watching',
+        label: 'Mark current as watching',
+        hint: 'Action',
+        run: () => selectedId && markPending(selectedId, 'watching'),
+        enabled: !!selectedId,
+      },
+      {
+        id: 'mark-discussed',
+        label: 'Mark current as discussed',
+        hint: 'Action',
+        run: () => selectedId && markPending(selectedId, 'discussed'),
+        enabled: !!selectedId,
+      },
+      {
+        id: 'mark-dismissed',
+        label: 'Mark current as dismissed',
+        hint: 'Action',
+        run: () => selectedId && markPending(selectedId, 'dismissed'),
+        enabled: !!selectedId,
+      },
+    ];
+    return list;
+  }, [traceOpen, selectedId, markPending, pushBusy, triggerRadarPush]);
+
+  // When the user clicks an inline trace capsule
+  const handleOpenFromSpan = useCallback(
+    (trace: MockTrace, spanId: string | null) => {
+      setActiveTrace(trace);
+      setHighlightSpanId(spanId);
+      setTraceOpen(true);
+    },
+    [],
+  );
+
+  const currentMessages: ChatMsg[] = selectedId
+    ? sessions[selectedId]?.messages ?? []
+    : [];
+
+  // Resolve effective status display (for list rows) + merge pending
+  const itemsForList = useMemo(
+    () =>
+      filteredItems.map((it) => ({
+        ...it,
+        status: effectiveStatus(it),
+      })),
+    [filteredItems, effectiveStatus],
+  );
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <div className="brand">agent-lab</div>
+        <div className="crumb">
+          <span className="sep">/</span>
+          <span>radar</span>
+        </div>
+        <div className="topbar-spacer" />
+        <button
+          type="button"
+          className="cmdk-hint"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <span>Search &amp; run</span>
+          <span className="kbd">
+            <kbd className="k">⌘</kbd>
+            <kbd className="k">K</kbd>
+          </span>
+        </button>
+        <span className="pill">
+          {loading
+            ? 'loading…'
+            : loadErr
+              ? 'load error'
+              : `${items.length} items`}
+        </span>
+        <div className="user-dot">A</div>
+      </div>
+
+      <PendingChangesBanner
+        pending={pending}
+        busy={applyBusy}
+        onApply={applyPending}
+        onDiscard={discardPending}
+      />
+
+      <div
+        className={`main ${selectedId ? 'has-selection' : ''}`}
+        style={{ ['--list-w' as string]: `${listWidth}px` }}
+      >
+        <NavRail />
+        <ItemsList
+          items={itemsForList}
+          filter={filter}
+          onFilterChange={(f) => {
+            setFilter(f);
+            setFocusedIndex(0);
+          }}
+          selectedId={selectedId}
+          focusedIndex={focusedIndex}
+          onSelect={selectItemByIndex}
+          pendingMap={pending}
+          listWidth={listWidth}
+          onResize={setListWidth}
+        />
+        <div
+          className={`content ${traceOpen ? 'trace-open' : ''}`}
+          style={{ ['--trace-w' as string]: `${traceWidth}px` }}
+        >
+          {selectedItem ? (
+            <ChatView
+              item={selectedItem}
+              messages={currentMessages}
+              busy={chatBusy}
+              onSend={sendMessage}
+              onOpenTraceFromSpan={handleOpenFromSpan}
+              onToggleTrace={() => setTraceOpen((v) => !v)}
+              traceOpen={traceOpen}
+            />
+          ) : (
+            <div className="chat-col">
+              <div className="empty">
+                <div className="icon">
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </svg>
+                </div>
+                <h2>No resource selected</h2>
+                <p>
+                  Pick an item from the list to start a conversation with Radar.
+                  Use <kbd className="k">J</kbd> / <kbd className="k">K</kbd> to
+                  navigate.
+                </p>
+                <div className="hints">
+                  <span>
+                    <kbd className="k">⌘K</kbd> command palette
+                  </span>
+                  <span>
+                    <kbd className="k">T</kbd> toggle trace
+                  </span>
+                  <span>
+                    <kbd className="k">?</kbd> shortcuts
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          <TraceDrawer
+            open={traceOpen}
+            trace={activeTrace}
+            width={traceWidth}
+            onResize={setTraceWidth}
+            onClose={() => setTraceOpen(false)}
+            highlightSpanId={highlightSpanId}
+            expandAllSignal={expandAllSignal}
+            collapseAllSignal={collapseAllSignal}
+          />
+        </div>
+      </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={items}
+        actions={actions}
+        onPickItem={(it) => {
+          const idx = filteredItems.findIndex((x) => x.id === it.id);
+          if (idx >= 0) {
+            setFocusedIndex(idx);
+          } else {
+            // Item is filtered out — reset filter so it becomes visible
+            setFilter('all');
+            setFocusedIndex(items.findIndex((x) => x.id === it.id));
+          }
+          setSelectedId(it.id);
+          setActiveTrace(null);
+        }}
+      />
+
+      {toast ? <div className="toast">{toast}</div> : null}
+    </div>
+  );
+}

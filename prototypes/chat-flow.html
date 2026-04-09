@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent-lab · Radar</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Warm neutral light — not black, not stark white */
+  --bg:           #fbfaf8;
+  --bg-sunk:      #f5f3ef;
+  --surface:      #ffffff;
+  --surface-hi:   #fcfbf9;
+  --border:       #ebe8e2;
+  --border-hi:    #ddd9d0;
+  --border-strong:#c7c2b6;
+
+  --text:         #1d1e22;
+  --text-2:       #51535c;
+  --text-3:       #858792;
+  --text-faint:   #b5b7bf;
+
+  --accent:       #4f46e5;
+  --accent-2:     #6366f1;
+  --accent-soft:  #eef0ff;
+  --accent-line:  #c7caff;
+
+  --fire:         #e96b28;
+  --fire-soft:    #fdebd8;
+  --bolt:         #3267d6;
+  --bolt-soft:    #e3ecfb;
+  --bulb:         #18935b;
+  --bulb-soft:    #dcf2e5;
+
+  --success:      #15803d;
+  --warn:         #b45309;
+  --danger:       #b91c1c;
+
+  --sans: 'IBM Plex Sans', -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+  --radius:    6px;
+  --radius-sm: 4px;
+  --shadow-sm: 0 1px 2px rgba(20,20,30,0.04);
+  --shadow:    0 1px 3px rgba(20,20,30,0.06), 0 1px 2px rgba(20,20,30,0.04);
+  --shadow-lg: 0 10px 38px -10px rgba(20,20,30,0.16), 0 10px 20px -15px rgba(20,20,30,0.1);
+}
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  font-feature-settings: "ss01", "cv11";
+}
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ─── App scaffold ───────────────────────────────────────────────────────── */
+.app {
+  display: grid;
+  grid-template-rows: 40px 1fr;
+  height: 100vh;
+}
+
+/* ── Topbar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-hi);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.crumb .sep { color: var(--text-faint); }
+.crumb .here { color: var(--text); font-weight: 500; }
+
+.topbar-spacer { flex: 1; }
+
+.cmdk-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 10px;
+  border: 1px solid var(--border-hi);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-3);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all .12s;
+}
+.cmdk-hint:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.cmdk-hint .kbd {
+  display: inline-flex;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.cmdk-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid var(--border-hi);
+  background: var(--surface);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-2);
+  line-height: 1;
+  font-weight: 500;
+}
+
+.pill {
+  padding: 2px 8px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--bg);
+}
+.user-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ─── Main layout: rail | list | content ─────────────────────────────────── */
+.main {
+  display: grid;
+  grid-template-columns: 52px minmax(260px, var(--list-w, 340px)) 1fr;
+  overflow: hidden;
+  min-height: 0;
+  position: relative;
+}
+
+/* ── Nav rail (52px) ── */
+.nav-rail {
+  border-right: 1px solid var(--border);
+  background: var(--surface-hi);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 4px;
+}
+.nav-item {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all .12s;
+  position: relative;
+}
+.nav-item:hover {
+  color: var(--text);
+  background: var(--bg-sunk);
+}
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.nav-item.disabled { opacity: 0.3; cursor: not-allowed; }
+.nav-rail .spacer { flex: 1; }
+.nav-rail .nav-sep {
+  width: 20px;
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
+/* Tooltip (hover) — simple */
+.nav-item[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+
+/* ── Items list column ── */
+.list-col {
+  border-right: 1px solid var(--border);
+  background: var(--surface-hi);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+.list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  flex-shrink: 0;
+}
+.list-head h1 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.list-head .count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.list-head .icon-btn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all .12s;
+}
+.list-head .icon-btn:hover {
+  color: var(--text);
+  background: var(--bg-sunk);
+  border-color: var(--border-hi);
+}
+
+.list-filters {
+  padding: 0 14px 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.list-filters .label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-right: 4px;
+  font-weight: 500;
+}
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .12s;
+}
+.fchip:hover { background: var(--bg-sunk); color: var(--text); }
+.fchip.active {
+  background: var(--surface);
+  border-color: var(--border-hi);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.fchip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.fchip .dot.all { background: var(--text-3); }
+.fchip .dot.fire { background: var(--fire); }
+.fchip .dot.bolt { background: var(--bolt); }
+.fchip .dot.bulb { background: var(--bulb); }
+
+.list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0 14px;
+}
+
+/* Dense item row — Linear-like */
+.item-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  column-gap: 10px;
+  padding: 9px 14px 9px 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  position: relative;
+  transition: background .08s;
+  border-bottom: 1px solid transparent;
+}
+.item-row:hover { background: rgba(0,0,0,0.018); }
+.item-row.selected {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.item-row.focused:not(.selected) {
+  background: var(--bg-sunk);
+  border-left-color: var(--border-strong);
+}
+
+.item-grade {
+  margin-top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.item-grade.fire { background: var(--fire); }
+.item-grade.bolt { background: var(--bolt); }
+.item-grade.bulb { background: var(--bulb); }
+
+.item-main { min-width: 0; }
+.item-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-sub {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.item-sub .src {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text-3);
+}
+.item-sub .sep { color: var(--text-faint); }
+.item-sub .snip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-time {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* Column divider (drag list width) */
+.col-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.col-divider::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: transparent;
+  transition: background .15s;
+}
+.col-divider:hover::after,
+.col-divider.dragging::after { background: var(--accent); }
+
+/* ─── Content column (chat + trace) ────────────────────────────────────── */
+.content {
+  display: grid;
+  grid-template-columns: 1fr 0px 0px;
+  transition: grid-template-columns .22s ease;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+.content.trace-open {
+  grid-template-columns: 1fr 6px var(--trace-w, 440px);
+}
+
+.chat-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  min-width: 0;
+}
+
+/* Empty state when nothing is selected */
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+.empty-card {
+  max-width: 400px;
+}
+.empty .icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  background: var(--surface);
+}
+.empty h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.empty p {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+.empty .hints {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.empty .hints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Chat view ── */
+.chat-head {
+  padding: 12px 20px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-hi);
+  flex-shrink: 0;
+}
+.chat-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.chat-grade {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.chat-grade.fire { background: var(--fire-soft); color: var(--fire); }
+.chat-grade.bolt { background: var(--bolt-soft); color: var(--bolt); }
+.chat-grade.bulb { background: var(--bulb-soft); color: var(--bulb); }
+
+.chat-title {
+  flex: 1;
+  min-width: 0;
+}
+.chat-title h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 3px;
+}
+.chat-title .meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  align-items: center;
+}
+.chat-title .meta a {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.chat-title .meta a:hover { text-decoration: underline; }
+
+.chat-head-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.chat-head-actions .icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all .12s;
+}
+.chat-head-actions .icon-btn:hover {
+  color: var(--text);
+  background: var(--bg-sunk);
+  border-color: var(--border-hi);
+}
+.chat-head-actions .icon-btn.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.chat-why {
+  margin-top: 10px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+  border-left: 2px solid var(--accent-line);
+}
+.chat-why .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.msg { display: flex; flex-direction: column; gap: 3px; }
+.msg.user { align-items: flex-end; }
+.msg.assistant { align-items: flex-start; }
+.msg-meta {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.msg-bubble {
+  max-width: 85%;
+  padding: 9px 13px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.msg.user .msg-bubble {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+.msg.assistant .msg-bubble {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 2px;
+}
+.msg.assistant .msg-bubble strong { font-weight: 600; }
+.msg.assistant .msg-bubble em { color: var(--text-2); font-style: italic; }
+.msg.assistant .msg-bubble p + p { margin-top: 0.7em; }
+.msg.assistant.streaming .msg-bubble::after {
+  content: '▍';
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--accent);
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+
+/* Inline trace button on assistant message */
+.msg-inline-trace {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-hi);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .12s;
+  font-family: var(--mono);
+}
+.msg-inline-trace:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.msg-inline-trace .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Composer */
+.composer {
+  border-top: 1px solid var(--border);
+  background: var(--surface-hi);
+  padding: 10px 16px 12px;
+  flex-shrink: 0;
+}
+.preset-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.preset {
+  font-size: 11.5px;
+  padding: 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .12s;
+}
+.preset:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  padding: 8px 8px 8px 12px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input-row:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.input-row textarea {
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  min-height: 22px;
+  max-height: 120px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.input-row textarea::placeholder { color: var(--text-faint); }
+.send-btn {
+  align-self: flex-end;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background .12s;
+}
+.send-btn:hover:not(:disabled) { background: var(--accent-2); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.send-btn .kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+/* ─── Trace drawer (slides in from right of content) ─────────────────── */
+.trace-divider {
+  background: var(--border);
+  cursor: col-resize;
+  position: relative;
+  transition: background .15s;
+}
+.trace-divider:hover,
+.trace-divider.dragging { background: var(--accent); }
+.trace-divider::before {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+.content:not(.trace-open) .trace-divider { display: none; }
+
+.trace-col {
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.content:not(.trace-open) .trace-col { display: none; }
+
+.trace-head {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-hi);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.trace-head h3 {
+  font-size: 12px;
+  font-weight: 600;
+}
+.trace-head .desc { font-size: 11px; color: var(--text-3); }
+.trace-head .close {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all .12s;
+}
+.trace-head .close:hover {
+  color: var(--text);
+  background: var(--bg-sunk);
+  border-color: var(--border-hi);
+}
+
+.trace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-hi);
+  font-size: 11px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.trace-toolbar .stat b {
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--mono);
+}
+.trace-toolbar .sep { color: var(--text-faint); }
+.trace-toolbar .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+  color: var(--text-2);
+  font-size: 10.5px;
+}
+.trace-toolbar .status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.trace-toolbar .status.running .dot {
+  background: var(--accent);
+  animation: ping 1.4s ease-in-out infinite;
+}
+.trace-toolbar .status.done .dot { background: var(--success); }
+@keyframes ping {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79,70,229,0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(79,70,229,0); }
+}
+.tbtn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all .12s;
+}
+.tbtn:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface); }
+
+.trace-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 16px;
+}
+.trace-empty {
+  margin: 30px auto;
+  max-width: 260px;
+  text-align: center;
+  padding: 20px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+}
+.trace-empty strong { color: var(--text); font-weight: 600; font-size: 12px; display: block; margin-bottom: 4px; }
+
+/* Span tree */
+.span {
+  position: relative;
+  padding: 0 14px;
+}
+.span-row {
+  display: grid;
+  grid-template-columns: 12px 14px auto 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 6px 6px 2px;
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .1s;
+  min-height: 26px;
+}
+.span-row:hover { background: var(--bg-sunk); }
+.span.expanded > .span-row { background: var(--bg-sunk); }
+
+.span-caret {
+  font-size: 8px;
+  color: var(--text-faint);
+  text-align: center;
+  transition: transform .15s ease;
+  font-family: var(--mono);
+}
+.span.expanded > .span-row .span-caret { transform: rotate(90deg); }
+.span:not(.has-body) > .span-row .span-caret { visibility: hidden; }
+
+.span-status .ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  display: block;
+}
+.span.running > .span-row .span-status .ring {
+  border-color: var(--accent);
+  border-top-color: transparent;
+  animation: spin 0.9s linear infinite;
+}
+.span.done > .span-row .span-status .ring {
+  border-color: var(--success);
+  background: var(--success);
+  position: relative;
+}
+.span.done > .span-row .span-status .ring::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.span-kind {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  text-transform: lowercase;
+}
+.span-kind.tool { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.span-kind.llm  { color: var(--warn); border-color: #f3dca8; background: #fef6e4; }
+
+.span-title {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.span-tokens {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+}
+.span-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.span-body {
+  display: none;
+  margin: 3px 4px 6px 32px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text);
+}
+.span.expanded > .span-body { display: block; }
+
+.section + .section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.copy-btn {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: all .12s;
+}
+.copy-btn:hover { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.copy-btn.copied { color: var(--success); border-color: #c5e8d2; }
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  align-items: baseline;
+}
+.kv dt { color: var(--text-3); }
+.kv dd { color: var(--text); word-break: break-word; }
+.kv dd.url { color: var(--accent); }
+
+.codeblock {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 9px 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.codeblock .com { color: var(--text-3); }
+.codeblock .key { color: var(--accent); }
+.codeblock .str { color: var(--success); }
+.codeblock .num { color: var(--warn); }
+
+.search-list {
+  display: flex;
+  flex-direction: column;
+}
+.search-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  font-size: 11.5px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.search-item:last-child { border-bottom: none; }
+.search-item .src {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+  background: var(--bg-sunk);
+  padding: 0 5px;
+  border-radius: 3px;
+}
+.search-item .ttl { color: var(--text); min-width: 0; }
+.search-item .score { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); }
+
+/* ─── Command palette (cmd+k) ─────────────────────────────────────────── */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 30, 0.4);
+  backdrop-filter: blur(2px);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 1000;
+  animation: fadein .12s ease;
+}
+.cmdk-overlay.open { display: flex; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+.cmdk {
+  width: 580px;
+  max-width: 92vw;
+  max-height: 60vh;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: popin .14s ease;
+}
+@keyframes popin {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cmdk-input-row svg { color: var(--text-3); flex-shrink: 0; }
+.cmdk-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+}
+.cmdk-input::placeholder { color: var(--text-faint); }
+.cmdk-hint-esc {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+
+.cmdk-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.cmdk-group {
+  padding: 8px 16px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text);
+  transition: background .08s;
+}
+.cmdk-item:hover,
+.cmdk-item.focused {
+  background: var(--accent-soft);
+}
+.cmdk-item .icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.cmdk-item .grade-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cmdk-item .grade-dot.fire { background: var(--fire); }
+.cmdk-item .grade-dot.bolt { background: var(--bolt); }
+.cmdk-item .grade-dot.bulb { background: var(--bulb); }
+.cmdk-item .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdk-item .hint {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.cmdk-item.focused .hint { color: var(--accent); }
+
+.cmdk-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-hi);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.cmdk-footer span { display: inline-flex; align-items: center; gap: 4px; }
+.cmdk-footer kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border: 1px solid var(--border-hi);
+  background: var(--surface);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-2);
+}
+
+/* ─── Toast (for "copied" feedback) ─────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--text);
+  color: var(--bg);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 2000;
+  box-shadow: var(--shadow-lg);
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ─── Scrollbars ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid var(--bg);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ─── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .main { grid-template-columns: 52px 1fr; }
+  .content { grid-column: 1 / -1; display: none; }
+  .main.has-selection .list-col { display: none; }
+  .main.has-selection .content { display: grid; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════ TOPBAR ═══════════ -->
+  <div class="topbar">
+    <div class="brand">agent-lab</div>
+    <div class="crumb">
+      <span class="sep">/</span>
+      <span>radar</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="cmdk-hint" id="cmdkHint">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span>Search & run</span>
+      <span class="kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+    </button>
+    <span class="pill">prototype v0.5</span>
+    <div class="user-dot">A</div>
+  </div>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <div class="main" id="main">
+
+    <!-- ── Nav rail ── -->
+    <aside class="nav-rail">
+      <button class="nav-item active" data-agent="radar" data-tip="Radar">R</button>
+      <button class="nav-item disabled" data-tip="Pulse · soon">P</button>
+      <button class="nav-item disabled" data-tip="Scout · soon">S</button>
+      <div class="nav-sep"></div>
+      <button class="nav-item" data-tip="All items">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button class="nav-item" data-tip="Watching">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <div class="spacer"></div>
+      <button class="nav-item" data-tip="Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </aside>
+
+    <!-- ── Items list column ── -->
+    <section class="list-col" id="listCol">
+      <div class="list-head">
+        <h1>Radar</h1>
+        <span class="count" id="listCount">12</span>
+        <button class="icon-btn" title="Sort (not wired)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+        </button>
+      </div>
+
+      <div class="list-filters">
+        <span class="label">grade</span>
+        <button class="fchip active" data-grade="all"><span class="dot all"></span>all</button>
+        <button class="fchip" data-grade="fire"><span class="dot fire"></span>fire</button>
+        <button class="fchip" data-grade="bolt"><span class="dot bolt"></span>bolt</button>
+        <button class="fchip" data-grade="bulb"><span class="dot bulb"></span>bulb</button>
+      </div>
+
+      <div class="list-scroll" id="listScroll">
+        <!-- items injected by JS -->
+      </div>
+
+      <div class="col-divider" id="listDivider" title="Drag to resize"></div>
+    </section>
+
+    <!-- ── Content column (chat + trace) ── -->
+    <div class="content" id="content">
+
+      <!-- Chat column -->
+      <div class="chat-col" id="chatCol">
+        <!-- Empty state (shown when no item selected) -->
+        <div class="empty" id="emptyState">
+          <div class="empty-card">
+            <div class="icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            </div>
+            <h2>No resource selected</h2>
+            <p>Pick an item from the list to start a conversation with Radar. Use <kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--border-hi);border-radius:3px;background:var(--surface)">J</kbd> / <kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--border-hi);border-radius:3px;background:var(--surface)">K</kbd> to navigate.</p>
+            <div class="hints">
+              <span><kbd style="font-family:var(--mono);font-size:10px;padding:1px 4px;border:1px solid var(--border-hi);border-radius:3px;background:var(--surface)">⌘K</kbd> command palette</span>
+              <span><kbd style="font-family:var(--mono);font-size:10px;padding:1px 4px;border:1px solid var(--border-hi);border-radius:3px;background:var(--surface)">T</kbd> toggle trace</span>
+              <span><kbd style="font-family:var(--mono);font-size:10px;padding:1px 4px;border:1px solid var(--border-hi);border-radius:3px;background:var(--surface)">?</kbd> shortcuts</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat view (hidden until selection) -->
+        <div class="chat-view" id="chatView" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+          <div class="chat-head">
+            <div class="chat-head-row">
+              <span class="chat-grade" id="chatGrade">fire</span>
+              <div class="chat-title">
+                <h2 id="chatTitle">—</h2>
+                <div class="meta">
+                  <span id="chatSource">—</span>
+                  <a id="chatUrl" href="#" target="_blank">↗ open</a>
+                </div>
+              </div>
+              <div class="chat-head-actions">
+                <button class="icon-btn" id="toggleTraceBtn" title="Toggle trace (t)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+                </button>
+                <button class="icon-btn" title="Mark as watching">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="icon-btn" title="Dismiss">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="chat-why" id="chatWhy">
+              <span class="label">why</span><span id="chatWhyText">—</span>
+            </div>
+          </div>
+
+          <div class="chat-scroll" id="chatScroll"></div>
+
+          <div class="composer">
+            <div class="preset-row" id="presetRow">
+              <button class="preset" data-msg="这个 SDK 和 LangChain 比有什么优势?">和 LangChain 比?</button>
+              <button class="preset" data-msg="它现在生产环境靠谱吗?">生产可用?</button>
+              <button class="preset" data-msg="给我看看最近的 commit 活跃度">最近活跃度</button>
+            </div>
+            <div class="input-row">
+              <textarea id="chatInput" rows="1" placeholder="问 Radar 一些关于这条推荐的问题…"></textarea>
+              <button class="send-btn" id="sendBtn">发送 <span class="kbd">↵</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trace drawer divider -->
+      <div class="trace-divider" id="traceDivider"></div>
+
+      <!-- Trace drawer -->
+      <aside class="trace-col">
+        <div class="trace-head">
+          <h3>Trace</h3>
+          <span class="desc">agent execution log</span>
+          <button class="close" id="closeTrace" title="Close (esc)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="trace-toolbar">
+          <span class="stat">spans <b id="statSpans">0</b></span>
+          <span class="sep">·</span>
+          <span class="stat">tokens <b id="statTokens">—</b></span>
+          <span class="sep">·</span>
+          <span class="stat">latency <b id="statLatency">—</b></span>
+          <span class="status" id="statusBadge"><span class="dot"></span>idle</span>
+        </div>
+        <div style="padding:6px 12px;border-bottom:1px solid var(--border);display:flex;gap:4px;background:var(--surface-hi)">
+          <button class="tbtn" id="expandAll">expand all</button>
+          <button class="tbtn" id="collapseAll">collapse all</button>
+        </div>
+        <div class="trace-scroll">
+          <div class="trace" id="trace"></div>
+          <div class="trace-empty" id="traceEmpty">
+            <strong>No trace yet</strong>
+            Send a message to see the agent's reasoning, tool calls and token budget.
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ COMMAND PALETTE ═══════════ -->
+<div class="cmdk-overlay" id="cmdkOverlay">
+  <div class="cmdk" role="dialog" aria-label="Command palette">
+    <div class="cmdk-input-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input class="cmdk-input" id="cmdkInput" placeholder="Search items, run actions, navigate…" autocomplete="off">
+      <span class="cmdk-hint-esc">esc</span>
+    </div>
+    <div class="cmdk-list" id="cmdkList"></div>
+    <div class="cmdk-footer">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> select</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">copied</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════════════════
+const USER = {
+  identity: 'Alex (薛林) · 7 年全栈,转型 AI Agent',
+  current: '黑马 AI 训练营 第一天',
+  target: '8 月上海求职'
+};
+
+const ITEMS = [
+  { id:'i1',  grade:'fire', title:'Claude Agent SDK', source:'github', time:'2h',
+    summary:'Anthropic 把 CC 内核开放为可编程 SDK,Python 6067⭐/TS 1205⭐',
+    why:'训练营今天开始,直接命中你的学习路径',
+    url:'https://github.com/anthropics/claude-agent-sdk-python' },
+  { id:'i2',  grade:'fire', title:'NASA 用 CC 处理 Artemis II', source:'x', time:'5h',
+    summary:'14000 种中止场景,5 天完成 4-6 月工作量',
+    why:'真实生产案例 + Artemis II 发射日新闻价值',
+    url:'https://x.com' },
+  { id:'i3',  grade:'bolt', title:'open-agent-sdk-typescript', source:'github', time:'1d',
+    summary:'TS 版社区实现,2029⭐,无 CLI 依赖',
+    why:'CC 源码泄漏后的社区响应,值得持续观察',
+    url:'#' },
+  { id:'i4',  grade:'bolt', title:'Cursor 3 Agents Window', source:'hn', time:'1d',
+    summary:'多 agent 并行管理面板 + Design Mode 图片→代码',
+    why:'直接竞品分析,你要做的 agent-lab 需要对标',
+    url:'#' },
+  { id:'i5',  grade:'bulb', title:'gsd v1.34.2 release', source:'github', time:'2d',
+    summary:'headless SDK 全生命周期驱动',
+    why:'WATCHLIST 跟进,版本增量小,备选了解',
+    url:'#' },
+  { id:'i6',  grade:'bolt', title:'EmDash CMS by Cloudflare', source:'hn', time:'2d',
+    summary:'WordPress 继任者,内置 MCP server',
+    why:'工程师自建博客方案,跟你个人站思路合',
+    url:'#' },
+  { id:'i7',  grade:'bolt', title:'tokscale · 多平台 token 追踪', source:'github', time:'3d',
+    summary:'CC/Codex/Cursor/OpenClaw 全平台统计',
+    why:'覆盖你整条 AI 工具链,成本可视化',
+    url:'#' },
+  { id:'i8',  grade:'bulb', title:'Webminal — 15 年 1 台服务器', source:'hn', time:'3d',
+    summary:'1 台 8GB 服务器跑 50 万用户,反云原生',
+    why:'独立开发故事感,跟你 8 月求职方向呼应',
+    url:'#' },
+  { id:'i9',  grade:'fire', title:'Hippo · 生物启发 Agent 记忆', source:'github', time:'4d',
+    summary:'不同于向量记忆的新方案',
+    why:'记忆是 Agent 核心能力,你在学这块',
+    url:'#' },
+  { id:'i10', grade:'bolt', title:'agent-flow · CC 实时可视化', source:'github', time:'5d',
+    summary:'黑盒变透明,节点图展示 agent 思考',
+    why:'直接解决多 agent 调试痛点',
+    url:'#' },
+  { id:'i11', grade:'bulb', title:'V2EX: 全职独立开发一年赚不到 $1000', source:'v2ex', time:'6d',
+    summary:'Go+Python+Vue3 财报 AI 真实复盘',
+    why:'真实失败案例,独立开发前值得看',
+    url:'#' },
+  { id:'i12', grade:'bolt', title:'jsongrep · Rust JSON 查询', source:'github', time:'1w',
+    summary:'比 jq 更快的 JSON 查询语言',
+    why:'CLI 工具箱补充',
+    url:'#' },
+];
+
+const CHAT_HISTORY = {};  // itemId -> [{role, content}]
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const state = {
+  selectedId: null,
+  focusedIndex: 0,
+  filter: 'all',
+  traceOpen: false,
+  busy: false,
+};
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const escapeHtml = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ITEMS LIST
+// ═══════════════════════════════════════════════════════════════════════════
+const listScroll = $('#listScroll');
+const listCount = $('#listCount');
+
+function filteredItems() {
+  return state.filter === 'all' ? ITEMS : ITEMS.filter(i => i.grade === state.filter);
+}
+
+function renderList() {
+  const items = filteredItems();
+  listCount.textContent = items.length;
+  listScroll.innerHTML = items.map((it, idx) => `
+    <div class="item-row ${it.id === state.selectedId ? 'selected' : ''} ${idx === state.focusedIndex ? 'focused' : ''}" data-id="${it.id}" data-idx="${idx}">
+      <span class="item-grade ${it.grade}"></span>
+      <div class="item-main">
+        <div class="item-title">${it.title}</div>
+        <div class="item-sub">
+          <span class="src">${it.source}</span>
+          <span class="sep">·</span>
+          <span class="snip">${it.summary}</span>
+        </div>
+      </div>
+      <span class="item-time">${it.time}</span>
+    </div>
+  `).join('');
+
+  listScroll.querySelectorAll('.item-row').forEach(row => {
+    row.addEventListener('click', () => {
+      state.focusedIndex = parseInt(row.dataset.idx, 10);
+      selectItem(row.dataset.id);
+    });
+  });
+
+  scrollFocusedIntoView();
+}
+
+function scrollFocusedIntoView() {
+  const el = listScroll.querySelector(`.item-row[data-idx="${state.focusedIndex}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+
+function moveFocus(delta) {
+  const items = filteredItems();
+  if (!items.length) return;
+  state.focusedIndex = (state.focusedIndex + delta + items.length) % items.length;
+  renderList();
+}
+
+// Filter chips
+$$('.fchip').forEach(c => {
+  c.addEventListener('click', () => {
+    $$('.fchip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    state.filter = c.dataset.grade;
+    state.focusedIndex = 0;
+    renderList();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SELECTION → CHAT
+// ═══════════════════════════════════════════════════════════════════════════
+const emptyState = $('#emptyState');
+const chatView = $('#chatView');
+const chatScroll = $('#chatScroll');
+const chatTitle = $('#chatTitle');
+const chatSource = $('#chatSource');
+const chatUrl = $('#chatUrl');
+const chatWhyText = $('#chatWhyText');
+const chatGrade = $('#chatGrade');
+const mainEl = $('#main');
+
+function selectItem(id) {
+  const it = ITEMS.find(x => x.id === id);
+  if (!it) return;
+  state.selectedId = id;
+  mainEl.classList.add('has-selection');
+  // Show chat view
+  emptyState.style.display = 'none';
+  chatView.style.display = 'flex';
+  // Populate header
+  chatTitle.textContent = it.title;
+  chatSource.textContent = it.source;
+  chatUrl.href = it.url;
+  chatWhyText.textContent = it.why;
+  chatGrade.textContent = it.grade;
+  chatGrade.className = 'chat-grade ' + it.grade;
+  // Load history (or greet)
+  if (!CHAT_HISTORY[id]) {
+    CHAT_HISTORY[id] = [{
+      role: 'assistant',
+      content: `<p>你好。我是 <strong>Radar</strong>。这条 <em>${escapeHtml(it.title)}</em> 是我刚推给你的 — ${escapeHtml(it.why)}。</p><p>想知道什么?我可以查最新数据、对比竞品,或者结合你的工作场景给建议。</p>`
+    }];
+  }
+  renderChat();
+  renderList();
+  // Clear old trace when switching
+  clearTrace();
+  setStatus('idle');
+}
+
+function renderChat() {
+  const id = state.selectedId;
+  const hist = CHAT_HISTORY[id] || [];
+  chatScroll.innerHTML = hist.map(m => `
+    <div class="msg ${m.role}">
+      <div class="msg-meta">${m.role === 'user' ? 'you' : 'radar'}</div>
+      <div class="msg-bubble">${m.role === 'user' ? escapeHtml(m.content) : m.content}</div>
+      ${m.role === 'assistant' && m.hasTrace ? `<button class="msg-inline-trace" data-trace-open="1"><span class="dot"></span>show trace ${m.spanCount || ''} spans</button>` : ''}
+    </div>
+  `).join('');
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  // Wire inline trace buttons
+  chatScroll.querySelectorAll('.msg-inline-trace').forEach(b => {
+    b.addEventListener('click', () => openTrace());
+  });
+}
+
+function addUserMsg(text) {
+  const id = state.selectedId;
+  CHAT_HISTORY[id].push({ role: 'user', content: text });
+  renderChat();
+}
+
+function addAssistantMsg(html, opts={}) {
+  const id = state.selectedId;
+  const m = { role: 'assistant', content: html, ...opts };
+  CHAT_HISTORY[id].push(m);
+  renderChat();
+  return m;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRACE
+// ═══════════════════════════════════════════════════════════════════════════
+const content = $('#content');
+const trace = $('#trace');
+const traceEmpty = $('#traceEmpty');
+const statSpans = $('#statSpans');
+const statTokens = $('#statTokens');
+const statLatency = $('#statLatency');
+const statusBadge = $('#statusBadge');
+const toggleTraceBtn = $('#toggleTraceBtn');
+
+let totalTokens = 0;
+let traceStart = 0;
+
+function openTrace() {
+  state.traceOpen = true;
+  content.classList.add('trace-open');
+  toggleTraceBtn.classList.add('on');
+}
+function closeTrace() {
+  state.traceOpen = false;
+  content.classList.remove('trace-open');
+  toggleTraceBtn.classList.remove('on');
+}
+function toggleTrace() { state.traceOpen ? closeTrace() : openTrace(); }
+toggleTraceBtn.addEventListener('click', toggleTrace);
+$('#closeTrace').addEventListener('click', closeTrace);
+
+function clearTrace() {
+  trace.innerHTML = '';
+  totalTokens = 0;
+  traceStart = Date.now();
+  traceEmpty.style.display = '';
+  refreshStats();
+}
+function setStatus(state_) {
+  statusBadge.className = 'status ' + state_;
+  statusBadge.innerHTML = `<span class="dot"></span>${state_}`;
+}
+function refreshStats() {
+  statSpans.textContent = trace.children.length;
+  statTokens.textContent = totalTokens ? totalTokens.toString() : '—';
+  if (trace.children.length) {
+    statLatency.textContent = ((Date.now() - traceStart) / 1000).toFixed(2) + 's';
+  } else {
+    statLatency.textContent = '—';
+  }
+}
+
+function addSpan({ kind='system', title, sections, tokens }) {
+  traceEmpty.style.display = 'none';
+  const span = document.createElement('div');
+  span.className = 'span running' + (sections && sections.length ? ' has-body' : '');
+  span.innerHTML = `
+    <div class="span-row">
+      <span class="span-caret">▶</span>
+      <span class="span-status"><span class="ring"></span></span>
+      <span class="span-kind ${kind}">${kind}</span>
+      <span class="span-title">${title}</span>
+      ${tokens ? `<span class="span-tokens">${tokens} tok</span>` : '<span></span>'}
+      <span class="span-time">…</span>
+    </div>
+    <div class="span-body">
+      ${(sections || []).map((s, i) => `
+        <div class="section">
+          <div class="section-head">
+            <span class="section-label">${s.label}</span>
+            ${s.copy ? `<button class="copy-btn" data-copy="${i}">copy</button>` : ''}
+          </div>
+          <div data-content="${i}">${s.body}</div>
+          ${s.copy ? `<template data-raw="${i}">${escapeHtml(s.copy)}</template>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+  span.querySelector('.span-row').addEventListener('click', () => {
+    if (span.classList.contains('has-body')) span.classList.toggle('expanded');
+  });
+  span.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = btn.dataset.copy;
+      const tpl = span.querySelector(`template[data-raw="${idx}"]`);
+      if (tpl) {
+        const txt = tpl.innerHTML.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+        navigator.clipboard.writeText(txt);
+        btn.textContent = 'copied';
+        btn.classList.add('copied');
+        showToast('copied to clipboard');
+        setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1200);
+      }
+    });
+  });
+  trace.appendChild(span);
+  refreshStats();
+  return span;
+}
+
+function finishSpan(span, ms) {
+  span.classList.remove('running');
+  span.classList.add('done');
+  const t = span.querySelector('.span-time');
+  if (t) t.textContent = ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed(2)}s`;
+}
+
+$('#expandAll').addEventListener('click', () =>
+  $$('.span.has-body').forEach(s => s.classList.add('expanded')));
+$('#collapseAll').addEventListener('click', () =>
+  $$('.span.expanded').forEach(s => s.classList.remove('expanded')));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPONSE MOCK + HIGHLIGHTER
+// ═══════════════════════════════════════════════════════════════════════════
+const RESPONSES = {
+  langchain: `<p>它和 <strong>LangChain</strong> 的核心差异有三处。</p>
+<p><strong>抽象层级。</strong> LangChain 是通用框架,试图覆盖所有 provider;Claude Agent SDK 只服务 Anthropic 自家模型,所以提示词和工具调用都贴着 Claude 的特性,延迟更低。</p>
+<p><strong>上下文管理。</strong> SDK 内置 Claude Code 的整套上下文压缩和文件管理逻辑,这些在 LangChain 里要自己拼装。</p>
+<p><strong>学习曲线。</strong> LangChain 概念多 (Chain / Agent / Memory / Tool);SDK 接口直接 — 一组 system prompt + tools,它跑 agent loop。</p>
+<p>建议两个都学。先用 SDK 跑通最简 Agent 理解原理,再切 LangChain 看它怎么解决多 provider 抽象。</p>`,
+  production: `<p><strong>结论:可以小规模生产,但有保留。</strong></p>
+<p><strong>支持。</strong> Anthropic 官方维护;6 067 ⭐ 增长曲线陡;23 个 open issues 一周内都有官方回复。</p>
+<p><strong>风险。</strong> 版本号还在 0.x,API 可能 break;TypeScript 版本比 Python 落后两个 minor 版本;没内置 memory 持久化。</p>
+<p>判断:内部工具或 MVP 放心用;客户生产环境建议固定 commit hash,等 1.0 再升。</p>`,
+  commits: `<p>查到了。最近 30 天 <strong>87 次 commit</strong>,15 位活跃 contributor。</p>
+<p>最新五次提交:</p>
+<p><em>2 小时前</em> — feat: streaming tool use (#312)<br>
+<em>6 小时前</em> — fix: token counting for Haiku 4.5<br>
+<em>昨天</em> — docs: cookbook for multi-agent loops<br>
+<em>2 天前</em> — feat: file_search tool primitive<br>
+<em>3 天前</em> — chore: bump anthropic-py to 0.45</p>
+<p><strong>信号。</strong> tool use 和 multi-agent 是当前迭代重点,对应你训练营第二周方向。</p>`,
+  default: `<p>这是个好问题。结合你的训练营进度 —</p>
+<p>这条资源的核心价值在于把一个生产级 Agent 的内部逻辑开放出来,不是从零造轮子。对你"做中学"的路径特别合适 — 先用它的高层接口跑通完整 Agent 理解原理,再深入实现。</p>
+<p>想我深入哪个方向?告诉我,我去查最新数据。</p>`
+};
+
+function pickResponse(msg) {
+  const m = msg.toLowerCase();
+  if (m.includes('langchain') || m.includes('对比') || m.includes('和 lang')) return RESPONSES.langchain;
+  if (m.includes('生产') || m.includes('靠谱') || m.includes('稳定')) return RESPONSES.production;
+  if (m.includes('commit') || m.includes('活跃') || m.includes('更新')) return RESPONSES.commits;
+  return RESPONSES.default;
+}
+function pickTools(msg) {
+  const m = msg.toLowerCase();
+  if (m.includes('commit') || m.includes('活跃') || m.includes('更新') || m.includes('生产') || m.includes('靠谱')) return ['github'];
+  if (m.includes('langchain') || m.includes('对比') || m.includes('和 lang')) return ['web_search'];
+  return [];
+}
+function hl(code) {
+  return escapeHtml(code)
+    .replace(/(#.*?$)/gm, '<span class="com">$1</span>')
+    .replace(/&quot;([^&]*?)&quot;/g, '<span class="str">"$1"</span>')
+    .replace(/\b(\d+)\b/g, '<span class="num">$1</span>')
+    .replace(/^(\s*)([a-z_][a-z0-9_]*)(\s*[:=])/gmi, '$1<span class="key">$2</span>$3');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEND / FLOW
+// ═══════════════════════════════════════════════════════════════════════════
+const chatInput = $('#chatInput');
+const sendBtn = $('#sendBtn');
+
+async function runFlow(userMsg) {
+  if (state.busy || !state.selectedId) return;
+  state.busy = true;
+  sendBtn.disabled = true;
+  clearTrace();
+  setStatus('running');
+
+  const item = ITEMS.find(x => x.id === state.selectedId);
+  addUserMsg(userMsg);
+
+  // 1. Receive
+  let sp = addSpan({
+    kind: 'system',
+    title: 'receive_message',
+    sections: [
+      { label: 'message', body: `<div class="codeblock">${escapeHtml(userMsg)}</div>` },
+      { label: 'context', body: `<dl class="kv">
+        <dt>session_id</dt><dd>sess_a3f4e2…d21</dd>
+        <dt>item_id</dt><dd>${item.id}</dd>
+        <dt>turn</dt><dd>${(CHAT_HISTORY[item.id].length / 2) | 0}</dd>
+      </dl>` }
+    ]
+  });
+  await sleep(180); finishSpan(sp, 180);
+
+  // 2. Load context
+  sp = addSpan({
+    kind: 'system',
+    title: 'load_context · D1.items + USER.md',
+    sections: [
+      { label: 'item (from D1.items)', body: `<dl class="kv">
+        <dt>title</dt><dd>${item.title}</dd>
+        <dt>grade</dt><dd>${item.grade}</dd>
+        <dt>url</dt><dd class="url">${item.url}</dd>
+        <dt>why</dt><dd>${item.why}</dd>
+      </dl>` },
+      { label: 'user profile (from USER.md)', body: `<dl class="kv">
+        <dt>identity</dt><dd>${USER.identity}</dd>
+        <dt>current</dt><dd>${USER.current}</dd>
+        <dt>target</dt><dd>${USER.target}</dd>
+      </dl>` }
+    ]
+  });
+  await sleep(220); finishSpan(sp, 220);
+
+  // 3. System prompt
+  const systemPrompt =
+`你是 Radar,Alex 的创意发现引擎。
+任务: 回答 Alex 关于他正在追问的推荐条目的问题。
+
+== 当前条目 ==
+- title: ${item.title}
+- url:   ${item.url}
+- why:   ${item.why}
+- gist:  ${item.summary}
+
+== Alex 上下文 ==
+- ${USER.identity}
+- 当前: ${USER.current}
+- 目标: ${USER.target}
+
+== 行为准则 ==
+1. 像朋友分享 - 不要写报告体
+2. 必须结合 Alex 的进度和目标
+3. 不确定的事实必须用工具查证, 严禁编造
+4. 关键数字(stars/issues/版本) 优先 fetch_github
+5. 竞品对比用 web_search, 不凭印象
+
+== 可用工具 ==
+- fetch_github(repo)
+- web_search(query)
+- read_user_todos()`;
+
+  sp = addSpan({
+    kind: 'llm',
+    title: 'compose_system_prompt',
+    tokens: 312,
+    sections: [
+      { label: 'system prompt (sent verbatim)', body: `<div class="codeblock">${hl(systemPrompt)}</div>`, copy: systemPrompt }
+    ]
+  });
+  totalTokens += 312;
+  await sleep(160); finishSpan(sp, 160);
+
+  // 4. Reasoning
+  const tools = pickTools(userMsg);
+  sp = addSpan({
+    kind: 'llm',
+    title: tools.length ? 'reason · decide_tool_use' : 'reason · direct_answer',
+    tokens: 64,
+    sections: [
+      { label: 'request', body: `<dl class="kv">
+        <dt>model</dt><dd>glm-4.6</dd>
+        <dt>temperature</dt><dd>0.7</dd>
+        <dt>max_tokens</dt><dd>2048</dd>
+      </dl>` },
+      { label: 'decision', body: tools.length
+        ? `<div>需要实时数据。计划调用 <code style="font-family:var(--mono);background:var(--accent-soft);padding:1px 5px;border-radius:3px;color:var(--accent);font-size:11px">${tools.join('</code> + <code style="font-family:var(--mono);background:var(--accent-soft);padding:1px 5px;border-radius:3px;color:var(--accent);font-size:11px">')}</code></div>`
+        : `<div>凭已有知识可以回答。直接生成。</div>` }
+    ]
+  });
+  totalTokens += 64;
+  await sleep(620); finishSpan(sp, 620);
+
+  // 5. Tool calls
+  if (tools.includes('github')) {
+    const ginput = `{ "repo": "anthropics/claude-agent-sdk-python" }`;
+    const goutput = `{
+  "stars": 6067,
+  "forks": 412,
+  "issues_open": 23,
+  "issues_closed_30d": 187,
+  "commits_30d": 87,
+  "contributors_30d": 15,
+  "last_commit": "2 hours ago",
+  "last_release": "v0.7.2 (3d)",
+  "topics": ["agent", "llm", "anthropic", "tool-use"]
+}`;
+    sp = addSpan({
+      kind: 'tool',
+      title: 'fetch_github · anthropics/claude-agent-sdk-python',
+      sections: [
+        { label: 'input',  body: `<div class="codeblock">${hl(ginput)}</div>`,  copy: ginput },
+        { label: 'output', body: `<div class="codeblock">${hl(goutput)}</div>`, copy: goutput }
+      ]
+    });
+    await sleep(900); finishSpan(sp, 900);
+  }
+
+  if (tools.includes('web_search')) {
+    const sinput = `{
+  "query": "Claude Agent SDK vs LangChain comparison",
+  "max_results": 5
+}`;
+    sp = addSpan({
+      kind: 'tool',
+      title: 'web_search · "Claude Agent SDK vs LangChain"',
+      sections: [
+        { label: 'input', body: `<div class="codeblock">${hl(sinput)}</div>`, copy: sinput },
+        { label: 'top results', body: `<div class="search-list">
+          <div class="search-item"><span class="src">HN</span><span class="ttl">Why I switched from LangChain to Claude Agent SDK</span><span class="score">234↑</span></div>
+          <div class="search-item"><span class="src">reddit</span><span class="ttl">r/LocalLLaMA benchmark</span><span class="score">94↑</span></div>
+          <div class="search-item"><span class="src">blog</span><span class="ttl">Anthropic 官方对比文 (2026-04-01)</span><span class="score">—</span></div>
+          <div class="search-item"><span class="src">x</span><span class="ttl">@swyx 观点</span><span class="score">—</span></div>
+          <div class="search-item"><span class="src">juejin</span><span class="ttl">中文社区评测</span><span class="score">138↑</span></div>
+        </div>` }
+      ]
+    });
+    await sleep(1100); finishSpan(sp, 1100);
+  }
+
+  // 6. Synthesis
+  if (tools.length > 0) {
+    sp = addSpan({
+      kind: 'llm',
+      title: 'synthesize · with_tool_results',
+      tokens: 836,
+      sections: [
+        { label: 'token budget', body: `<dl class="kv">
+          <dt>system</dt><dd>312</dd>
+          <dt>history</dt><dd>~80</dd>
+          <dt>tool_results</dt><dd>~420</dd>
+          <dt>user_message</dt><dd>~24</dd>
+          <dt><strong>total in</strong></dt><dd><strong>≈ 836</strong></dd>
+        </dl>` }
+      ]
+    });
+    totalTokens += 836;
+    await sleep(680); finishSpan(sp, 680);
+  }
+
+  // 7. Stream
+  sp = addSpan({
+    kind: 'llm',
+    title: 'stream_response · glm-4.6',
+    sections: [
+      { label: 'sink', body: `<div style="font-size:12px;color:var(--text-2)">流式写入 chat_messages + 返回到前端。</div>` }
+    ]
+  });
+
+  const reply = pickResponse(userMsg).trim();
+  const msg = addAssistantMsg('');
+  const bubbleEl = chatScroll.querySelector('.msg.assistant:last-child .msg-bubble');
+  const msgEl = chatScroll.querySelector('.msg.assistant:last-child');
+  msgEl.classList.add('streaming');
+  await streamHtml(bubbleEl, reply, 14);
+  msg.content = reply;
+  msgEl.classList.remove('streaming');
+  finishSpan(sp, reply.length * 14);
+
+  // 8. Persist
+  sp = addSpan({
+    kind: 'system',
+    title: 'persist · D1.chat_messages',
+    sections: [
+      { label: 'writes', body: `<dl class="kv">
+        <dt>user</dt><dd>${userMsg.length} chars</dd>
+        <dt>assistant</dt><dd>≈ ${reply.replace(/<[^>]+>/g,'').length} chars</dd>
+      </dl>` }
+    ]
+  });
+  await sleep(140); finishSpan(sp, 140);
+
+  setStatus('done');
+  refreshStats();
+
+  // Mark last assistant with trace info for inline "show trace" button
+  msg.hasTrace = true;
+  msg.spanCount = trace.children.length;
+  renderChat();
+
+  state.busy = false;
+  sendBtn.disabled = false;
+}
+
+async function streamHtml(target, html, charDelay) {
+  let i = 0, inTag = false, acc = '';
+  while (i < html.length) {
+    const ch = html[i];
+    acc += ch;
+    if (ch === '<') inTag = true;
+    if (ch === '>') inTag = false;
+    target.innerHTML = acc;
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+    i++;
+    if (!inTag) await sleep(ch === '\n' ? 18 : charDelay);
+  }
+}
+
+function doSend() {
+  const v = chatInput.value.trim();
+  if (!v || state.busy || !state.selectedId) return;
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  runFlow(v);
+}
+sendBtn.addEventListener('click', doSend);
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    doSend();
+  }
+});
+chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+});
+$$('.preset').forEach(b => {
+  b.addEventListener('click', () => {
+    if (state.busy) return;
+    chatInput.value = b.dataset.msg;
+    doSend();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMAND PALETTE
+// ═══════════════════════════════════════════════════════════════════════════
+const cmdkOverlay = $('#cmdkOverlay');
+const cmdkInput = $('#cmdkInput');
+const cmdkList = $('#cmdkList');
+let cmdkFocused = 0;
+let cmdkResults = [];
+
+const ACTIONS = [
+  { id:'filter-all',  label:'Show all items',     icon:'list', hint:'Filter', run: () => setFilterChip('all')  },
+  { id:'filter-fire', label:'Filter: fire only',  icon:'list', hint:'Filter', run: () => setFilterChip('fire') },
+  { id:'filter-bolt', label:'Filter: bolt only',  icon:'list', hint:'Filter', run: () => setFilterChip('bolt') },
+  { id:'filter-bulb', label:'Filter: bulb only',  icon:'list', hint:'Filter', run: () => setFilterChip('bulb') },
+  { id:'toggle-trace',label:'Toggle trace panel', icon:'list', hint:'View',   run: () => toggleTrace() },
+  { id:'expand-all',  label:'Expand all trace spans', icon:'list', hint:'View', run: () => $('#expandAll').click() },
+  { id:'deselect',    label:'Deselect current item',  icon:'list', hint:'View', run: () => deselectItem() },
+];
+
+function setFilterChip(g) {
+  $$('.fchip').forEach(x => x.classList.toggle('active', x.dataset.grade === g));
+  state.filter = g;
+  state.focusedIndex = 0;
+  renderList();
+}
+
+function deselectItem() {
+  state.selectedId = null;
+  mainEl.classList.remove('has-selection');
+  emptyState.style.display = 'flex';
+  chatView.style.display = 'none';
+  renderList();
+  clearTrace();
+  closeTrace();
+}
+
+function openCmdk() {
+  cmdkOverlay.classList.add('open');
+  cmdkInput.value = '';
+  cmdkInput.focus();
+  renderCmdk('');
+}
+function closeCmdk() { cmdkOverlay.classList.remove('open'); }
+
+$('#cmdkHint').addEventListener('click', openCmdk);
+
+function renderCmdk(q) {
+  const query = q.toLowerCase().trim();
+  const items = ITEMS.filter(it =>
+    !query || it.title.toLowerCase().includes(query) || it.summary.toLowerCase().includes(query)
+  ).slice(0, 8);
+  const actions = ACTIONS.filter(a =>
+    !query || a.label.toLowerCase().includes(query)
+  );
+  cmdkResults = [
+    ...items.map(it => ({ type: 'item', item: it })),
+    ...actions.map(a => ({ type: 'action', action: a })),
+  ];
+  cmdkFocused = 0;
+
+  let html = '';
+  if (items.length) {
+    html += `<div class="cmdk-group">Resources</div>`;
+    items.forEach((it, i) => {
+      html += `<div class="cmdk-item" data-idx="${i}">
+        <span class="grade-dot ${it.grade}"></span>
+        <span class="label">${it.title}</span>
+        <span class="hint">${it.source}</span>
+      </div>`;
+    });
+  }
+  if (actions.length) {
+    html += `<div class="cmdk-group">Actions</div>`;
+    actions.forEach((a, i) => {
+      const idx = items.length + i;
+      html += `<div class="cmdk-item" data-idx="${idx}">
+        <span class="icon">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </span>
+        <span class="label">${a.label}</span>
+        <span class="hint">${a.hint}</span>
+      </div>`;
+    });
+  }
+  if (!html) {
+    html = `<div style="padding:30px;text-align:center;color:var(--text-3);font-size:12.5px">No results for "${escapeHtml(q)}"</div>`;
+  }
+  cmdkList.innerHTML = html;
+  updateCmdkFocus();
+
+  cmdkList.querySelectorAll('.cmdk-item').forEach(el => {
+    el.addEventListener('click', () => {
+      cmdkFocused = parseInt(el.dataset.idx, 10);
+      executeCmdkFocused();
+    });
+    el.addEventListener('mouseenter', () => {
+      cmdkFocused = parseInt(el.dataset.idx, 10);
+      updateCmdkFocus();
+    });
+  });
+}
+
+function updateCmdkFocus() {
+  cmdkList.querySelectorAll('.cmdk-item').forEach((el, i) => {
+    el.classList.toggle('focused', i === cmdkFocused);
+  });
+  const focused = cmdkList.querySelector('.cmdk-item.focused');
+  if (focused) focused.scrollIntoView({ block: 'nearest' });
+}
+
+function moveCmdkFocus(delta) {
+  if (!cmdkResults.length) return;
+  cmdkFocused = (cmdkFocused + delta + cmdkResults.length) % cmdkResults.length;
+  updateCmdkFocus();
+}
+
+function executeCmdkFocused() {
+  const r = cmdkResults[cmdkFocused];
+  if (!r) return;
+  closeCmdk();
+  if (r.type === 'item') {
+    const idx = ITEMS.findIndex(x => x.id === r.item.id);
+    state.focusedIndex = idx;
+    selectItem(r.item.id);
+  } else if (r.type === 'action') {
+    r.action.run();
+  }
+}
+
+cmdkInput.addEventListener('input', e => renderCmdk(e.target.value));
+cmdkInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveCmdkFocus(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveCmdkFocus(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); executeCmdkFocused(); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeCmdk(); }
+});
+cmdkOverlay.addEventListener('click', (e) => {
+  if (e.target === cmdkOverlay) closeCmdk();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL KEYBOARD LAYER
+// ═══════════════════════════════════════════════════════════════════════════
+function isTypingInField(e) {
+  const t = e.target;
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
+}
+
+window.addEventListener('keydown', (e) => {
+  // Cmd+K / Ctrl+K always works
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openCmdk();
+    return;
+  }
+
+  // If palette open, let its own handler manage
+  if (cmdkOverlay.classList.contains('open')) return;
+
+  // Escape: close trace → deselect → close palette
+  if (e.key === 'Escape') {
+    if (state.traceOpen) { closeTrace(); return; }
+    if (state.selectedId && !isTypingInField(e)) { deselectItem(); return; }
+  }
+
+  // If typing in textarea/input, don't hijack j/k/t/etc.
+  if (isTypingInField(e)) return;
+
+  if (e.key === 'j') { e.preventDefault(); moveFocus(1); selectFocused(); }
+  else if (e.key === 'k') { e.preventDefault(); moveFocus(-1); selectFocused(); }
+  else if (e.key === 't') { e.preventDefault(); if (state.selectedId) toggleTrace(); }
+  else if (e.key === '/') { e.preventDefault(); openCmdk(); }
+  else if (e.key === '?') { e.preventDefault(); showHelp(); }
+});
+
+function selectFocused() {
+  const items = filteredItems();
+  const it = items[state.focusedIndex];
+  if (it) selectItem(it.id);
+}
+
+function showHelp() {
+  showToast('⌘K search · J/K navigate · T trace · / search · Esc back');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIST WIDTH DIVIDER
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  const divider = $('#listDivider');
+  const KEY = 'agent-lab.proto.list-w';
+  const MIN = 260, MAX_PCT = 0.55;
+
+  const saved = localStorage.getItem(KEY);
+  if (saved) $('#main').style.setProperty('--list-w', saved);
+
+  let dragging = false;
+  divider.addEventListener('mousedown', (e) => {
+    dragging = true;
+    divider.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const m = $('#main').getBoundingClientRect();
+    let w = e.clientX - m.left - 52;  // minus nav rail
+    if (w < MIN) w = MIN;
+    if (w > m.width * MAX_PCT) w = m.width * MAX_PCT;
+    $('#main').style.setProperty('--list-w', w + 'px');
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    const v = $('#main').style.getPropertyValue('--list-w');
+    if (v) localStorage.setItem(KEY, v);
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRACE WIDTH DIVIDER
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  const divider = $('#traceDivider');
+  const KEY = 'agent-lab.proto.trace-w';
+  const MIN = 320, MAX = 720;
+
+  const saved = localStorage.getItem(KEY);
+  if (saved) content.style.setProperty('--trace-w', saved);
+
+  let dragging = false;
+  divider.addEventListener('mousedown', (e) => {
+    if (!state.traceOpen) return;
+    dragging = true;
+    divider.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const rect = content.getBoundingClientRect();
+    let w = rect.right - e.clientX;
+    if (w < MIN) w = MIN;
+    if (w > MAX) w = MAX;
+    content.style.setProperty('--trace-w', w + 'px');
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    const v = content.style.getPropertyValue('--trace-w');
+    if (v) localStorage.setItem(KEY, v);
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════════════════
+const toast = $('#toast');
+let toastTimer = null;
+function showToast(text) {
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+renderList();
+</script>
+</body>
+</html>

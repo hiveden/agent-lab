@@ -1,0 +1,8 @@
+node_modules
+.next
+.vercel
+.wrangler
+.open-next
+.dev.vars
+*.log
+.DS_Store
