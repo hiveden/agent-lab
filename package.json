@@ -1,0 +1,16 @@
+{
+  "name": "agent-lab",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Personal AI agent platform — Next.js + Python agents",
+  "scripts": {
+    "dev:web": "pnpm --filter @agent-lab/web dev",
+    "build:web": "pnpm --filter @agent-lab/web build",
+    "deploy:web": "pnpm --filter @agent-lab/web deploy"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

@@ -40,8 +40,9 @@
 
 ---
 
-## Phase 2 — 多 Agent 扩展
+## Phase 2 — 多 Agent 扩展 + UI 升级
 
+- **UI 重设计**(Phase 1 是最简可用版,Phase 2 重做):统一风格、视觉打磨、对话体验完善
 - 加 Pulse Agent(复制 radar 改 prompt)
 - 加 TTS Quality Agent(读 tts-agent-harness 的 chunks.json,给发音修复建议)
 - LangChain → LangGraph 重写对话链
