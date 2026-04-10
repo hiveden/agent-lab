@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import time
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -10,7 +12,7 @@ from agent_lab_shared.config import settings
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .chains.chat import chat_stream
 from .push import event_to_sse, run_push_stream
@@ -25,19 +27,16 @@ app.add_middleware(
 )
 
 
-class ChatRequest(BaseModel):
-    """对齐 apps/web 的 /api/chat 转发契约。
+class ChatMessage(BaseModel):
+    role: str
+    content: str
 
-    - session_id / item_id 由 Web 侧持久化和传递,Radar 内部不使用
-    - message 是用户最新一轮的消息(单轮);多轮历史在 Phase 2 由 Web 加载后传入
-    - item 可选,如果带上则注入到 system prompt 提供条目上下文
-    """
 
-    session_id: str | None = None
-    item_id: str | None = None
-    message: str
-    item: dict[str, Any] | None = None
-    history: list[dict[str, Any]] | None = None
+class ChatCompletionRequest(BaseModel):
+    model: str = "radar"
+    messages: list[ChatMessage]
+    stream: bool = False
+    temperature: float | None = None
 
 
 @app.get("/health")
@@ -45,31 +44,61 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-async def _sse_iter(
-    messages: list[dict[str, Any]], item: dict[str, Any] | None
-) -> AsyncIterator[bytes]:
-    """SSE 输出,chunk 格式与 apps/web 解析器对齐:{"type":"delta","content":"..."}"""
+async def _openai_sse_iter(messages: list[dict[str, Any]]) -> AsyncIterator[bytes]:
+    """SSE 输出, 完全对齐 OpenAI chat.completion.chunk 格式。"""
+    chat_id = f"chatcmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+    
+    # 提取 system_message 作为 item context (可选)
+    system_msg = next((m["content"] for m in messages if m["role"] == "system"), None)
+    item_ctx = {"summary": system_msg} if system_msg else None
+
+    # 去掉 system message,因为 chain 里有自己的 template
+    user_messages = [m for m in messages if m["role"] != "system"]
+
     try:
-        async for chunk in chat_stream(messages, item):
-            payload = json.dumps(
-                {"type": "delta", "content": chunk}, ensure_ascii=False
-            )
-            yield f"data: {payload}\n\n".encode("utf-8")
+        async for chunk in chat_stream(user_messages, item_ctx):
+            payload = {
+                "id": chat_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": "radar",
+                "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+        
+        # 结束标记
+        payload = {
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": "radar",
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        }
+        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
     except Exception as e:  # noqa: BLE001
-        err = json.dumps(
-            {"type": "error", "error": str(e)}, ensure_ascii=False
-        )
-        yield f"data: {err}\n\n".encode("utf-8")
+        err_payload = {
+            "id": chat_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": "radar",
+            "choices": [{"index": 0, "delta": {"content": f"\n\n[Error: {e}]"}, "finish_reason": "stop"}],
+        }
+        yield f"data: {json.dumps(err_payload, ensure_ascii=False)}\n\n".encode("utf-8")
+    
     yield b"data: [DONE]\n\n"
 
 
-@app.post("/chat")
-async def chat(req: ChatRequest) -> StreamingResponse:
-    # 拼装 messages: history (可选) + 当前 user message
-    messages: list[dict[str, Any]] = list(req.history or [])
-    messages.append({"role": "user", "content": req.message})
+@app.post("/v1/chat/completions")
+async def chat_completions(req: ChatCompletionRequest) -> StreamingResponse:
+    messages = [m.model_dump() for m in req.messages]
+    
+    if not req.stream:
+        raise HTTPException(status_code=400, detail="Only stream=True is supported")
+
     return StreamingResponse(
-        _sse_iter(messages, req.item),
+        _openai_sse_iter(messages),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -81,6 +110,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
 class PushRequest(BaseModel):
     limit: int = 30
+
 
 
 async def _push_sse(limit: int) -> AsyncIterator[bytes]:

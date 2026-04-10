@@ -13,9 +13,14 @@
   },
   "dependencies": {
     "@agent-lab/types": "workspace:*",
+    "@ai-sdk/openai": "^0.0.66",
+    "@libsql/client": "^0.17.2",
+    "ai": "^3.4.33",
+    "drizzle-orm": "^0.45.2",
     "next": "15.1.6",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.7",
@@ -24,6 +29,8 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.31.10",
+    "eslint-plugin-drizzle": "^0.2.3",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",

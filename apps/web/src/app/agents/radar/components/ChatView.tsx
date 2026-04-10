@@ -4,23 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { ItemWithState } from '@/lib/types';
 import type { MockTrace } from '../traceMock';
 import InlineTraceRail from './InlineTraceRail';
-
-export interface ChatMsg {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  pending?: boolean;
-  trace?: MockTrace;
-}
+import { useChat } from 'ai/react';
+import type { Message } from 'ai';
 
 interface Props {
   item: ItemWithState;
-  messages: ChatMsg[];
-  busy: boolean;
-  onSend: (text: string) => void;
+  initialMessages: Message[];
+  sessionId: string | null;
   onOpenTraceFromSpan: (trace: MockTrace, spanId: string | null) => void;
   onToggleTrace: () => void;
   traceOpen: boolean;
+  onChatUpdate?: (messages: Message[]) => void;
 }
 
 const PRESETS = [
@@ -31,27 +25,42 @@ const PRESETS = [
 
 export default function ChatView({
   item,
-  messages,
-  busy,
-  onSend,
+  initialMessages,
+  sessionId,
   onOpenTraceFromSpan,
   onToggleTrace,
   traceOpen,
+  onChatUpdate,
 }: Props) {
-  const [input, setInput] = useState('');
+  const { messages, input, handleInputChange, handleSubmit, isLoading, stop, setInput } = useChat({
+    id: item.id,
+    api: '/api/chat',
+    initialMessages,
+    body: {
+      item_id: item.id,
+      session_id: sessionId,
+    },
+    onFinish: (message) => {
+      // Allow parent to sync state if needed
+    },
+  });
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 999999 });
-  }, [messages]);
+    if (onChatUpdate) {
+      onChatUpdate(messages);
+    }
+  }, [messages, onChatUpdate]);
 
-  function handleSend() {
-    const v = input.trim();
-    if (!v || busy) return;
-    setInput('');
-    if (taRef.current) taRef.current.style.height = 'auto';
-    onSend(v);
+  function onPresetSend(msg: string) {
+    setInput(msg);
+    // Vercel AI SDK requires an Event object for handleSubmit, or we can use append
+    const fakeEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+    // Hack to trigger submit with the preset value
+    setTimeout(() => handleSubmit(fakeEvent), 0);
   }
 
   return (
@@ -110,14 +119,14 @@ export default function ChatView({
             对这条推送有什么想追问的? 发一条消息试试。
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m: Message) => (
             <div
               key={m.id}
-              className={`msg ${m.role}${m.pending ? ' streaming' : ''}`}
+              className={`msg ${m.role}${isLoading && m.role === 'assistant' && !m.content ? ' streaming' : ''}`}
             >
               <div className="msg-meta">
                 {m.role === 'user' ? 'you' : 'radar'}
-                {m.role === 'assistant' && m.pending && !m.content ? (
+                {m.role === 'assistant' && isLoading && m.id === messages[messages.length - 1].id && !m.content ? (
                   <span style={{ marginLeft: 6, color: 'var(--text-faint)' }}>
                     is thinking…
                   </span>
@@ -126,7 +135,7 @@ export default function ChatView({
               <div className="msg-bubble">
                 {m.content ? (
                   m.content
-                ) : m.pending ? (
+                ) : isLoading && m.id === messages[messages.length - 1].id ? (
                   <span className="thinking-dots" aria-label="thinking">
                     <span />
                     <span />
@@ -134,12 +143,7 @@ export default function ChatView({
                   </span>
                 ) : null}
               </div>
-              {m.role === 'assistant' && m.trace ? (
-                <InlineTraceRail
-                  trace={m.trace}
-                  onOpenSpan={(spanId) => onOpenTraceFromSpan(m.trace!, spanId)}
-                />
-              ) : null}
+              {/* Note: Trace injection requires custom handling in Vercel SDK if needed. We hide it for now unless we add tool_calls mapping. */}
             </div>
           ))
         )}
@@ -151,24 +155,24 @@ export default function ChatView({
             <button
               key={p.label}
               className="preset"
-              disabled={busy}
+              disabled={isLoading}
               onClick={() => {
-                if (busy) return;
-                onSend(p.msg);
+                if (isLoading) return;
+                onPresetSend(p.msg);
               }}
             >
               {p.label}
             </button>
           ))}
         </div>
-        <div className="input-row">
+        <form className="input-row" onSubmit={handleSubmit}>
           <textarea
             ref={taRef}
             rows={1}
             value={input}
             placeholder="问 Radar 一些关于这条推荐的问题…"
             onChange={(e) => {
-              setInput(e.target.value);
+              handleInputChange(e);
               const el = e.currentTarget;
               el.style.height = 'auto';
               el.style.height = Math.min(el.scrollHeight, 120) + 'px';
@@ -176,21 +180,28 @@ export default function ChatView({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSend();
+                const fakeEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+                handleSubmit(fakeEvent);
               }
             }}
-            disabled={busy}
+            disabled={isLoading}
           />
-          <button
-            type="button"
-            className="send-btn"
-            disabled={busy || !input.trim()}
-            onClick={handleSend}
-          >
-            发送
-          </button>
-        </div>
+          {isLoading ? (
+            <button type="button" className="send-btn" onClick={stop}>
+              停止
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="send-btn"
+              disabled={isLoading || !input.trim()}
+            >
+              发送
+            </button>
+          )}
+        </form>
       </div>
     </div>
   );
 }
+

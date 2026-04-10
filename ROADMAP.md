@@ -9,7 +9,7 @@
 | 项 | 决策 |
 |---|---|
 | 仓库 | `agent-lab` monorepo,public |
-| 前端 | Next.js + Cloudflare Pages + D1 |
+| 前端 | Next.js + Cloudflare Pages + D1 + Drizzle ORM + Vercel AI SDK |
 | Agent | Python 3.12 + uv + LangChain,部署 Fly.io |
 | LLM | GLM-4.6 (对话流) + GLM-4-Flash (推送流),封装 `get_llm(task_type)` |
 | 用户 | 写死 `alex`,不做用户系统 |

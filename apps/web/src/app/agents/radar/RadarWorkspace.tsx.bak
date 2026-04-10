@@ -106,9 +106,6 @@ export default function RadarWorkspace() {
   useEffect(() => {
     localStorage.setItem(LS.selectedId, selectedId ?? 'null');
   }, [selectedId]);
-  useEffect(() => {
-    localStorage.setItem(LS.view, activeView);
-  }, [activeView]);
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -120,12 +117,7 @@ export default function RadarWorkspace() {
   // Load items — reusable
   const reloadItems = useCallback(async () => {
     try {
-      setLoading(true);
-      let statusParam = 'unread';
-      if (activeView === 'watching') statusParam = 'watching';
-      else if (activeView === 'archive') statusParam = 'dismissed,discussed,applied,rejected';
-
-      const res = await fetch(`/api/items?agent_id=radar&limit=400&status=${statusParam}`);
+      const res = await fetch('/api/items?agent_id=radar&limit=400');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = (await res.json()) as { items: ItemWithState[] };
       setItems(body.items ?? []);
@@ -135,19 +127,11 @@ export default function RadarWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [activeView]);
+  }, []);
 
   useEffect(() => {
     reloadItems();
   }, [reloadItems]);
-
-  const handleViewChange = useCallback((view: ViewType) => {
-    setActiveView(view);
-    setFocusedIndex(0);
-    setSelectedId(null);
-    setActiveTrace(null);
-    setHighlightSpanId(null);
-  }, []);
 
   // Effective status (merges pending over saved)
   const effectiveStatus = useCallback(
@@ -765,6 +749,21 @@ export default function RadarWorkspace() {
           const idx = filteredItems.findIndex((x) => x.id === it.id);
           if (idx >= 0) {
             setFocusedIndex(idx);
+          } else {
+            // Item is filtered out — reset filter so it becomes visible
+            setFilter('all');
+            setFocusedIndex(items.findIndex((x) => x.id === it.id));
+          }
+          setSelectedId(it.id);
+          setActiveTrace(null);
+        }}
+      />
+
+      {toast ? <div className="toast">{toast}</div> : null}
+    </div>
+  );
+}
+          setFocusedIndex(idx);
           } else {
             // Item is filtered out — reset filter so it becomes visible
             setFilter('all');

@@ -2,106 +2,126 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type { Item, ItemStatus } from '@/lib/types';
 import type { ItemWithState } from '@/lib/types';
 import { DEFAULT_USER_ID } from '@/lib/env';
-
-// Row as it appears in D1 (SQLite returns TEXT for JSON columns).
-interface ItemRow {
-  id: string;
-  external_id: string;
-  agent_id: string;
-  item_type: string;
-  grade: string;
-  title: string;
-  summary: string;
-  why: string | null;
-  url: string | null;
-  source: string | null;
-  tags: string;
-  payload: string;
-  round_at: string;
-  created_at: string;
-  status: string | null;
-}
-
-function rowToItem(row: ItemRow): ItemWithState {
-  return {
-    id: row.id,
-    external_id: row.external_id,
-    agent_id: row.agent_id as Item['agent_id'],
-    item_type: row.item_type as Item['item_type'],
-    grade: row.grade as Item['grade'],
-    title: row.title,
-    summary: row.summary,
-    why: row.why,
-    url: row.url,
-    source: row.source,
-    tags: safeJson<string[]>(row.tags, []),
-    payload: safeJson<Record<string, unknown>>(row.payload, {}),
-    round_at: row.round_at,
-    created_at: row.created_at,
-    status: (row.status ?? 'unread') as ItemStatus,
-  };
-}
-
-function safeJson<T>(s: string | null, fallback: T): T {
-  if (!s) return fallback;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return fallback;
-  }
-}
+import { getDb } from './db';
+import { items, userStates } from './db/schema';
+import { desc, eq, and, sql, gte } from 'drizzle-orm';
 
 export interface ListOptions {
   agentId?: string;
   grade?: string | null;
   since?: string | null;
   limit?: number;
+  status?: string | null;
 }
 
 export async function listItems(
-  db: D1Database,
+  d1: D1Database,
   opts: ListOptions,
 ): Promise<ItemWithState[]> {
+  const db = getDb(d1);
   const agentId = opts.agentId ?? 'radar';
   const limit = Math.min(Math.max(opts.limit ?? 200, 1), 1000);
-  const clauses: string[] = ['items.agent_id = ?'];
-  const params: unknown[] = [agentId];
-  if (opts.grade) {
-    clauses.push('items.grade = ?');
-    params.push(opts.grade);
+
+  const conditions = [eq(items.agent_id, agentId)];
+  if (opts.grade) conditions.push(eq(items.grade, opts.grade));
+  if (opts.since) conditions.push(gte(items.round_at, opts.since));
+  
+  if (opts.status) {
+    const statuses = opts.status.split(',');
+    const hasUnread = statuses.includes('unread');
+    const sqlStatuses = statuses.map((s) => `'${s}'`).join(',');
+    
+    if (hasUnread) {
+      // If asking for unread, it means status is null OR status IN (...)
+      conditions.push(sql`(COALESCE(${userStates.status}, 'unread') IN (${sql.raw(sqlStatuses)}))`);
+    } else {
+      conditions.push(sql`(${userStates.status} IN (${sql.raw(sqlStatuses)}))`);
+    }
   }
-  if (opts.since) {
-    clauses.push('items.round_at >= ?');
-    params.push(opts.since);
-  }
-  const sql = `
-    SELECT items.*, COALESCE(us.status, 'unread') AS status
-    FROM items
-    LEFT JOIN user_states us
-      ON us.item_id = items.id AND us.user_id = ?
-    WHERE ${clauses.join(' AND ')}
-    ORDER BY items.round_at DESC, items.created_at DESC
-    LIMIT ?
-  `;
-  const stmt = db.prepare(sql).bind(DEFAULT_USER_ID, ...params, limit);
-  const res = await stmt.all<ItemRow>();
-  return (res.results ?? []).map(rowToItem);
+
+  const results = await db
+    .select({
+      id: items.id,
+      external_id: items.external_id,
+      agent_id: items.agent_id,
+      item_type: items.item_type,
+      grade: items.grade,
+      title: items.title,
+      summary: items.summary,
+      why: items.why,
+      url: items.url,
+      source: items.source,
+      tags: items.tags,
+      payload: items.payload,
+      round_at: items.round_at,
+      created_at: items.created_at,
+      status: sql<string>`COALESCE(${userStates.status}, 'unread')`.as('status'),
+    })
+    .from(items)
+    .leftJoin(
+      userStates,
+      and(
+        eq(userStates.item_id, items.id),
+        eq(userStates.user_id, DEFAULT_USER_ID)
+      )
+    )
+    .where(and(...conditions))
+    .orderBy(desc(items.round_at), desc(items.created_at))
+    .limit(limit);
+
+  return results.map((row) => ({
+    ...row,
+    agent_id: row.agent_id as Item['agent_id'],
+    item_type: row.item_type as Item['item_type'],
+    grade: row.grade as Item['grade'],
+    status: row.status as ItemStatus,
+  }));
 }
 
 export async function getItem(
-  db: D1Database,
+  d1: D1Database,
   id: string,
 ): Promise<ItemWithState | null> {
-  const sql = `
-    SELECT items.*, COALESCE(us.status, 'unread') AS status
-    FROM items
-    LEFT JOIN user_states us
-      ON us.item_id = items.id AND us.user_id = ?
-    WHERE items.id = ?
-    LIMIT 1
-  `;
-  const row = await db.prepare(sql).bind(DEFAULT_USER_ID, id).first<ItemRow>();
-  return row ? rowToItem(row) : null;
+  const db = getDb(d1);
+  const results = await db
+    .select({
+      id: items.id,
+      external_id: items.external_id,
+      agent_id: items.agent_id,
+      item_type: items.item_type,
+      grade: items.grade,
+      title: items.title,
+      summary: items.summary,
+      why: items.why,
+      url: items.url,
+      source: items.source,
+      tags: items.tags,
+      payload: items.payload,
+      round_at: items.round_at,
+      created_at: items.created_at,
+      status: sql<string>`COALESCE(${userStates.status}, 'unread')`.as('status'),
+    })
+    .from(items)
+    .leftJoin(
+      userStates,
+      and(
+        eq(userStates.item_id, items.id),
+        eq(userStates.user_id, DEFAULT_USER_ID)
+      )
+    )
+    .where(eq(items.id, id))
+    .limit(1);
+
+  if (!results.length) return null;
+
+  const row = results[0];
+  return {
+    ...row,
+    agent_id: row.agent_id as Item['agent_id'],
+    item_type: row.item_type as Item['item_type'],
+    grade: row.grade as Item['grade'],
+    status: row.status as ItemStatus,
+  };
 }
 
 export interface BatchInsertItem {
@@ -125,7 +145,6 @@ export interface BatchResult {
 }
 
 function genId(): string {
-  // Use crypto.randomUUID if available (Workers runtime has it).
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
@@ -133,59 +152,68 @@ function genId(): string {
 }
 
 export async function insertItemsBatch(
-  db: D1Database,
+  d1: D1Database,
   roundAt: string,
-  items: BatchInsertItem[],
+  batchItems: BatchInsertItem[],
 ): Promise<BatchResult> {
-  if (!items.length) return { inserted: 0, skipped: 0 };
+  if (!batchItems.length) return { inserted: 0, skipped: 0 };
+  const db = getDb(d1);
 
-  const stmts = items.map((it) => {
-    const id = genId();
-    return db
-      .prepare(
-        `INSERT OR IGNORE INTO items
-          (id, external_id, agent_id, item_type, grade, title, summary, why, url, source, tags, payload, round_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        id,
-        it.external_id,
-        it.agent_id,
-        it.item_type,
-        it.grade,
-        it.title,
-        it.summary ?? '',
-        it.why ?? null,
-        it.url ?? null,
-        it.source ?? null,
-        JSON.stringify(it.tags ?? []),
-        JSON.stringify(it.payload ?? {}),
-        it.round_at ?? roundAt,
-      );
-  });
+  const valuesToInsert = batchItems.map((it) => ({
+    id: genId(),
+    external_id: it.external_id,
+    agent_id: it.agent_id,
+    item_type: it.item_type,
+    grade: it.grade,
+    title: it.title,
+    summary: it.summary ?? '',
+    why: it.why ?? null,
+    url: it.url ?? null,
+    source: it.source ?? null,
+    tags: (it.tags ?? []) as string[],
+    payload: it.payload ?? {},
+    round_at: it.round_at ?? roundAt,
+  }));
 
-  const results = await db.batch(stmts);
+  // D1 / SQLite does not support returning number of rows inserted cleanly with ON CONFLICT DO NOTHING
+  // via simple driver sometimes, but we can do a naive insert and catch constraints.
+  // Actually, Drizzle allows `.onConflictDoNothing()` which we will use.
   let inserted = 0;
   let skipped = 0;
-  for (const r of results) {
-    const changes = (r.meta as { changes?: number } | undefined)?.changes ?? 0;
-    if (changes > 0) inserted += 1;
-    else skipped += 1;
+  
+  for (const val of valuesToInsert) {
+    try {
+      const res = await db.insert(items).values(val).onConflictDoNothing();
+      if (res.meta.changes > 0) inserted++;
+      else skipped++;
+    } catch (e) {
+      skipped++;
+    }
   }
+
   return { inserted, skipped };
 }
 
 export async function upsertUserState(
-  db: D1Database,
+  d1: D1Database,
   itemId: string,
   status: ItemStatus,
 ): Promise<void> {
-  const sql = `
-    INSERT INTO user_states (item_id, user_id, status, updated_at)
-    VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(item_id, user_id) DO UPDATE SET
-      status = excluded.status,
-      updated_at = excluded.updated_at
-  `;
-  await db.prepare(sql).bind(itemId, DEFAULT_USER_ID, status).run();
+  const db = getDb(d1);
+  await db
+    .insert(userStates)
+    .values({
+      item_id: itemId,
+      user_id: DEFAULT_USER_ID,
+      status: status,
+      updated_at: sql`(datetime('now'))`,
+    })
+    .onConflictDoUpdate({
+      target: [userStates.item_id, userStates.user_id],
+      set: {
+        status: status,
+        updated_at: sql`(datetime('now'))`,
+      },
+    });
 }
+

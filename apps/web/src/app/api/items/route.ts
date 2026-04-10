@@ -10,9 +10,10 @@ export async function GET(req: Request) {
   const agentId = url.searchParams.get('agent_id') ?? 'radar';
   const grade = url.searchParams.get('grade');
   const since = url.searchParams.get('since');
+  const status = url.searchParams.get('status');
   const limitRaw = url.searchParams.get('limit');
   const limit = limitRaw ? parseInt(limitRaw, 10) : 200;
 
-  const items = await listItems(env.DB, { agentId, grade, since, limit });
+  const items = await listItems(env.DB, { agentId, grade, since, status, limit });
   return NextResponse.json({ items });
 }
