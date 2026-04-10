@@ -120,7 +120,7 @@ export function buildMockTrace(args: {
     sections: [
       {
         label: 'system prompt',
-        body: `你是 Radar, Alex 的创意发现引擎。\n当前条目: ${itemTitle}`,
+        body: `你是 Radar, 用户的创意发现引擎。\n当前条目: ${itemTitle}`,
       },
     ],
   });

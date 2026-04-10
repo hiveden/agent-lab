@@ -59,7 +59,7 @@ Base URL: `http://127.0.0.1:8788`
 | Method | Path                              | Auth                     | Notes |
 |--------|-----------------------------------|--------------------------|-------|
 | POST   | `/api/items/batch`                | `Bearer ${RADAR_WRITE_TOKEN}` | Idempotent on `external_id`. Body: `{ round_at, items[] }`. Returns `{ ok, inserted, skipped }`. |
-| GET    | `/api/items?agent_id=&grade=&since=&limit=` | —              | Defaults: `agent_id=radar`, `limit=200`. Joins `user_states` (user_id=`alex`); each item includes `status`. |
+| GET    | `/api/items?agent_id=&grade=&since=&limit=` | —              | Defaults: `agent_id=radar`, `limit=200`. Joins `user_states` (user_id=`default_user`); each item includes `status`. |
 | GET    | `/api/items/:id`                  | —                        | Single item with status. |
 | PATCH  | `/api/items/:id/state`            | —                        | Body: `{ status }`. Upserts `user_states`. |
 | POST   | `/api/chat`                       | —                        | Body: `{ item_id, session_id?, message }`. Streams SSE. Forwards to `${RADAR_AGENT_BASE}/chat`; falls back to a mock stream if the agent is down. Persists to `chat_sessions` / `chat_messages`. |

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     platform_api_base: str = Field(
         default="http://127.0.0.1:8788", alias="PLATFORM_API_BASE"
     )
-    default_user_id: str = Field(default="alex", alias="DEFAULT_USER_ID")
+    default_user_id: str = Field(default="default_user", alias="DEFAULT_USER_ID")
 
     # Agent service
     radar_agent_port: int = Field(default=8001, alias="RADAR_AGENT_PORT")

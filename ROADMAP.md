@@ -12,7 +12,7 @@
 | 前端 | Next.js + Cloudflare Pages + D1 + Drizzle ORM + Vercel AI SDK |
 | Agent | Python 3.12 + uv + LangChain,部署 Fly.io |
 | LLM | GLM-4.6 (对话流) + GLM-4-Flash (推送流),封装 `get_llm(task_type)` |
-| 用户 | 写死 `alex`,不做用户系统 |
+| 用户 | 写死 `default_user`,不做用户系统 |
 | 域名 | `agents.<your-domain>`(待定) |
 
 ### 数据模型要点

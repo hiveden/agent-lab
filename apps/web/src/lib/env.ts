@@ -17,4 +17,4 @@ export function getEnv(): CloudflareEnv {
   return ctx.env as unknown as CloudflareEnv;
 }
 
-export const DEFAULT_USER_ID = 'alex';
+export const DEFAULT_USER_ID = 'default_user';

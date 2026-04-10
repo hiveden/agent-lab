@@ -1500,8 +1500,8 @@ button, input, textarea, select {
 // DATA
 // ═══════════════════════════════════════════════════════════════════════════
 const USER = {
-  identity: 'Alex (薛林) · 7 年全栈,转型 AI Agent',
-  current: '黑马 AI 训练营 第一天',
+  identity: '开发者 · 7 年全栈,转型 AI Agent',
+  current: '某 AI 训练营 第一天',
   target: '8 月上海求职'
 };
 
@@ -1919,8 +1919,8 @@ async function runFlow(userMsg) {
 
   // 3. System prompt
   const systemPrompt =
-`你是 Radar,Alex 的创意发现引擎。
-任务: 回答 Alex 关于他正在追问的推荐条目的问题。
+`你是 Radar,用户的创意发现引擎。
+任务: 回答 用户关于他正在追问的推荐条目的问题。
 
 == 当前条目 ==
 - title: ${item.title}
@@ -1928,14 +1928,14 @@ async function runFlow(userMsg) {
 - why:   ${item.why}
 - gist:  ${item.summary}
 
-== Alex 上下文 ==
+== 用户上下文 ==
 - ${USER.identity}
 - 当前: ${USER.current}
 - 目标: ${USER.target}
 
 == 行为准则 ==
 1. 像朋友分享 - 不要写报告体
-2. 必须结合 Alex 的进度和目标
+2. 必须结合 用户的进度和目标
 3. 不确定的事实必须用工具查证, 严禁编造
 4. 关键数字(stars/issues/版本) 优先 fetch_github
 5. 竞品对比用 web_search, 不凭印象
