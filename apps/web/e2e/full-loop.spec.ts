@@ -211,7 +211,11 @@ test('Phase 6: full data loop verified', async ({ request }) => {
   expect(runs.filter((r: Record<string, unknown>) => r.phase === 'ingest').length).toBeGreaterThan(0);
   expect(runs.filter((r: Record<string, unknown>) => r.phase === 'evaluate').length).toBeGreaterThan(0);
 
-  // 5. 数据链路完整：所有层都有数据
-  //    注：多次运行 E2E 会积累历史数据，不做严格数量对比
-  console.log(`Funnel: sources=${sources.length} raw_items=${rawItems.length} items=${itemsBody.items.length} runs=${runs.length}`);
+  // 5. 注意力快照可计算
+  const attRes = await request.get('/api/attention/snapshot?agent_id=radar');
+  expect(attRes.status()).toBe(200);
+  const att = await attRes.json();
+  expect(att.sources.length).toBeGreaterThan(0);
+
+  console.log(`Funnel: sources=${sources.length} raw_items=${rawItems.length} items=${itemsBody.items.length} runs=${runs.length} attention_sources=${att.sources.length}`);
 });

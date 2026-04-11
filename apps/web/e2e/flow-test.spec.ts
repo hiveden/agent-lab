@@ -349,10 +349,123 @@ test('Step 8: item status persists after user action', async ({ request }) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Step 9: 全链路血缘汇总
+// Step 9: 制造偏差场景 — 添加第二个 source，调整权重
 // ═══════════════════════════════════════════════════════════════
 
-test('Step 9: end-to-end data lineage summary', async ({ request }) => {
+test('Step 9: create multi-source deviation scenario', async ({ request }) => {
+  // 添加一个 RSS source（没有真实数据，用户"声称"要花 40% 注意力在 RSS 上）
+  const createRes = await request.post('/api/sources', {
+    data: {
+      agent_id: 'radar',
+      source_type: 'rss',
+      name: 'AI Research RSS',
+      config: {},
+      attention_weight: 0.4,
+      enabled: true,
+    },
+  });
+  expect(createRes.status()).toBe(201);
+
+  // 把 HN 权重调为 60%（原来是 100%）
+  await request.patch('/api/sources/src_hn_top', {
+    data: { attention_weight: 0.6 },
+  });
+
+  // 验证配置
+  const srcRes = await request.get('/api/sources?agent_id=radar');
+  const sources = (await srcRes.json()).sources;
+  const hn = sources.find((s: Record<string, string>) => s.source_type === 'hacker-news');
+  const rss = sources.find((s: Record<string, string>) => s.source_type === 'rss');
+  expect(hn.attention_weight).toBe(0.6);
+  expect(rss.attention_weight).toBe(0.4);
+  console.log('Deviation setup: HN=60% RSS=40%, but all activity is on HN');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Step 10: 注意力聚合 — 验证偏差计算
+// ═══════════════════════════════════════════════════════════════
+
+test('Step 10: attention snapshot shows real deviation', async ({ request }) => {
+  const res = await request.get('/api/attention/snapshot?agent_id=radar');
+  expect(res.status()).toBe(200);
+  const snapshot = await res.json();
+
+  // 应该有 2 个 source
+  expect(snapshot.sources.length).toBe(2);
+
+  // 结构完整
+  for (const src of snapshot.sources) {
+    expect(src.source_id).toBeTruthy();
+    expect(src.source_name).toBeTruthy();
+    expect(typeof src.expected_weight).toBe('number');
+    expect(typeof src.actual_weight).toBe('number');
+    expect(typeof src.deviation).toBe('number');
+    expect(typeof src.raw_score).toBe('number');
+    expect(src.detail).toBeTruthy();
+  }
+
+  // 偏差 = actual - expected
+  for (const src of snapshot.sources) {
+    const computedDev = src.actual_weight - src.expected_weight;
+    expect(Math.abs(src.deviation - computedDev)).toBeLessThan(0.001);
+  }
+
+  // actual_weights 之和 = 1
+  const totalActual = snapshot.sources.reduce(
+    (sum: number, s: { actual_weight: number }) => sum + s.actual_weight, 0,
+  );
+  if (snapshot.total_score > 0) {
+    expect(totalActual).toBeGreaterThan(0.99);
+    expect(totalActual).toBeLessThan(1.01);
+  }
+
+  const hn = snapshot.sources.find((s: Record<string, string>) => s.source_type === 'hacker-news');
+  const rss = snapshot.sources.find((s: Record<string, string>) => s.source_type === 'rss');
+
+  if (snapshot.total_score > 0) {
+    // 所有行为都在 HN 上，RSS 没有活动
+    // HN: actual ≈ 100%, expected = 60% → deviation ≈ +40% (过度关注)
+    expect(hn.actual_weight, 'HN gets all attention').toBeGreaterThan(0.9);
+    expect(hn.deviation, 'HN should be over-attended').toBeGreaterThan(0);
+
+    // RSS: actual ≈ 0%, expected = 40% → deviation ≈ -40% (被忽略)
+    expect(rss.actual_weight, 'RSS gets no attention').toBeLessThan(0.1);
+    expect(rss.deviation, 'RSS should be under-attended').toBeLessThan(0);
+
+    console.log(`Deviation: HN expected=${(hn.expected_weight * 100).toFixed(0)}% actual=${(hn.actual_weight * 100).toFixed(0)}% dev=${(hn.deviation * 100).toFixed(0)}%`);
+    console.log(`Deviation: RSS expected=${(rss.expected_weight * 100).toFixed(0)}% actual=${(rss.actual_weight * 100).toFixed(0)}% dev=${(rss.deviation * 100).toFixed(0)}%`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Step 11: 注意力 UI — 偏差可视化渲染正确
+// ═══════════════════════════════════════════════════════════════
+
+test('Step 11: attention view renders deviation bars', async ({ page }) => {
+  await page.goto('/agents/radar');
+  await page.waitForLoadState('networkidle');
+
+  await page.click('button[aria-label="Attention"]');
+  await page.waitForTimeout(1500);
+
+  // 标题存在
+  await expect(page.locator('h2:has-text("Attention Mirror")')).toBeVisible();
+
+  // Expected / Actual 条存在
+  await expect(page.locator('.att-bar.expected').first()).toBeVisible();
+  await expect(page.locator('.att-bar.actual').first()).toBeVisible();
+
+  // 偏差标注存在
+  await expect(page.locator('.att-deviation').first()).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/test-results/flow-10-attention-view.png' });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Step 12: 全链路血缘汇总（含注意力偏差）
+// ═══════════════════════════════════════════════════════════════
+
+test('Step 12: end-to-end data lineage summary', async ({ request }) => {
   // 收集所有数据打印完整链路
   const sources = (await (await request.get('/api/sources?agent_id=radar')).json()).sources;
   const rawItems = (await (await request.get('/api/raw-items?agent_id=radar&limit=1000')).json()).raw_items;
@@ -379,6 +492,15 @@ test('Step 9: end-to-end data lineage summary', async ({ request }) => {
   console.log(`  Evaluate runs:  ${evalRuns.length} completed`);
   console.log(`  Curated items:  ${items.length}`);
   console.log(`  Conversion:     ${rawItems.length} → ${items.length} (${((items.length / Math.max(rawItems.length, 1)) * 100).toFixed(0)}%)`);
+
+  // 注意力快照
+  const attRes = await request.get('/api/attention/snapshot?agent_id=radar');
+  const att = await attRes.json();
+  console.log('  ── Attention Mirror ──');
+  for (const src of att.sources) {
+    const dev = src.deviation >= 0 ? `+${(src.deviation * 100).toFixed(0)}%` : `${(src.deviation * 100).toFixed(0)}%`;
+    console.log(`  ${src.source_name}: expected=${(src.expected_weight * 100).toFixed(0)}% actual=${(src.actual_weight * 100).toFixed(0)}% deviation=${dev}`);
+  }
   console.log('═══════════════════════════════════════\n');
 
   // 最终断言：完整链路

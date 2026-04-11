@@ -1,6 +1,6 @@
 'use client';
 
-export type ViewType = 'inbox' | 'watching' | 'archive' | 'sources' | 'runs';
+export type ViewType = 'inbox' | 'watching' | 'archive' | 'sources' | 'runs' | 'attention';
 
 export interface NavRailProps {
   activeView?: ViewType;
@@ -99,6 +99,20 @@ export default function NavRail({
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      </button>
+
+      {/* Attention Mirror */}
+      <button
+        className={`nav-item ${activeView === 'attention' ? 'active' : ''}`}
+        data-tip="Attention"
+        aria-label="Attention"
+        onClick={() => onViewChange?.('attention')}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+          <line x1="2" y1="12" x2="22" y2="12" />
         </svg>
       </button>
 

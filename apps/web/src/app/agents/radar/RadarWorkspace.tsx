@@ -19,6 +19,7 @@ import CommandPalette, {
 import PendingChangesBanner from './components/PendingChangesBanner';
 import SourcesView from './components/SourcesView';
 import RunsView from './components/RunsView';
+import AttentionView from './components/AttentionView';
 import { buildMockTrace, type MockTrace } from './traceMock';
 
 const LS = {
@@ -669,6 +670,8 @@ export default function RadarWorkspace() {
           <div className="content full-width"><SourcesView /></div>
         ) : activeView === 'runs' ? (
           <div className="content full-width"><RunsView /></div>
+        ) : activeView === 'attention' ? (
+          <div className="content full-width"><AttentionView /></div>
         ) : (
         <>
         <ItemsList
