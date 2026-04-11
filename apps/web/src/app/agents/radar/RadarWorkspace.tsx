@@ -17,6 +17,8 @@ import CommandPalette, {
   type PaletteAction,
 } from './components/CommandPalette';
 import PendingChangesBanner from './components/PendingChangesBanner';
+import SourcesView from './components/SourcesView';
+import RunsView from './components/RunsView';
 import { buildMockTrace, type MockTrace } from './traceMock';
 
 const LS = {
@@ -282,9 +284,9 @@ export default function RadarWorkspace() {
     setToast(failed ? `Applied (${failed} failed)` : 'Changes applied');
   }, [pending]);
 
-  // ─── Trigger Radar push flow ───────────────────────────────────────────
-  // Calls /api/cron/radar/trigger → Agent /cron/push,reads SSE progress events
-  // live and builds a growing trace that displays in the right drawer.
+  // ─── Trigger Radar pipeline (ingest → evaluate) ────────────────────────
+  // Calls /api/cron/radar/ingest then /api/cron/radar/evaluate,
+  // reads SSE progress events and builds a growing trace.
   const [pushBusy, setPushBusy] = useState(false);
 
   const triggerRadarPush = useCallback(
@@ -320,15 +322,13 @@ export default function RadarWorkspace() {
         total: number;
       } | null = null;
 
-      try {
-        const res = await fetch('/api/cron/radar/trigger', {
+      // Helper: consume SSE stream and update trace
+      const consumeSSE = async (url: string, phasePrefix: string) => {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ limit }),
         });
-        if (!res.ok || !res.body) {
-          throw new Error(`HTTP ${res.status}`);
-        }
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -352,7 +352,7 @@ export default function RadarWorkspace() {
             const type = ev.type as string | undefined;
 
             if (type === 'span') {
-              const id = String(ev.id ?? '');
+              const id = `${phasePrefix}-${String(ev.id ?? '')}`;
               const kind = mapKind(String(ev.kind ?? 'system'));
               const title = String(ev.title ?? '');
               const status =
@@ -362,12 +362,7 @@ export default function RadarWorkspace() {
               const detail = ev.detail as Record<string, unknown> | undefined;
 
               const sections = detail
-                ? [
-                    {
-                      label: 'detail',
-                      body: JSON.stringify(detail, null, 2),
-                    },
-                  ]
+                ? [{ label: 'detail', body: JSON.stringify(detail, null, 2) }]
                 : [];
 
               trace.spans = (() => {
@@ -375,54 +370,45 @@ export default function RadarWorkspace() {
                 if (existing) {
                   return trace.spans.map((s) =>
                     s.id === id
-                      ? {
-                          ...s,
-                          title,
-                          status,
-                          ms: ms || s.ms,
-                          sections: sections.length ? sections : s.sections,
-                        }
+                      ? { ...s, title, status, ms: ms || s.ms, sections: sections.length ? sections : s.sections }
                       : s,
                   );
                 }
-                return [
-                  ...trace.spans,
-                  {
-                    id,
-                    kind,
-                    title,
-                    status,
-                    ms,
-                    sections,
-                  },
-                ];
+                return [...trace.spans, { id, kind, title, status, ms, sections }];
               })();
               trace.totalMs = trace.spans.reduce((a, s) => a + s.ms, 0);
               setActiveTrace({ ...trace, spans: [...trace.spans] });
             } else if (type === 'result') {
               receivedResult = {
-                inserted: Number(ev.inserted ?? 0),
-                skipped: Number(ev.skipped ?? 0),
-                total: Number(ev.total ?? 0),
+                inserted: Number(ev.inserted ?? ev.promoted ?? 0),
+                skipped: Number(ev.skipped ?? ev.rejected ?? 0),
+                total: Number(ev.total ?? ev.evaluated ?? 0),
               };
               trace.totalMs = Number(ev.total_ms ?? Date.now() - t0);
               setActiveTrace({ ...trace, spans: [...trace.spans] });
             } else if (type === 'error') {
-              setToast(`Push failed: ${String(ev.message ?? 'unknown')}`);
+              setToast(`Pipeline failed: ${String(ev.message ?? 'unknown')}`);
             }
           }
         }
+      };
+
+      try {
+        // Phase 1: Ingest (采集)
+        await consumeSSE('/api/cron/radar/ingest', 'ingest');
+        // Phase 2: Evaluate (评判)
+        await consumeSSE('/api/cron/radar/evaluate', 'evaluate');
       } catch (e) {
-        setToast(`Push failed: ${String(e)}`);
+        setToast(`Pipeline failed: ${String(e)}`);
       } finally {
         setPushBusy(false);
       }
 
-      if (receivedResult) {
+      if (receivedResult !== null) {
+        const r = receivedResult as { inserted: number; skipped: number };
         setToast(
-          `✓ Collected: ${receivedResult.inserted} new · ${receivedResult.skipped} duplicate`,
+          `✓ Collected: ${r.inserted} new · ${r.skipped} duplicate`,
         );
-        // Refetch items list to surface new rows
         await reloadItems();
       }
     },
@@ -679,6 +665,12 @@ export default function RadarWorkspace() {
         style={{ ['--list-w' as string]: `${listWidth}px` }}
       >
         <NavRail activeView={activeView} onViewChange={handleViewChange} />
+        {activeView === 'sources' ? (
+          <div className="content full-width"><SourcesView /></div>
+        ) : activeView === 'runs' ? (
+          <div className="content full-width"><RunsView /></div>
+        ) : (
+        <>
         <ItemsList
           items={itemsForList}
           filter={filter}
@@ -754,6 +746,8 @@ export default function RadarWorkspace() {
             collapseAllSignal={collapseAllSignal}
           />
         </div>
+        </>
+        )}
       </div>
 
       <CommandPalette

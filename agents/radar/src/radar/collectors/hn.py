@@ -1,4 +1,4 @@
-"""Hacker News top stories collector。HN 走直连,不走代理。"""
+"""Hacker News collector，符合 Collector Protocol。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import os
 from typing import Any
 
 import httpx
+
+from .base import RawCollectorItem
 
 HN_BASE = "https://hacker-news.firebaseio.com/v0"
 DEFAULT_LIMIT = 30
@@ -24,8 +26,7 @@ async def _fetch_item(client: httpx.AsyncClient, item_id: int) -> dict[str, Any]
         return None
 
 
-async def _collect_async(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
-    # 优先使用显式 HTTPS_PROXY (http://),避免 ALL_PROXY (socks5) 需要 socksio
+async def _collect_async(limit: int = DEFAULT_LIMIT) -> list[RawCollectorItem]:
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
     client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False}
     if proxy and proxy.startswith("http"):
@@ -37,25 +38,48 @@ async def _collect_async(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
 
         raw = await asyncio.gather(*(_fetch_item(client, i) for i in ids))
 
-    results: list[dict[str, Any]] = []
+    results: list[RawCollectorItem] = []
     for item in raw:
         if not item:
             continue
         if not item.get("url"):
             continue
         results.append(
-            {
-                "id": item.get("id"),
-                "title": item.get("title", ""),
-                "url": item.get("url"),
-                "score": item.get("score", 0),
-                "by": item.get("by", ""),
-                "time": item.get("time", 0),
-            }
+            RawCollectorItem(
+                external_id=str(item.get("id")),
+                title=item.get("title", ""),
+                url=item.get("url"),
+                raw_payload={
+                    "hn_id": item.get("id"),
+                    "score": item.get("score", 0),
+                    "by": item.get("by", ""),
+                    "time": item.get("time", 0),
+                },
+            )
         )
     return results
 
 
+class HNCollector:
+    """Hacker News top stories collector。"""
+
+    async def collect(self, config: dict[str, Any]) -> list[RawCollectorItem]:
+        limit = config.get("limit", DEFAULT_LIMIT)
+        return await _collect_async(limit=limit)
+
+
+# 向后兼容：旧代码可能还在用这个同步函数
 def fetch_top_stories(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
-    """同步入口,拉取 HN top stories 并过滤无 url 条目。"""
-    return asyncio.run(_collect_async(limit=limit))
+    """同步入口（兼容旧 push.py 如果还有引用）。"""
+    items = asyncio.run(_collect_async(limit=limit))
+    return [
+        {
+            "id": it["raw_payload"].get("hn_id"),
+            "title": it["title"],
+            "url": it["url"],
+            "score": it["raw_payload"].get("score", 0),
+            "by": it["raw_payload"].get("by", ""),
+            "time": it["raw_payload"].get("time", 0),
+        }
+        for it in items
+    ]

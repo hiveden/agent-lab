@@ -175,21 +175,9 @@ export async function insertItemsBatch(
     round_at: it.round_at ?? roundAt,
   }));
 
-  // D1 / SQLite does not support returning number of rows inserted cleanly with ON CONFLICT DO NOTHING
-  // via simple driver sometimes, but we can do a naive insert and catch constraints.
-  // Actually, Drizzle allows `.onConflictDoNothing()` which we will use.
-  let inserted = 0;
-  let skipped = 0;
-  
-  for (const val of valuesToInsert) {
-    try {
-      const res = await db.insert(items).values(val).onConflictDoNothing();
-      if (res.meta.changes > 0) inserted++;
-      else skipped++;
-    } catch (e) {
-      skipped++;
-    }
-  }
+  const res = await db.insert(items).values(valuesToInsert).onConflictDoNothing();
+  const inserted = res.meta.changes ?? 0;
+  const skipped = valuesToInsert.length - inserted;
 
   return { inserted, skipped };
 }

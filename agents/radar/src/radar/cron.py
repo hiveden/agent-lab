@@ -1,69 +1,136 @@
-"""Radar 推送流 CLI 入口 (薄 wrapper, 消费 push.run_push_stream)。
+"""Radar CLI 入口: ingest / evaluate 子命令。
 
-生产环境用 HTTP `POST /cron/push` 触发;这个 CLI 只是本地开发便利。
+生产环境用 HTTP 端点触发；CLI 只是本地开发便利。
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 
 import click
 
-from .push import run_push_stream
+from agent_lab_shared.db import PlatformClient
+from agent_lab_shared.schema import SourceConfig
 
 
-async def _run(limit: int, dry_run: bool) -> int:
-    """消费 async generator,按事件类型打印进度。"""
-    if dry_run:
-        click.echo("[radar-push] --dry-run mode: will still hit LLM but not POST", err=True)
+def _print_events(ev: dict) -> int | None:
+    """统一打印 progress event，返回 exit code（仅 error 时返回 1）。"""
+    t = ev.get("type")
+    if t == "start":
+        phase = ev.get("phase", "?")
+        click.echo(f"[radar-{phase}] start · {ev}")
+    elif t == "span":
+        status = ev.get("status", "?")
+        icon = {"running": "⋯", "done": "✓", "failed": "✗"}.get(status, "•")
+        ms = ev.get("ms")
+        ms_s = f" ({ms}ms)" if ms is not None else ""
+        click.echo(f"  {icon} [{ev.get('kind'):6s}] {ev.get('title')}{ms_s}")
+        if status == "done" and ev.get("detail"):
+            d = ev["detail"]
+            for k, v in d.items():
+                if isinstance(v, list):
+                    click.echo(f"       {k}: ({len(v)} items)")
+                else:
+                    click.echo(f"       {k}: {v}")
+    elif t == "result":
+        phase = ev.get("phase", "?")
+        click.echo(f"[radar-{phase}] DONE · {ev.get('total_ms', '?')}ms")
+        for k in ("fetched", "inserted", "skipped", "evaluated", "promoted", "rejected"):
+            if k in ev:
+                click.echo(f"  {k}: {ev[k]}")
+        if ev.get("preview"):
+            click.echo("[radar] picks:")
+            for p in ev["preview"]:
+                click.echo(f"  · [{p['grade']}] {p['title']}")
+    elif t == "error":
+        click.echo(f"[radar] ERROR: {ev.get('message')}", err=True)
+        return 1
+    return None
 
-    result: dict = {"inserted": 0, "skipped": 0, "total": 0}
-    async for ev in run_push_stream(limit=limit):
-        t = ev.get("type")
-        if t == "start":
-            click.echo(
-                f"[radar-push] start · limit={ev.get('limit')} mock={ev.get('mock')}"
-            )
-        elif t == "span":
-            status = ev.get("status", "?")
-            icon = {"running": "⋯", "done": "✓", "failed": "✗"}.get(status, "•")
-            ms = ev.get("ms")
-            ms_s = f" ({ms}ms)" if ms is not None else ""
-            click.echo(f"  {icon} [{ev.get('kind'):6s}] {ev.get('title')}{ms_s}")
-            if status == "done" and ev.get("detail"):
-                # 紧凑打印 detail
-                d = ev["detail"]
-                for k, v in d.items():
-                    if isinstance(v, list):
-                        click.echo(f"       {k}: ({len(v)} items)")
-                    else:
-                        click.echo(f"       {k}: {v}")
-        elif t == "result":
-            result = ev
-            click.echo(
-                f"[radar-push] DONE · inserted={ev.get('inserted')} "
-                f"skipped={ev.get('skipped')} total={ev.get('total')} "
-                f"({ev.get('total_ms', '?')}ms)"
-            )
-            if ev.get("preview"):
-                click.echo("[radar-push] picks:")
-                for p in ev["preview"]:
-                    click.echo(f"  · [{p['grade']}] {p['title']}")
-        elif t == "error":
-            click.echo(f"[radar-push] ERROR: {ev.get('message')}", err=True)
+
+@click.group()
+def cli() -> None:
+    """Radar Agent CLI。"""
+
+
+@cli.command()
+def ingest() -> None:
+    """执行一次 Ingestion（采集原始内容）。"""
+    from .pipelines.ingest import run_ingest_stream
+
+    async def _run() -> int:
+        client = PlatformClient()
+        resp = client.get_sources(agent_id="radar")
+        sources = [
+            SourceConfig(id=s["id"], source_type=s["source_type"], config=s.get("config", {}))
+            for s in resp.get("sources", [])
+            if s.get("enabled", True)
+        ]
+        if not sources:
+            click.echo("[radar-ingest] no enabled sources found", err=True)
+            return 1
+        async for ev in run_ingest_stream(sources):
+            code = _print_events(ev)
+            if code is not None:
+                return code
+        return 0
+
+    raise SystemExit(asyncio.run(_run()))
+
+
+@cli.command()
+def evaluate() -> None:
+    """执行一次 Evaluate（LLM 评判筛选）。"""
+    from .pipelines.evaluate import run_evaluate_stream
+
+    async def _run() -> int:
+        async for ev in run_evaluate_stream():
+            code = _print_events(ev)
+            if code is not None:
+                return code
+        return 0
+
+    raise SystemExit(asyncio.run(_run()))
+
+
+@cli.command()
+def push() -> None:
+    """执行完整流程: ingest + evaluate（向后兼容）。"""
+    from .pipelines.evaluate import run_evaluate_stream
+    from .pipelines.ingest import run_ingest_stream
+
+    async def _run() -> int:
+        client = PlatformClient()
+        resp = client.get_sources(agent_id="radar")
+        sources = [
+            SourceConfig(id=s["id"], source_type=s["source_type"], config=s.get("config", {}))
+            for s in resp.get("sources", [])
+            if s.get("enabled", True)
+        ]
+        if not sources:
+            click.echo("[radar-push] no enabled sources found", err=True)
             return 1
 
-    return 0 if result.get("inserted", 0) + result.get("skipped", 0) > 0 else 0
+        click.echo("── Phase 1: Ingest ──")
+        async for ev in run_ingest_stream(sources):
+            code = _print_events(ev)
+            if code is not None:
+                return code
+
+        click.echo("\n── Phase 2: Evaluate ──")
+        async for ev in run_evaluate_stream():
+            code = _print_events(ev)
+            if code is not None:
+                return code
+
+        return 0
+
+    raise SystemExit(asyncio.run(_run()))
 
 
-@click.command()
-@click.option("--limit", default=30, help="HN top stories 拉取数量")
-@click.option("--dry-run", is_flag=True, default=False, help="占位,暂无实际效果")
-def main(limit: int, dry_run: bool) -> None:
-    """radar-push CLI 入口。"""
-    code = asyncio.run(_run(limit, dry_run))
-    raise SystemExit(code)
+def main() -> None:
+    """radar-push 入口（向后兼容 pyproject.toml scripts）。"""
+    cli()
 
 
 if __name__ == "__main__":

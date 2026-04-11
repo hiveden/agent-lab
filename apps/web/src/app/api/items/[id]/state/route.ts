@@ -1,18 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
 import { upsertUserState } from '@/lib/items';
-import type { ItemStatus } from '@/lib/types';
+import { stateUpdateSchema } from '@/lib/validations';
 
 export const runtime = 'edge';
-
-const VALID: ItemStatus[] = [
-  'unread',
-  'watching',
-  'discussed',
-  'dismissed',
-  'applied',
-  'rejected',
-];
 
 export async function PATCH(
   req: Request,
@@ -26,13 +17,13 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
-  const status = (body as { status?: string } | null)?.status;
-  if (!status || !VALID.includes(status as ItemStatus)) {
+  const parsed = stateUpdateSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: `invalid status; must be one of ${VALID.join(',')}` },
+      { error: 'invalid status', issues: parsed.error.issues },
       { status: 400 },
     );
   }
-  await upsertUserState(env.DB, id, status as ItemStatus);
+  await upsertUserState(env.DB, id, parsed.data.status);
   return NextResponse.json({ ok: true });
 }

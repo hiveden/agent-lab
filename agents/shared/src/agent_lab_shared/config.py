@@ -1,10 +1,13 @@
-"""环境变量 / 配置。读 .env 然后暴露 settings 单例。"""
+"""环境变量 / 配置。读 .env 然后暴露 settings 单例。
+
+DEPLOY_ENV=production 时触发启动校验，防止用 dev 默认值跑生产。
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +33,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # Deploy
+    deploy_env: str = Field(default="development", alias="DEPLOY_ENV")
+
     # LLM
     llm_mock: bool = Field(default=True, alias="LLM_MOCK")
     llm_provider: str = Field(default="glm", alias="LLM_PROVIDER")
@@ -52,6 +58,35 @@ class Settings(BaseSettings):
 
     # Agent service
     radar_agent_port: int = Field(default=8001, alias="RADAR_AGENT_PORT")
+
+    @model_validator(mode="after")
+    def validate_production(self) -> "Settings":
+        """DEPLOY_ENV=production 时强制校验关键配置。"""
+        if self.deploy_env != "production":
+            return self
+
+        errors: list[str] = []
+
+        if self.llm_mock:
+            errors.append("LLM_MOCK must be 0 (false) in production")
+
+        if not self.glm_api_key:
+            errors.append("GLM_API_KEY is required in production")
+
+        if self.radar_write_token == "dev-radar-token-change-me":
+            errors.append("RADAR_WRITE_TOKEN must be changed from default in production")
+
+        if "127.0.0.1" in self.platform_api_base or "localhost" in self.platform_api_base:
+            errors.append(
+                f"PLATFORM_API_BASE cannot be localhost in production (got: {self.platform_api_base})"
+            )
+
+        if errors:
+            raise ValueError(
+                "Production config validation failed:\n  - " + "\n  - ".join(errors)
+            )
+
+        return self
 
 
 settings = Settings()

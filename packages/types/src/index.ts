@@ -7,6 +7,10 @@ export type Grade = 'fire' | 'bolt' | 'bulb';
 export type ItemStatus = 'unread' | 'watching' | 'discussed' | 'dismissed' | 'applied' | 'rejected';
 export type AgentId = 'radar' | 'pulse' | 'scout' | 'tts-quality';
 export type ItemType = 'recommendation' | 'quality-issue';
+export type SourceType = 'hacker-news' | 'rss' | 'twitter';
+export type RawItemStatus = 'pending' | 'evaluated' | 'promoted' | 'rejected';
+export type RunPhase = 'ingest' | 'evaluate';
+export type RunStatus = 'running' | 'done' | 'failed';
 
 export interface Item {
   id: string;
@@ -53,4 +57,48 @@ export interface ChatSession {
   item_id: string | null;
   agent_id: AgentId;
   created_at: string;
+}
+
+// ── Sources ──
+
+export interface Source {
+  id: string;
+  agent_id: AgentId;
+  source_type: SourceType;
+  name: string;
+  config: Record<string, unknown>;
+  attention_weight: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Raw Items ──
+
+export interface RawItem {
+  id: string;
+  source_id: string;
+  agent_id: AgentId;
+  external_id: string;
+  title: string;
+  url: string | null;
+  raw_payload: Record<string, unknown>;
+  status: RawItemStatus;
+  run_id: string | null;
+  fetched_at: string;
+}
+
+// ── Runs ──
+
+export interface Run {
+  id: string;
+  agent_id: AgentId;
+  phase: RunPhase;
+  status: RunStatus;
+  source_ids: string[];
+  stats: Record<string, unknown>;
+  trace: unknown[];
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
 }

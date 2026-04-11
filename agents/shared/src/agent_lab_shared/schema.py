@@ -12,6 +12,10 @@ ItemStatus = Literal["unread", "watching", "discussed", "dismissed", "applied", 
 AgentId = Literal["radar", "pulse", "scout", "tts-quality"]
 ItemType = Literal["recommendation", "quality-issue"]
 ChatRole = Literal["user", "assistant", "tool", "system"]
+SourceType = Literal["hacker-news", "rss", "twitter"]
+RawItemStatus = Literal["pending", "evaluated", "promoted", "rejected"]
+RunPhase = Literal["ingest", "evaluate"]
+RunStatus = Literal["running", "done", "failed"]
 
 
 class ItemInput(BaseModel):
@@ -62,3 +66,63 @@ class ChatSession(BaseModel):
     item_id: str | None = None
     agent_id: AgentId
     created_at: datetime
+
+
+# ── Sources ──
+
+
+class Source(BaseModel):
+    id: str
+    agent_id: AgentId
+    source_type: SourceType
+    name: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    attention_weight: float = 0.0
+    enabled: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+
+class SourceConfig(BaseModel):
+    """Ingest pipeline 接收的 source 配置（轻量子集）。"""
+
+    id: str
+    source_type: SourceType
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+# ── Raw Items ──
+
+
+class RawItemInput(BaseModel):
+    """Collector → API 写入时的 raw item 形态。"""
+
+    source_id: str
+    agent_id: AgentId
+    external_id: str
+    title: str
+    url: str | None = None
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RawItem(RawItemInput):
+    id: str
+    status: RawItemStatus = "pending"
+    run_id: str | None = None
+    fetched_at: datetime
+
+
+# ── Runs ──
+
+
+class Run(BaseModel):
+    id: str
+    agent_id: AgentId
+    phase: RunPhase
+    status: RunStatus = "running"
+    source_ids: list[str] = Field(default_factory=list)
+    stats: dict[str, Any] = Field(default_factory=dict)
+    trace: list[Any] = Field(default_factory=list)
+    error: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None

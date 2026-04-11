@@ -1,3 +1,8 @@
+# e2e / playwright
+e2e/test-results/
+playwright-report/
+/tmp/agent-lab-*.log
+
 # env & secrets
 .env
 .env.*

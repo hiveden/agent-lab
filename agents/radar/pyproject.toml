@@ -21,6 +21,16 @@ dependencies = [
 radar-push = "radar.cron:main"
 radar-serve = "radar.main:serve"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-httpx>=0.30",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [tool.uv.sources]
 agent-lab-shared = { workspace = true }
 

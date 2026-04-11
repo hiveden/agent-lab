@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
 import { insertItemsBatch } from '@/lib/items';
+import { itemBatchInputSchema } from '@/lib/validations';
 
 export const runtime = 'edge';
 
@@ -17,19 +18,15 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
-  const b = body as { round_at?: string; items?: unknown[] };
-  if (!b || typeof b.round_at !== 'string' || !Array.isArray(b.items)) {
+  const parsed = itemBatchInputSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'invalid body: expected { round_at, items[] }' },
+      { error: 'validation failed', issues: parsed.error.issues },
       { status: 400 },
     );
   }
   try {
-    const result = await insertItemsBatch(
-      env.DB,
-      b.round_at,
-      b.items as Parameters<typeof insertItemsBatch>[2],
-    );
+    const result = await insertItemsBatch(env.DB, parsed.data.round_at, parsed.data.items);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(
