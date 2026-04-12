@@ -21,6 +21,7 @@ import { useIsMobile } from '@/lib/hooks/useMediaQuery';
 import type { MockTrace } from './traceMock';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 
 export default function RadarWorkspace() {
   const isMobile = useIsMobile();
@@ -574,14 +575,9 @@ export default function RadarWorkspace() {
             <kbd className="k">K</kbd>
           </span>
         </button>
-        <button
-          type="button"
-          className="trigger-btn"
-          disabled={pushBusy}
-          onClick={() => triggerRadarPush(30)}
-        >
+        <Button size="sm" disabled={pushBusy} onClick={() => triggerRadarPush(30)}>
           {pushBusy ? 'Running…' : 'Trigger'}
-        </button>
+        </Button>
         <span className="py-0.5 px-2 border border-[var(--border-hi)] rounded-full font-[var(--mono)] text-[10.5px] text-[var(--text-2)] bg-[var(--bg)]">
           {loading
             ? 'loading…'

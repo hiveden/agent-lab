@@ -8,6 +8,7 @@ import ChatView from './ChatView';
 import TraceDrawer from './TraceDrawer';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 
 type CategoryTab = 'inbox' | 'watching' | 'archive';
 
@@ -157,11 +158,14 @@ export default function InboxView() {
         </Tabs>
         <div className="ml-auto flex gap-1">
           {gradeChips.map((c) => (
-            <button
+            <Badge
               key={c.f}
+              variant="outline"
               className={cn(
-                'py-[3px] px-2.5 rounded-[14px] border border-[var(--border)] bg-transparent cursor-pointer text-[11px] text-[var(--text-2)] inline-flex items-center gap-[3px]',
-                filter === c.f && 'bg-[var(--accent)] text-white border-transparent',
+                'cursor-pointer text-[11px] py-[3px] px-2.5 rounded-[14px] gap-[3px]',
+                filter === c.f
+                  ? 'bg-[var(--accent)] text-white border-transparent'
+                  : 'bg-transparent text-[var(--text-2)] border-[var(--border)]',
               )}
               onClick={() => {
                 setFilter(c.f);
@@ -170,7 +174,7 @@ export default function InboxView() {
             >
               {c.f !== 'all' && <span className={cn('grade-dot', c.f)} />}
               {c.label || c.f}
-            </button>
+            </Badge>
           ))}
         </div>
       </div>
@@ -200,7 +204,14 @@ export default function InboxView() {
                         onClick={() => handleSelectById(it.id)}
                       >
                         <div className="flex items-center gap-2 mb-2">
-                          <span className={cn('grade-dot', it.grade)} />
+                          <Badge variant="outline" className={cn(
+                            'text-[10px] px-1.5 py-0 h-5',
+                            it.grade === 'fire' && 'border-[var(--fire)] text-[var(--fire)] bg-[var(--fire-bg,var(--fire-soft))]',
+                            it.grade === 'bolt' && 'border-[var(--bolt)] text-[var(--bolt)] bg-[var(--bolt-bg,var(--bolt-soft))]',
+                            it.grade === 'bulb' && 'border-[var(--bulb)] text-[var(--bulb)] bg-[var(--bulb-bg,var(--bulb-soft))]',
+                          )}>
+                            {it.grade}
+                          </Badge>
                           <span className="text-[11px] text-[var(--text-2)]">{it.source ?? ''}</span>
                           <span className="text-[11px] text-[var(--text-3)] ml-auto">{relTime(it.round_at)}</span>
                         </div>

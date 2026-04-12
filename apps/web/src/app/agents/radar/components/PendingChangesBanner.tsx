@@ -1,7 +1,7 @@
 'use client';
 
 import type { ItemStatus } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   pending: Record<string, ItemStatus>;
@@ -31,23 +31,12 @@ export default function PendingChangesBanner({
       <span className="font-semibold">{keys.length} pending change{keys.length > 1 ? 's' : ''}</span>
       <span>: {parts}</span>
       <span className="flex-1" />
-      <button
-        className="py-[3px] px-2.5 text-[11.5px] rounded border border-[#f3dca8] bg-white text-[var(--warn)] cursor-pointer transition-all duration-[.12s] hover:brightness-95"
-        onClick={onDiscard}
-        disabled={busy}
-      >
+      <Button size="sm" variant="ghost" onClick={onDiscard} disabled={busy}>
         Discard
-      </button>
-      <button
-        className={cn(
-          'py-[3px] px-2.5 text-[11.5px] rounded border cursor-pointer transition-all duration-[.12s] hover:brightness-95',
-          'bg-[var(--warn)] text-white border-[var(--warn)]',
-        )}
-        onClick={onApply}
-        disabled={busy}
-      >
-        {busy ? 'Applying…' : 'Apply'}
-      </button>
+      </Button>
+      <Button size="sm" onClick={onApply} disabled={busy}>
+        {busy ? 'Applying…' : `Apply ${keys.length} changes`}
+      </Button>
     </div>
   );
 }
