@@ -20,6 +20,7 @@ import PendingChangesBanner from './components/PendingChangesBanner';
 import SourcesView from './components/SourcesView';
 import RunsView from './components/RunsView';
 import AttentionView from './components/AttentionView';
+import SettingsView from './components/SettingsView';
 import TabBar from './components/TabBar';
 import MobileItemsList from './components/MobileItemsList';
 import MobileChatView from './components/MobileChatView';
@@ -669,6 +670,8 @@ export default function RadarWorkspace() {
                 <RunsView />
               ) : activeView === 'attention' ? (
                 <AttentionView />
+              ) : activeView === 'settings' ? (
+                <SettingsView />
               ) : (
                 <MobileItemsList
                   items={itemsForList}
@@ -749,6 +752,8 @@ export default function RadarWorkspace() {
           <div className="content full-width"><RunsView /></div>
         ) : activeView === 'attention' ? (
           <div className="content full-width"><AttentionView /></div>
+        ) : activeView === 'settings' ? (
+          <div className="content full-width"><SettingsView /></div>
         ) : (
         <>
         <ItemsList

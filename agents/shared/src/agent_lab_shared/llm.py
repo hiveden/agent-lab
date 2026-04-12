@@ -1,4 +1,7 @@
-"""LLM factory: 按 task 返回 BaseChatModel,支持 mock 模式。"""
+"""LLM factory: 按 task 返回 BaseChatModel，支持 mock + 多 provider。
+
+读取优先级: env var > DB settings > defaults
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ TaskType = Literal["push", "chat", "tool"]
 
 
 class MockChatModel(BaseChatModel):
-    """无依赖的假 LLM。固定输出 mock 回复,支持 stream 和 structured output。"""
+    """无依赖的假 LLM。固定输出 mock 回复。"""
 
     mock_text: str = "[mock] 这是一条假回复,Phase 2 接真 LLM。"
 
@@ -40,7 +43,6 @@ class MockChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        # 切成若干 chunk,模拟流式
         text = self.mock_text
         size = max(1, len(text) // 6)
         for i in range(0, len(text), size):
@@ -58,36 +60,79 @@ class MockChatModel(BaseChatModel):
             yield chunk
 
 
-def get_llm(task: TaskType = "chat") -> BaseChatModel:
-    """按任务类型返回 LLM。LLM_MOCK=1 时返回 MockChatModel。
+def _resolve_settings(task: TaskType) -> tuple[str, str, str, str]:
+    """解析 LLM 配置，返回 (provider, base_url, api_key, model)。
 
-    明确传 trust_env=False 的 httpx client,避免 shell 的 HTTPS_PROXY/ALL_PROXY
-    干扰本地 CPA / LLM provider 的 localhost 连接。
+    优先级: env var > DB settings > defaults
     """
-    if settings.llm_mock:
-        return MockChatModel()
+    model_map = {
+        "push": settings.llm_model_push,
+        "chat": settings.llm_model_chat,
+        "tool": settings.llm_model_tool,
+    }
 
-    # 延迟导入,mock 模式下不需要真 openai 客户端
+    # 如果 env 有 API key，直接用 env 配置（测试环境覆盖）
+    if settings.glm_api_key:
+        return (
+            settings.llm_provider,
+            settings.glm_base_url,
+            settings.glm_api_key,
+            model_map.get(task, settings.llm_model_chat),
+        )
+
+    # 否则尝试从 platform API 读取 DB 配置
+    try:
+        from .db import PlatformClient
+
+        client = PlatformClient()
+        data = client.get_llm_settings()
+        s = data.get("settings", {})
+        db_model_map = {
+            "push": s.get("model_push", ""),
+            "chat": s.get("model_chat", ""),
+            "tool": s.get("model_tool", ""),
+        }
+        return (
+            s.get("provider", settings.llm_provider),
+            s.get("base_url", settings.glm_base_url),
+            s.get("api_key", ""),
+            db_model_map.get(task, "") or model_map.get(task, ""),
+        )
+    except Exception:
+        # Fallback to env defaults
+        return (
+            settings.llm_provider,
+            settings.glm_base_url,
+            "",
+            model_map.get(task, settings.llm_model_chat),
+        )
+
+
+def _create_llm(provider: str, base_url: str, api_key: str, model: str) -> BaseChatModel:
+    """创建 LLM 实例。所有 provider 走 OpenAI-compatible API。"""
     import httpx
     from langchain_openai import ChatOpenAI
 
-    if task == "push":
-        model = settings.llm_model_push
-    elif task == "tool":
-        model = settings.llm_model_tool
-    else:
-        model = settings.llm_model_chat
-
-    # 关键:trust_env=False 让 httpx 完全忽略 shell 的 HTTP_PROXY / HTTPS_PROXY /
-    # ALL_PROXY / NO_PROXY,避免 localhost CPA 被推到 ClashX。
     sync_client = httpx.Client(trust_env=False, timeout=180.0)
     async_client = httpx.AsyncClient(trust_env=False, timeout=180.0)
 
+    # Ollama 不需要 API key
+    effective_key = api_key or ("ollama" if provider == "ollama" else "sk-placeholder")
+
     return ChatOpenAI(
         model=model,
-        base_url=settings.glm_base_url,
-        api_key=settings.glm_api_key or "sk-placeholder",
+        base_url=base_url,
+        api_key=effective_key,
         temperature=0.7,
         http_client=sync_client,
         http_async_client=async_client,
     )
+
+
+def get_llm(task: TaskType = "chat") -> BaseChatModel:
+    """按任务类型返回 LLM。LLM_MOCK=1 时返回 MockChatModel。"""
+    if settings.llm_mock:
+        return MockChatModel()
+
+    provider, base_url, api_key, model = _resolve_settings(task)
+    return _create_llm(provider, base_url, api_key, model)

@@ -83,3 +83,21 @@ export const runUpdateSchema = z.object({
   error: z.string().nullable().optional(),
   finished_at: z.string().optional(),
 });
+
+// ── LLM Settings ──
+
+export const llmSettingsUpdateSchema = z.object({
+  provider: z.enum(['glm', 'ollama', 'anthropic']).optional(),
+  model_push: z.string().min(1).optional(),
+  model_chat: z.string().min(1).optional(),
+  model_tool: z.string().min(1).optional(),
+  base_url: z.string().min(1).optional(),
+  api_key: z.string().optional(),
+});
+
+export const testConnectionSchema = z.object({
+  provider: z.enum(['glm', 'ollama', 'anthropic']),
+  base_url: z.string().min(1),
+  api_key: z.string().optional().default(''),
+  model: z.string().min(1),
+});

@@ -5,6 +5,7 @@ export interface CloudflareEnv {
   DB: D1Database;
   RADAR_WRITE_TOKEN: string;
   RADAR_AGENT_BASE: string;
+  SETTINGS_SECRET: string;
 }
 
 /**

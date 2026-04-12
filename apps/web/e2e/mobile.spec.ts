@@ -143,10 +143,10 @@ test('Step 6: tab switching, each view visual clean', async ({ page }) => {
   await page.screenshot({ path: 'e2e/test-results/m-08-runs.png' });
   await runVisualAudit(page, 'mobile-runs');
 
-  // More (Sources) tab
-  await page.locator('.tab-item', { hasText: 'More' }).click();
+  // Settings tab
+  await page.locator('.tab-item', { hasText: 'Settings' }).click();
   await page.waitForTimeout(500);
-  await expect(page.locator('.sources-view')).toBeVisible();
-  await page.screenshot({ path: 'e2e/test-results/m-09-sources.png' });
-  await runVisualAudit(page, 'mobile-sources');
+  await expect(page.locator('.settings-view')).toBeVisible();
+  await page.screenshot({ path: 'e2e/test-results/m-09-settings.png' });
+  await runVisualAudit(page, 'mobile-settings');
 });

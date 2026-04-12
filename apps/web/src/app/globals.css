@@ -1369,6 +1369,21 @@ kbd.k {
 .att-timestamp { font-size: 11px; color: var(--ag-text-2); margin-top: 16px; }
 
 /* ══════════════════════════════════════════════════════
+/* ── Settings View ── */
+.settings-view { max-width: 600px; }
+.settings-header { margin-bottom: 4px; }
+.settings-header h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.settings-form { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.s-row { display: flex; align-items: center; gap: 12px; }
+.s-row label { width: 100px; font-size: 13px; color: var(--ag-text-2); flex-shrink: 0; }
+.s-row input, .s-row select { flex: 1; padding: 8px 12px; border: 1px solid var(--ag-border); border-radius: 8px; font-size: 13px; background: var(--ag-bg); color: var(--ag-text); font-family: inherit; }
+.s-row input:focus, .s-row select:focus { outline: none; border-color: var(--ag-text); }
+.s-key-group { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.s-key-group input { width: 100%; }
+.s-key-hint { font-size: 11px; color: var(--ag-text-2); }
+.s-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.s-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ag-text); color: var(--ag-bg); padding: 8px 20px; border-radius: 8px; font-size: 13px; z-index: 999; animation: toast-in 0.2s ease; }
+
    MOBILE LAYOUT (≤640px)
    ══════════════════════════════════════════════════════ */
 

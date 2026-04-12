@@ -17,4 +17,7 @@ pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0002_sou
 echo "[init-local-db] applying migrations/0003_dwell_time.sql ..."
 pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0003_dwell_time.sql 2>/dev/null || echo "[init-local-db] (0003 already applied, skipping)"
 
+echo "[init-local-db] applying migrations/0004_llm_settings.sql ..."
+pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0004_llm_settings.sql 2>/dev/null || echo "[init-local-db] (0004 already applied, skipping)"
+
 echo "[init-local-db] done. Local state at: $WEB_DIR/.wrangler/state"

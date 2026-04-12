@@ -123,6 +123,15 @@ class PlatformClient:
             resp.raise_for_status()
             return resp.json()
 
+    # ── LLM Settings ──
+
+    def get_llm_settings(self) -> dict[str, Any]:
+        url = f"{self.base_url}/api/settings?internal=true"
+        with self._client() as client:
+            resp = client.get(url, headers=self._headers())
+            resp.raise_for_status()
+            return resp.json()
+
     def update_run(self, run_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/api/runs/{run_id}"
         with self._client() as client:

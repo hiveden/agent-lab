@@ -12,7 +12,7 @@ const TABS: { view: ViewType; label: string; icon: string }[] = [
   { view: 'watching', label: 'Watch', icon: '👁' },
   { view: 'attention', label: 'Mirror', icon: '🪞' },
   { view: 'runs', label: 'Runs', icon: '⚡' },
-  { view: 'sources', label: 'More', icon: '⚙' },
+  { view: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
 export default function TabBar({ activeView, onViewChange }: TabBarProps) {

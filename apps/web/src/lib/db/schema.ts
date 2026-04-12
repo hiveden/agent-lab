@@ -139,3 +139,16 @@ export const runs = sqliteTable(
     index('idx_runs_agent_phase').on(table.agent_id, table.phase, table.started_at),
   ]
 );
+
+// ── LLM Settings ──
+
+export const llmSettings = sqliteTable('llm_settings', {
+  id: text('id').primaryKey(),
+  provider: text('provider').notNull().default('glm'),
+  model_push: text('model_push').notNull().default('glm-4-flash'),
+  model_chat: text('model_chat').notNull().default('glm-4.6'),
+  model_tool: text('model_tool').notNull().default('glm-4.6'),
+  base_url: text('base_url').notNull().default('https://open.bigmodel.cn/api/paas/v4'),
+  api_key_encrypted: text('api_key_encrypted'),
+  updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
+});
