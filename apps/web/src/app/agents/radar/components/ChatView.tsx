@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ItemWithState } from '@/lib/types';
 import type { MockTrace } from '../traceMock';
 import InlineTraceRail from './InlineTraceRail';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
+import { cn } from '@/lib/utils';
 
 interface Props {
   item: ItemWithState;
@@ -64,24 +65,29 @@ export default function ChatView({
   }
 
   return (
-    <div className="chat-col">
-      <div className="chat-head">
-        <div className="chat-head-row">
-          <span className={`chat-grade ${item.grade}`}>{item.grade}</span>
-          <div className="chat-title">
-            <h2>{item.title}</h2>
-            <div className="meta">
+    <div className="flex flex-col overflow-hidden bg-[var(--bg)] min-w-0">
+      <div className="px-5 pt-3 pb-2.5 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
+        <div className="flex items-start gap-2.5">
+          <span className={cn(
+            'chat-grade',
+            item.grade,
+          )}>
+            {item.grade}
+          </span>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[15px] font-semibold text-[var(--text)] leading-[1.35] mb-[3px]">{item.title}</h2>
+            <div className="flex gap-2.5 text-[11.5px] text-[var(--text-3)] items-center flex-wrap">
               {item.source ? <span>{item.source}</span> : null}
               {item.url ? (
-                <a href={item.url} target="_blank" rel="noopener noreferrer">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] no-underline font-[var(--mono)] text-[11px] hover:underline">
                   ↗ open
                 </a>
               ) : null}
             </div>
           </div>
-          <div className="chat-head-actions">
+          <div className="flex gap-1 items-center shrink-0">
             <button
-              className={`icon-btn ${traceOpen ? 'on' : ''}`}
+              className={cn('icon-btn w-[26px] h-[26px]', traceOpen && 'on')}
               title="Toggle trace (T)"
               onClick={onToggleTrace}
               aria-label="Toggle trace"
@@ -100,8 +106,8 @@ export default function ChatView({
           </div>
         </div>
         {item.why ? (
-          <div className="chat-why">
-            <span className="label">why</span>
+          <div className="mt-2.5 py-[9px] px-3 bg-[var(--surface)] border border-[var(--border)] rounded-[5px] text-xs text-[var(--text-2)] leading-[1.55] border-l-2 border-l-[var(--accent-line)]">
+            <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-3)] mr-1.5 font-semibold">why</span>
             {item.why}
           </div>
         ) : null}
@@ -149,12 +155,12 @@ export default function ChatView({
         )}
       </div>
 
-      <div className="composer">
-        <div className="preset-row">
+      <div className="border-t border-[var(--border)] bg-[var(--surface-hi)] px-4 pt-2.5 pb-3 shrink-0">
+        <div className="flex gap-1.5 mb-2 flex-wrap">
           {PRESETS.map((p) => (
             <button
               key={p.label}
-              className="preset"
+              className="text-[11.5px] py-[3px] px-2.5 bg-[var(--surface)] border border-[var(--border-hi)] rounded-full text-[var(--text-2)] cursor-pointer transition-all duration-[.12s] hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
               disabled={isLoading}
               onClick={() => {
                 if (isLoading) return;
@@ -204,4 +210,3 @@ export default function ChatView({
     </div>
   );
 }
-

@@ -1,18 +1,11 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
+import { useRadarStore } from '@/lib/stores/radar-store';
+import { useItems } from '@/lib/hooks/use-items';
 import NavRail, { type ViewType } from './components/NavRail';
-import ItemsList, { type GradeFilter } from './components/ItemsList';
-import ChatView from './components/ChatView';
-import type { Message } from 'ai';
-import TraceDrawer from './components/TraceDrawer';
+import InboxView from './components/InboxView';
 import CommandPalette, {
   type PaletteAction,
 } from './components/CommandPalette';
@@ -25,146 +18,98 @@ import TabBar from './components/TabBar';
 import MobileItemsList from './components/MobileItemsList';
 import MobileChatView from './components/MobileChatView';
 import { useIsMobile } from '@/lib/hooks/useMediaQuery';
-import { buildMockTrace, type MockTrace } from './traceMock';
-
-const LS = {
-  listW: 'agent-lab.radar.list-w',
-  traceW: 'agent-lab.radar.trace-w',
-  traceOpen: 'agent-lab.radar.trace-open',
-  filter: 'agent-lab.radar.filter',
-  selectedId: 'agent-lab.radar.selected-id',
-  view: 'agent-lab.radar.view',
-};
-
-function loadLS<T>(key: string, fallback: T, parse?: (s: string) => T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const v = localStorage.getItem(key);
-    if (v == null) return fallback;
-    return parse ? parse(v) : (JSON.parse(v) as T);
-  } catch {
-    return fallback;
-  }
-}
-
-function rid() {
-  return 'm_' + Math.random().toString(36).slice(2, 10);
-}
-
-interface SessionState {
-  session_id: string | null;
-  messages: Message[];
-}
+import type { MockTrace } from './traceMock';
 
 export default function RadarWorkspace() {
   const isMobile = useIsMobile();
 
-  // Data
-  const [items, setItems] = useState<ItemWithState[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadErr, setLoadErr] = useState<string | null>(null);
+  // ── Store selectors (individual to avoid unnecessary re-renders) ──
+  const activeView = useRadarStore((s) => s.activeView);
+  const filter = useRadarStore((s) => s.filter);
+  const selectedId = useRadarStore((s) => s.selectedId);
+  const focusedIndex = useRadarStore((s) => s.focusedIndex);
+  const paletteOpen = useRadarStore((s) => s.paletteOpen);
+  const toast = useRadarStore((s) => s.toast);
+  const chatHeight = useRadarStore((s) => s.chatHeight);
+  const traceWidth = useRadarStore((s) => s.traceWidth);
+  const traceOpen = useRadarStore((s) => s.traceOpen);
 
-  // UI state — 初始值固定为 SSR-safe defaults，useEffect 里恢复 localStorage
-  const [activeView, setActiveView] = useState<ViewType>('inbox');
-  const [filter, setFilter] = useState<GradeFilter>('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const [listWidth, setListWidth] = useState(340);
+  // ── SWR data fetching ────────────────────────────────────────────
+  const { items: swrItems, isLoading: swrLoading, error: swrError, mutate: mutateItems } = useItems(activeView);
 
-  // 客户端 hydrate 后从 localStorage 恢复
-  useEffect(() => {
-    setActiveView(loadLS(LS.view, 'inbox' as ViewType, (s) => s as ViewType));
-    setFilter(loadLS(LS.filter, 'all' as GradeFilter, (s) => s as GradeFilter));
-    setSelectedId(loadLS<string | null>(LS.selectedId, null, (s) => (s === 'null' ? null : s)));
-    setListWidth(loadLS(LS.listW, 340, (s) => parseInt(s, 10) || 340));
-    setTraceWidth(loadLS(LS.traceW, 440, (s) => parseInt(s, 10) || 440));
-    setTraceOpen(loadLS(LS.traceOpen, false, (s) => s === 'true'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const [traceWidth, setTraceWidth] = useState(440);
-  const [traceOpen, setTraceOpen] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const items = useRadarStore((s) => s.items);
+  const loading = useRadarStore((s) => s.loading);
+  const loadErr = useRadarStore((s) => s.loadErr);
 
-  // Pending state changes (batch)
-  const [pending, setPending] = useState<Record<string, ItemStatus>>({});
-  const [applyBusy, setApplyBusy] = useState(false);
+  const pending = useRadarStore((s) => s.pending);
+  const applyBusy = useRadarStore((s) => s.applyBusy);
 
-  // Per-item chat sessions
-  const [sessions, setSessions] = useState<Record<string, SessionState>>({});
+  const sessions = useRadarStore((s) => s.sessions);
 
-  // Trace currently visible in drawer + highlight span
-  const [activeTrace, setActiveTrace] = useState<MockTrace | null>(null);
-  const [highlightSpanId, setHighlightSpanId] = useState<string | null>(null);
-  const [expandAllSignal, setExpandAllSignal] = useState(0);
-  const [collapseAllSignal, setCollapseAllSignal] = useState(0);
+  const activeTrace = useRadarStore((s) => s.activeTrace);
+  const highlightSpanId = useRadarStore((s) => s.highlightSpanId);
+  const expandAllSignal = useRadarStore((s) => s.expandAllSignal);
+  const collapseAllSignal = useRadarStore((s) => s.collapseAllSignal);
 
-  // Persist UI state
-  useEffect(() => {
-    localStorage.setItem(LS.listW, String(listWidth));
-  }, [listWidth]);
-  useEffect(() => {
-    localStorage.setItem(LS.traceW, String(traceWidth));
-  }, [traceWidth]);
-  useEffect(() => {
-    localStorage.setItem(LS.traceOpen, String(traceOpen));
-  }, [traceOpen]);
-  useEffect(() => {
-    localStorage.setItem(LS.filter, filter);
-  }, [filter]);
-  useEffect(() => {
-    localStorage.setItem(LS.selectedId, selectedId ?? 'null');
-  }, [selectedId]);
-  useEffect(() => {
-    localStorage.setItem(LS.view, activeView);
-  }, [activeView]);
+  // ── Store actions ─────────────────────────────────────────────────
+  const setFilter = useRadarStore((s) => s.setFilter);
+  const setSelectedId = useRadarStore((s) => s.setSelectedId);
+  const setFocusedIndex = useRadarStore((s) => s.setFocusedIndex);
+  const setPaletteOpen = useRadarStore((s) => s.setPaletteOpen);
+  const setToast = useRadarStore((s) => s.setToast);
+  const setChatHeight = useRadarStore((s) => s.setChatHeight);
+  const setTraceWidth = useRadarStore((s) => s.setTraceWidth);
+  const setTraceOpen = useRadarStore((s) => s.setTraceOpen);
+  const handleViewChange = useRadarStore((s) => s.handleViewChange);
 
-  // Toast auto-dismiss
+  const setItems = useRadarStore((s) => s.setItems);
+  const setLoading = useRadarStore((s) => s.setLoading);
+  const setLoadErr = useRadarStore((s) => s.setLoadErr);
+
+  const markPending = useRadarStore((s) => s.markPending);
+  const discardPending = useRadarStore((s) => s.discardPending);
+  const applyPending = useRadarStore((s) => s.applyPending);
+
+  const loadSession = useRadarStore((s) => s.loadSession);
+  const updateSession = useRadarStore((s) => s.updateSession);
+
+  const setActiveTrace = useRadarStore((s) => s.setActiveTrace);
+  const setHighlightSpanId = useRadarStore((s) => s.setHighlightSpanId);
+  const triggerExpandAll = useRadarStore((s) => s.triggerExpandAll);
+  const triggerCollapseAll = useRadarStore((s) => s.triggerCollapseAll);
+
+  // ── Sync SWR data into the store ──────────────────────────────────
+  useEffect(() => {
+    setItems(swrItems);
+  }, [swrItems, setItems]);
+
+  useEffect(() => {
+    setLoading(swrLoading);
+  }, [swrLoading, setLoading]);
+
+  useEffect(() => {
+    setLoadErr(swrError ? String(swrError) : null);
+  }, [swrError, setLoadErr]);
+
+  // ── Load session on selectedId change ─────────────────────────────
+  useEffect(() => {
+    if (selectedId) loadSession(selectedId);
+  }, [selectedId, loadSession]);
+
+  // ── Toast auto-dismiss ────────────────────────────────────────────
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 1800);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, setToast]);
 
-  // Load items — reusable
-  const reloadItems = useCallback(async () => {
-    try {
-      setLoading(true);
-      let statusParam = 'unread';
-      if (activeView === 'watching') statusParam = 'watching';
-      else if (activeView === 'archive') statusParam = 'dismissed,discussed,applied,rejected';
+  // ── Derived state ─────────────────────────────────────────────────
 
-      const res = await fetch(`/api/items?agent_id=radar&limit=400&status=${statusParam}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = (await res.json()) as { items: ItemWithState[] };
-      setItems(body.items ?? []);
-      setLoadErr(null);
-    } catch (e) {
-      setLoadErr(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeView]);
-
-  useEffect(() => {
-    reloadItems();
-  }, [reloadItems]);
-
-  const handleViewChange = useCallback((view: ViewType) => {
-    setActiveView(view);
-    setFocusedIndex(0);
-    setSelectedId(null);
-    setActiveTrace(null);
-    setHighlightSpanId(null);
-  }, []);
-
-  // Effective status (merges pending over saved)
   const effectiveStatus = useCallback(
     (it: ItemWithState): ItemStatus => pending[it.id] ?? it.status,
     [pending],
   );
 
-  // Filtered list
   const filteredItems = useMemo(() => {
     return items.filter((it) => {
       if (filter === 'all') return true;
@@ -177,123 +122,33 @@ export default function RadarWorkspace() {
     if (focusedIndex >= filteredItems.length) {
       setFocusedIndex(Math.max(0, filteredItems.length - 1));
     }
-  }, [filteredItems.length, focusedIndex]);
+  }, [filteredItems.length, focusedIndex, setFocusedIndex]);
 
   const selectedItem = useMemo(
     () => items.find((it) => it.id === selectedId) ?? null,
     [items, selectedId],
   );
 
-  const selectItemByIndex = useCallback(
-    (idx: number) => {
-      const it = filteredItems[idx];
-      if (!it) return;
-      setFocusedIndex(idx);
-      setSelectedId(it.id);
-      // Clear drawer trace (will be replaced by next reply)
-      setActiveTrace(null);
-      setHighlightSpanId(null);
+  const handleChatUpdate = useCallback(
+    (msgs: import('ai').Message[]) => {
+      if (!selectedId) return;
+      updateSession(selectedId, msgs);
     },
-    [filteredItems],
+    [selectedId, updateSession],
   );
 
-  // Load session history when an item is selected the first time
-  useEffect(() => {
-    if (!selectedId) return;
-    if (sessions[selectedId]) return;
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/chat/sessions/${selectedId}`);
-        if (!res.ok) return;
-        const j = (await res.json()) as {
-          session_id: string | null;
-          messages: Array<{ id: string; role: string; content: string }>;
-        };
-        if (!alive) return;
-        const msgs: Message[] = (j.messages ?? [])
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({
-            id: m.id,
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-          }));
-        setSessions((prev) => ({
-          ...prev,
-          [selectedId]: { session_id: j.session_id, messages: msgs },
-        }));
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [selectedId, sessions]);
+  const currentSession = selectedId ? sessions[selectedId] : null;
 
-  const handleChatUpdate = useCallback((msgs: Message[]) => {
-    if (!selectedId) return;
-    setSessions((prev) => {
-      const cur = prev[selectedId] ?? { session_id: null, messages: [] };
-      return {
-        ...prev,
-        [selectedId]: { ...cur, messages: msgs },
-      };
-    });
-  }, [selectedId]);
-
-  // Pending state batch operations
-  const markPending = useCallback(
-    (id: string, status: ItemStatus) => {
-      setPending((prev) => {
-        // Toggle off if repeating the same next state
-        if (prev[id] === status) {
-          const { [id]: _, ...rest } = prev;
-          return rest;
-        }
-        return { ...prev, [id]: status };
-      });
-    },
-    [],
+  const itemsForList = useMemo(
+    () =>
+      filteredItems.map((it) => ({
+        ...it,
+        status: effectiveStatus(it),
+      })),
+    [filteredItems, effectiveStatus],
   );
 
-  const discardPending = useCallback(() => setPending({}), []);
-
-  const applyPending = useCallback(async () => {
-    const entries = Object.entries(pending);
-    if (entries.length === 0) return;
-    setApplyBusy(true);
-    // Fire all PATCH in parallel
-    const results = await Promise.allSettled(
-      entries.map(([id, status]) =>
-        fetch(`/api/items/${id}/state`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ status }),
-        }),
-      ),
-    );
-    // Optimistically update items in place and remove those that no longer match the active view
-    setItems((prev) =>
-      prev.map((it) => {
-        const next = pending[it.id];
-        return next ? { ...it, status: next } : it;
-      }).filter((it) => {
-        if (activeView === 'inbox' && it.status !== 'unread') return false;
-        if (activeView === 'watching' && it.status !== 'watching') return false;
-        if (activeView === 'archive' && !['dismissed', 'discussed', 'applied', 'rejected'].includes(it.status)) return false;
-        return true;
-      })
-    );
-    setPending({});
-    setApplyBusy(false);
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    setToast(failed ? `Applied (${failed} failed)` : 'Changes applied');
-  }, [pending]);
-
-  // ─── Trigger Radar pipeline (ingest → evaluate) ────────────────────────
-  // Calls /api/cron/radar/ingest then /api/cron/radar/evaluate,
-  // reads SSE progress events and builds a growing trace.
+  // ─── Trigger Radar pipeline (ingest → evaluate) ──────────────────
   const [pushBusy, setPushBusy] = useState(false);
 
   const triggerRadarPush = useCallback(
@@ -302,7 +157,6 @@ export default function RadarWorkspace() {
       setPushBusy(true);
       setToast('Triggering Radar collection…');
 
-      // Start with an empty push trace and open drawer immediately
       const trace: MockTrace = {
         spans: [],
         totalTokens: 0,
@@ -314,8 +168,9 @@ export default function RadarWorkspace() {
       setTraceOpen(true);
       setHighlightSpanId(null);
 
-      // Kind mapping for backend span kinds → frontend MockSpan SpanKind
-      const mapKind = (k: string): 'tool' | 'llm' | 'system' | 'ctx' | 'stream' => {
+      const mapKind = (
+        k: string,
+      ): 'tool' | 'llm' | 'system' | 'ctx' | 'stream' => {
         if (k === 'tool') return 'tool';
         if (k === 'llm') return 'llm';
         if (k === 'system') return 'system';
@@ -329,7 +184,6 @@ export default function RadarWorkspace() {
         total: number;
       } | null = null;
 
-      // Helper: consume SSE stream and update trace
       const consumeSSE = async (url: string, phasePrefix: string) => {
         const res = await fetch(url, {
           method: 'POST',
@@ -377,11 +231,20 @@ export default function RadarWorkspace() {
                 if (existing) {
                   return trace.spans.map((s) =>
                     s.id === id
-                      ? { ...s, title, status, ms: ms || s.ms, sections: sections.length ? sections : s.sections }
+                      ? {
+                          ...s,
+                          title,
+                          status,
+                          ms: ms || s.ms,
+                          sections: sections.length ? sections : s.sections,
+                        }
                       : s,
                   );
                 }
-                return [...trace.spans, { id, kind, title, status, ms, sections }];
+                return [
+                  ...trace.spans,
+                  { id, kind, title, status, ms, sections },
+                ];
               })();
               trace.totalMs = trace.spans.reduce((a, s) => a + s.ms, 0);
               setActiveTrace({ ...trace, spans: [...trace.spans] });
@@ -394,16 +257,16 @@ export default function RadarWorkspace() {
               trace.totalMs = Number(ev.total_ms ?? Date.now() - t0);
               setActiveTrace({ ...trace, spans: [...trace.spans] });
             } else if (type === 'error') {
-              setToast(`Pipeline failed: ${String(ev.message ?? 'unknown')}`);
+              setToast(
+                `Pipeline failed: ${String(ev.message ?? 'unknown')}`,
+              );
             }
           }
         }
       };
 
       try {
-        // Phase 1: Ingest (采集)
         await consumeSSE('/api/cron/radar/ingest', 'ingest');
-        // Phase 2: Evaluate (评判)
         await consumeSSE('/api/cron/radar/evaluate', 'evaluate');
       } catch (e) {
         setToast(`Pipeline failed: ${String(e)}`);
@@ -416,13 +279,13 @@ export default function RadarWorkspace() {
         setToast(
           `✓ Collected: ${r.inserted} new · ${r.skipped} duplicate`,
         );
-        await reloadItems();
+        await mutateItems();
       }
     },
-    [pushBusy, reloadItems],
+    [pushBusy, mutateItems, setToast, setActiveTrace, setTraceOpen, setHighlightSpanId],
   );
 
-  // Keyboard layer
+  // ── Keyboard layer ────────────────────────────────────────────────
   useEffect(() => {
     function isTyping(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
@@ -435,7 +298,6 @@ export default function RadarWorkspace() {
     }
 
     function onKey(e: KeyboardEvent) {
-      // Cmd+K always works
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen(true);
@@ -443,7 +305,6 @@ export default function RadarWorkspace() {
       }
       if (paletteOpen) return;
 
-      // Escape: trace → deselect → nothing
       if (e.key === 'Escape') {
         if (traceOpen) {
           setTraceOpen(false);
@@ -480,7 +341,7 @@ export default function RadarWorkspace() {
         }
       } else if (key === 't') {
         e.preventDefault();
-        if (selectedId) setTraceOpen((v) => !v);
+        if (selectedId) setTraceOpen(!traceOpen);
       } else if (key === '/') {
         e.preventDefault();
         setPaletteOpen(true);
@@ -506,9 +367,15 @@ export default function RadarWorkspace() {
     filteredItems,
     focusedIndex,
     markPending,
+    setPaletteOpen,
+    setTraceOpen,
+    setSelectedId,
+    setFocusedIndex,
+    setActiveTrace,
+    setToast,
   ]);
 
-  // Palette actions
+  // ── Palette actions ───────────────────────────────────────────────
   const actions: PaletteAction[] = useMemo(() => {
     const list: PaletteAction[] = [
       {
@@ -548,21 +415,21 @@ export default function RadarWorkspace() {
         id: 'toggle-trace',
         label: traceOpen ? 'Close trace panel' : 'Open trace panel',
         hint: 'View',
-        run: () => setTraceOpen((v) => !v),
+        run: () => setTraceOpen(!traceOpen),
         enabled: !!selectedId,
       },
       {
         id: 'expand-all',
         label: 'Expand all spans',
         hint: 'View',
-        run: () => setExpandAllSignal((n) => n + 1),
+        run: () => triggerExpandAll(),
         enabled: traceOpen,
       },
       {
         id: 'collapse-all',
         label: 'Collapse all spans',
         hint: 'View',
-        run: () => setCollapseAllSignal((n) => n + 1),
+        run: () => triggerCollapseAll(),
         enabled: traceOpen,
       },
       {
@@ -595,66 +462,53 @@ export default function RadarWorkspace() {
       },
     ];
     return list;
-  }, [traceOpen, selectedId, markPending, pushBusy, triggerRadarPush]);
-
-  // When the user clicks an inline trace capsule
-  const handleOpenFromSpan = useCallback(
-    (trace: MockTrace, spanId: string | null) => {
-      setActiveTrace(trace);
-      setHighlightSpanId(spanId);
-      setTraceOpen(true);
-    },
-    [],
-  );
-
-  const currentSession = selectedId ? sessions[selectedId] : null;
-
-  // Resolve effective status display (for list rows) + merge pending
-  const itemsForList = useMemo(
-    () =>
-      filteredItems.map((it) => ({
-        ...it,
-        status: effectiveStatus(it),
-      })),
-    [filteredItems, effectiveStatus],
-  );
+  }, [
+    traceOpen,
+    selectedId,
+    markPending,
+    pushBusy,
+    triggerRadarPush,
+    setFilter,
+    setTraceOpen,
+    triggerExpandAll,
+    triggerCollapseAll,
+    setSelectedId,
+  ]);
 
   // ─── Mobile Layout ──────────────────────────────────────────
-  // SSR: isMobile 未确定时不渲染布局，避免 hydration mismatch
   if (isMobile === undefined) {
-    return <div className="app" />;
+    return <div className="grid grid-rows-[40px_1fr] h-screen" />;
   }
 
   if (isMobile) {
     const mobileSelectItem = (item: ItemWithState) => {
       setSelectedId(item.id);
     };
-    const mobileSwipeAction = async (itemId: string, action: 'watching' | 'dismissed') => {
-      // Optimistic: add to pending immediately
-      setPending((prev) => ({ ...prev, [itemId]: action }));
+    const mobileSwipeAction = async (
+      itemId: string,
+      action: 'watching' | 'dismissed',
+    ) => {
+      markPending(itemId, action);
       try {
         await fetch(`/api/items/${itemId}/state`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ status: action }),
         });
-        // Remove from pending, update local items
-        setItems((prev) =>
-          prev.map((it) => (it.id === itemId ? { ...it, status: action } : it)),
+        setItems(
+          items.map((it) =>
+            it.id === itemId ? { ...it, status: action } : it,
+          ),
         );
       } catch {
         // Revert on failure
       }
-      setPending((prev) => {
-        const next = { ...prev };
-        delete next[itemId];
-        return next;
-      });
+      // Remove from pending — use store's markPending to toggle off
+      markPending(itemId, action);
     };
 
     return (
-      <div className="m-app">
-        {/* Mobile: selected item → full-screen chat */}
+      <div className="flex flex-col h-[100dvh] bg-[var(--ag-bg)] text-[var(--ag-text)]">
         {selectedItem && currentSession !== undefined ? (
           <MobileChatView
             key={selectedItem.id}
@@ -666,8 +520,7 @@ export default function RadarWorkspace() {
           />
         ) : (
           <>
-            {/* Mobile content area */}
-            <div className="m-content">
+            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               {activeView === 'sources' ? (
                 <SourcesView />
               ) : activeView === 'runs' ? (
@@ -680,14 +533,15 @@ export default function RadarWorkspace() {
                 <MobileItemsList
                   items={itemsForList}
                   filter={filter}
-                  onFilterChange={(f) => { setFilter(f); }}
+                  onFilterChange={(f) => {
+                    setFilter(f);
+                  }}
                   onSelect={mobileSelectItem}
                   onSwipeAction={mobileSwipeAction}
                   pendingMap={pending}
                 />
               )}
             </div>
-            {/* Tab Bar */}
             <TabBar activeView={activeView} onViewChange={handleViewChange} />
           </>
         )}
@@ -698,14 +552,14 @@ export default function RadarWorkspace() {
 
   // ─── Desktop Layout ────────────────────────────────────────
   return (
-    <div className="app">
-      <div className="topbar">
-        <div className="brand">agent-lab</div>
-        <div className="crumb">
-          <span className="sep">/</span>
+    <div className="grid grid-rows-[40px_1fr] h-screen">
+      <div className="flex items-center gap-3 px-[14px] pl-[18px] border-b border-[var(--border)] bg-[var(--surface-hi)]">
+        <div className="font-semibold text-[13px] tracking-[-0.005em] text-[var(--text)]">agent-lab</div>
+        <div className="flex items-center gap-1.5 text-[var(--text-3)] text-xs">
+          <span className="text-[var(--text-faint)]">/</span>
           <span>radar</span>
         </div>
-        <div className="topbar-spacer" />
+        <div className="flex-1" />
         <button
           type="button"
           className="cmdk-hint"
@@ -728,14 +582,22 @@ export default function RadarWorkspace() {
             <kbd className="k">K</kbd>
           </span>
         </button>
-        <span className="pill">
+        <button
+          type="button"
+          className="trigger-btn"
+          disabled={pushBusy}
+          onClick={() => triggerRadarPush(30)}
+        >
+          {pushBusy ? 'Running…' : 'Trigger'}
+        </button>
+        <span className="py-0.5 px-2 border border-[var(--border-hi)] rounded-full font-[var(--mono)] text-[10.5px] text-[var(--text-2)] bg-[var(--bg)]">
           {loading
             ? 'loading…'
             : loadErr
               ? 'load error'
               : `${items.length} items`}
         </span>
-        <div className="user-dot">A</div>
+        <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)] text-white inline-flex items-center justify-center text-[10px] font-semibold">A</div>
       </div>
 
       <PendingChangesBanner
@@ -745,97 +607,24 @@ export default function RadarWorkspace() {
         onDiscard={discardPending}
       />
 
-      <div
-        className={`main ${selectedId ? 'has-selection' : ''}`}
-        style={{ ['--list-w' as string]: `${listWidth}px` }}
-      >
+      <div className="grid grid-cols-[52px_1fr] overflow-hidden min-h-0 relative">
         <NavRail activeView={activeView} onViewChange={handleViewChange} />
         {activeView === 'sources' ? (
-          <div className="content full-width"><SourcesView /></div>
+          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
+            <SourcesView />
+          </div>
         ) : activeView === 'runs' ? (
-          <div className="content full-width"><RunsView /></div>
+          <RunsView />
         ) : activeView === 'attention' ? (
-          <div className="content full-width"><AttentionView /></div>
+          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
+            <AttentionView />
+          </div>
         ) : activeView === 'settings' ? (
-          <div className="content full-width"><SettingsView /></div>
+          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
+            <SettingsView />
+          </div>
         ) : (
-        <>
-        <ItemsList
-          items={itemsForList}
-          filter={filter}
-          onFilterChange={(f) => {
-            setFilter(f);
-            setFocusedIndex(0);
-          }}
-          selectedId={selectedId}
-          focusedIndex={focusedIndex}
-          onSelect={selectItemByIndex}
-          pendingMap={pending}
-          listWidth={listWidth}
-          onResize={setListWidth}
-        />
-        <div
-          className={`content ${traceOpen ? 'trace-open' : ''}`}
-          style={{ ['--trace-w' as string]: `${traceWidth}px` }}
-        >
-          {selectedItem && currentSession !== undefined ? (
-            <ChatView
-              key={selectedItem.id}
-              item={selectedItem}
-              initialMessages={currentSession?.messages ?? []}
-              sessionId={currentSession?.session_id ?? null}
-              onOpenTraceFromSpan={handleOpenFromSpan}
-              onToggleTrace={() => setTraceOpen((v) => !v)}
-              traceOpen={traceOpen}
-              onChatUpdate={handleChatUpdate}
-            />
-          ) : (
-            <div className="chat-col">
-              <div className="empty">
-                <div className="icon">
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  >
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                  </svg>
-                </div>
-                <h2>No resource selected</h2>
-                <p>
-                  Pick an item from the list to start a conversation with Radar.
-                  Use <kbd className="k">J</kbd> / <kbd className="k">K</kbd> to
-                  navigate.
-                </p>
-                <div className="hints">
-                  <span>
-                    <kbd className="k">⌘K</kbd> command palette
-                  </span>
-                  <span>
-                    <kbd className="k">T</kbd> toggle trace
-                  </span>
-                  <span>
-                    <kbd className="k">?</kbd> shortcuts
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-          <TraceDrawer
-            open={traceOpen}
-            trace={activeTrace}
-            width={traceWidth}
-            onResize={setTraceWidth}
-            onClose={() => setTraceOpen(false)}
-            highlightSpanId={highlightSpanId}
-            expandAllSignal={expandAllSignal}
-            collapseAllSignal={collapseAllSignal}
-          />
-        </div>
-        </>
+          <InboxView />
         )}
       </div>
 
@@ -849,7 +638,6 @@ export default function RadarWorkspace() {
           if (idx >= 0) {
             setFocusedIndex(idx);
           } else {
-            // Item is filtered out — reset filter so it becomes visible
             setFilter('all');
             setFocusedIndex(items.findIndex((x) => x.id === it.id));
           }

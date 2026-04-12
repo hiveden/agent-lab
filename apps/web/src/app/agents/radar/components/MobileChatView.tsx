@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ItemWithState } from '@/lib/types';
 import type { Message } from 'ai';
 import { useDwellTracker } from '@/lib/hooks/useDwellTracker';
+import { cn } from '@/lib/utils';
 
 interface MobileChatViewProps {
   item: ItemWithState;
@@ -154,50 +155,57 @@ export default function MobileChatView({
   }, [input, isLoading, messages, item.id, currentSessionId, onChatUpdate]);
 
   return (
-    <div className="m-chat">
+    <div className="flex flex-col h-[var(--vv-height,100dvh)] bg-[var(--ag-bg)]">
       {/* Top bar */}
-      <div className="m-chat-header">
-        <button className="m-back-btn" onClick={onBack} aria-label="Back">
+      <div className="flex items-center gap-3 py-3 px-4 border-b border-[var(--ag-border)] shrink-0">
+        <button className="bg-transparent border-none text-xl text-[var(--ag-text)] cursor-pointer p-1 px-2 [-webkit-tap-highlight-color:transparent]" onClick={onBack} aria-label="Back">
           ←
         </button>
-        <span className="m-chat-source">{item.source ?? 'Radar'}</span>
+        <span className="text-[13px] text-[var(--ag-text-2)]">{item.source ?? 'Radar'}</span>
       </div>
 
       {/* Item summary */}
-      <div className="m-chat-summary">
-        <div className="m-chat-grade">{GRADE_ICON[item.grade] ?? '•'}</div>
-        <div className="m-chat-meta">
-          <div className="m-chat-title">{item.title}</div>
-          {item.why && <div className="m-chat-why">{item.why}</div>}
+      <div className="flex gap-2.5 py-3 px-4 border-b border-[var(--ag-border)] shrink-0">
+        <div className="text-xl shrink-0">{GRADE_ICON[item.grade] ?? '•'}</div>
+        <div>
+          <div className="text-sm font-semibold leading-[1.4]">{item.title}</div>
+          {item.why && <div className="text-xs text-[var(--ag-text-2)] mt-1 leading-[1.4]">{item.why}</div>}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="m-chat-messages">
+      <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] p-4 flex flex-col gap-3">
         {messages.length === 0 && (
-          <div className="m-chat-empty">Ask anything about this article.</div>
+          <div className="text-[var(--ag-text-2)] text-sm text-center py-10">Ask anything about this article.</div>
         )}
         {messages.map((msg) => (
-          <div key={msg.id} className={`m-msg ${msg.role}`}>
-            <div className="m-msg-bubble">{msg.content}</div>
+          <div key={msg.id} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+            <div className={cn(
+              'max-w-[85%] py-2.5 px-3.5 rounded-2xl text-sm leading-[1.5] break-words',
+              msg.role === 'user' && 'bg-[var(--ag-text)] text-[var(--ag-bg)] rounded-br-[4px]',
+              msg.role === 'assistant' && 'bg-[var(--ag-hover)] text-[var(--ag-text)] rounded-bl-[4px]',
+            )}>
+              {msg.content}
+            </div>
           </div>
         ))}
         {isLoading && messages[messages.length - 1]?.role === 'user' && (
-          <div className="m-msg assistant">
-            <div className="m-msg-bubble thinking">Thinking…</div>
+          <div className="flex justify-start">
+            <div className="max-w-[85%] py-2.5 px-3.5 rounded-2xl text-sm leading-[1.5] break-words bg-[var(--ag-hover)] text-[var(--ag-text)] rounded-bl-[4px] opacity-60 italic">Thinking…</div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="m-chat-input">
+      <div className="flex items-end gap-2 py-2 px-3 border-t border-[var(--ag-border)] bg-[var(--ag-bg)] shrink-0 pb-[max(8px,env(safe-area-inset-bottom))]">
         <textarea
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about this article…"
           rows={1}
+          className="flex-1 border border-[var(--ag-border)] rounded-[20px] py-2.5 px-4 text-[15px] leading-[1.4] resize-none bg-[var(--ag-bg)] text-[var(--ag-text)] font-inherit max-h-[120px] focus:outline-none focus:border-[var(--ag-text)]"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -206,7 +214,7 @@ export default function MobileChatView({
           }}
         />
         <button
-          className="m-send-btn"
+          className="w-9 h-9 rounded-full border-none bg-[var(--ag-text)] text-[var(--ag-bg)] text-lg cursor-pointer shrink-0 flex items-center justify-center disabled:opacity-30"
           onClick={handleSend}
           disabled={isLoading || !input.trim()}
         >

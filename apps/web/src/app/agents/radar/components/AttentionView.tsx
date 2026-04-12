@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface SourceDetail {
   total_items: number;
@@ -63,12 +64,12 @@ export default function AttentionView() {
   }, [fetch_]);
 
   if (loading) {
-    return <div className="attention-view"><p className="att-empty">Computing attention snapshot...</p></div>;
+    return <div className="max-w-[800px]"><p className="att-empty">Computing attention snapshot...</p></div>;
   }
 
   if (!snapshot || snapshot.sources.length === 0) {
     return (
-      <div className="attention-view">
+      <div className="max-w-[800px]">
         <p className="att-empty">No attention data yet. Consume some items first.</p>
       </div>
     );
@@ -77,12 +78,12 @@ export default function AttentionView() {
   const hasActivity = snapshot.total_score > 0;
 
   return (
-    <div className="attention-view">
-      <div className="att-header">
-        <h2>Attention Mirror</h2>
+    <div className="max-w-[800px]">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-base font-semibold m-0">Attention Mirror</h2>
         <button className="sources-btn" onClick={fetch_}>Refresh</button>
       </div>
-      <p className="att-subtitle">
+      <p className="text-[13px] text-[var(--ag-text-2)] mb-5">
         Comparing your intended attention allocation vs actual behavior.
       </p>
 

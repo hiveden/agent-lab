@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface Source {
   id: string;
@@ -45,6 +46,77 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   'rss': 'RSS / Atom',
   'grok': 'Grok (Twitter/X)',
 };
+
+function SourceTypeIcon({ type }: { type: string }) {
+  switch (type) {
+    case 'hacker-news':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="2" y="2" width="20" height="20" rx="3" />
+          <text x="12" y="17" textAnchor="middle" fill="currentColor" stroke="none" fontSize="14" fontWeight="bold">Y</text>
+        </svg>
+      );
+    case 'http':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+        </svg>
+      );
+    case 'rss':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 11a9 9 0 0118 0" />
+          <path d="M4 4a16 16 0 0118 0" />
+          <circle cx="5" cy="19" r="2" />
+        </svg>
+      );
+    case 'grok':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4m0 4h.01" />
+        </svg>
+      );
+  }
+}
+
+function getConfigSummary(source: Source): string {
+  const c = source.config;
+  switch (source.source_type) {
+    case 'hacker-news':
+      return `limit: ${c.limit ?? '?'}`;
+    case 'http': {
+      try {
+        const url = new URL(String(c.url ?? ''));
+        return url.hostname;
+      } catch {
+        return String(c.url ?? 'HTTP');
+      }
+    }
+    case 'rss': {
+      try {
+        const url = new URL(String(c.feed_url ?? ''));
+        return url.hostname;
+      } catch {
+        return String(c.feed_url ?? 'RSS');
+      }
+    }
+    case 'grok': {
+      const accounts = c.accounts as string[] | undefined;
+      return accounts ? `${accounts.length} accounts` : 'Grok';
+    }
+    default:
+      return source.source_type;
+  }
+}
 
 export default function SourcesView() {
   const [sources, setSources] = useState<Source[]>([]);
@@ -188,19 +260,19 @@ export default function SourcesView() {
   };
 
   if (loading) {
-    return <div className="sources-view"><p className="sources-empty">Loading sources…</p></div>;
+    return <div className="max-w-[900px]"><p className="text-[var(--ag-text-2)] text-[13px] py-8 text-center">Loading sources…</p></div>;
   }
 
   return (
-    <div className="sources-view">
-      <div className="sources-header">
-        <h2>Sources</h2>
+    <div className="max-w-[900px]">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold m-0">Sources</h2>
         <button className="sources-btn primary" onClick={() => setAdding(true)}>+ Add Source</button>
       </div>
 
       {/* Weight bar */}
       {sources.length > 0 && (
-        <div className="weight-bar-container">
+        <div className="mb-5">
           <div className="weight-bar">
             {sources.filter(s => s.enabled).map((s) => (
               <div
@@ -213,10 +285,10 @@ export default function SourcesView() {
               </div>
             ))}
           </div>
-          <div className="weight-total">
+          <div className="text-[11px] text-[var(--ag-text-2)] mt-1">
             Total: {(totalWeight * 100).toFixed(0)}%
             {Math.abs(totalWeight - 1) > 0.01 && (
-              <span className="weight-warn"> (should be 100%)</span>
+              <span className="text-[#e55]"> (should be 100%)</span>
             )}
           </div>
         </div>
@@ -269,61 +341,71 @@ export default function SourcesView() {
         </div>
       )}
 
-      {/* Sources table */}
-      <table className="sources-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Weight</th>
-            <th>Enabled</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sources.map((s) => (
-            <tr key={s.id} className={!s.enabled ? 'disabled-row' : ''}>
-              {editing === s.id && editForm ? (
-                <>
-                  <td><input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></td>
-                  <td>{s.source_type}</td>
-                  <td>
-                    <input type="range" min={0} max={1} step={0.05} value={editForm.attention_weight} onChange={(e) => setEditForm({ ...editForm, attention_weight: Number(e.target.value) })} />
-                    <span>{(editForm.attention_weight * 100).toFixed(0)}%</span>
-                  </td>
-                  <td>
-                    <button className="toggle-btn" onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}>
-                      {editForm.enabled ? '✓' : '✗'}
-                    </button>
-                  </td>
-                  <td>
-                    <button className="sources-btn primary" onClick={handleSave}>Save</button>
-                    <button className="sources-btn" onClick={() => setEditing(null)}>Cancel</button>
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td>{s.name}</td>
-                  <td><code>{s.source_type}</code></td>
-                  <td>{(s.attention_weight * 100).toFixed(0)}%</td>
-                  <td>
-                    <button className="toggle-btn" onClick={() => handleToggle(s)}>
-                      {s.enabled ? '✓' : '✗'}
-                    </button>
-                  </td>
-                  <td>
-                    <button className="sources-btn" onClick={() => handleEdit(s)}>Edit</button>
-                    <button className="sources-btn danger" onClick={() => handleDelete(s.id)}>Delete</button>
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Sources grid */}
+      <div className="sources-grid">
+        {sources.map((s) => (
+          <div key={s.id} className={cn('source-card', !s.enabled && 'disabled')}>
+            {editing === s.id && editForm ? (
+              <div className="source-card-edit">
+                <div className="form-row">
+                  <label>Name</label>
+                  <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                </div>
+                <div className="form-row">
+                  <label>Config (JSON)</label>
+                  <textarea value={editForm.config} onChange={(e) => setEditForm({ ...editForm, config: e.target.value })} rows={3} />
+                </div>
+                <div className="form-row">
+                  <label>Weight: {(editForm.attention_weight * 100).toFixed(0)}%</label>
+                  <input type="range" min={0} max={1} step={0.05} value={editForm.attention_weight} onChange={(e) => setEditForm({ ...editForm, attention_weight: Number(e.target.value) })} />
+                </div>
+                <div className="form-row">
+                  <label>Enabled</label>
+                  <button className="toggle-btn" onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}>
+                    {editForm.enabled ? '✓' : '✗'}
+                  </button>
+                </div>
+                <div className="form-actions">
+                  <button className="sources-btn primary" onClick={handleSave}>Save</button>
+                  <button className="sources-btn" onClick={() => setEditing(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="source-card-header">
+                  <div className="source-card-icon">
+                    <SourceTypeIcon type={s.source_type} />
+                  </div>
+                  <div>
+                    <div className="source-card-name">{s.name}</div>
+                    <div className="source-card-type">{s.source_type} · {getConfigSummary(s)}</div>
+                  </div>
+                </div>
+                <div className="source-card-status">
+                  <span className={`status-dot ${s.enabled ? 'ok' : 'off'}`} />
+                  {s.enabled ? 'Active' : 'Disabled'}
+                  <button className="toggle-btn compact" onClick={() => handleToggle(s)} title={s.enabled ? 'Disable' : 'Enable'}>
+                    {s.enabled ? '✓' : '✗'}
+                  </button>
+                </div>
+                <div className="source-card-footer">
+                  <span className="source-card-weight">Weight: {(s.attention_weight * 100).toFixed(0)}%</span>
+                  <div className="card-weight-bar">
+                    <div className="card-weight-fill" style={{ width: `${(s.attention_weight * 100).toFixed(0)}%` }} />
+                  </div>
+                </div>
+                <div className="source-card-actions">
+                  <button className="sources-btn" onClick={() => handleEdit(s)}>Edit</button>
+                  <button className="sources-btn danger" onClick={() => handleDelete(s.id)}>Delete</button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
 
       {sources.length === 0 && (
-        <p className="sources-empty">No sources configured. Add one to start collecting content.</p>
+        <p className="text-[var(--ag-text-2)] text-[13px] py-8 text-center">No sources configured. Add one to start collecting content.</p>
       )}
     </div>
   );

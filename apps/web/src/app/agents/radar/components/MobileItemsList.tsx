@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import type { ItemWithState } from '@/lib/types';
 import type { GradeFilter } from './ItemsList';
+import { cn } from '@/lib/utils';
 
 interface MobileItemsListProps {
   items: ItemWithState[];
@@ -60,12 +61,12 @@ function SwipeableCard({
       initial={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
       transition={{ duration: 0.25 }}
-      className="m-swipe-wrapper"
+      className="relative"
     >
       {/* Background hints */}
-      <div className="m-swipe-bg">
-        <span className="m-swipe-hint left">👁 Watch</span>
-        <span className="m-swipe-hint right">✕ Dismiss</span>
+      <div className="absolute inset-0 flex items-center justify-between px-5 rounded-xl pointer-events-none">
+        <span className="text-[13px] font-semibold opacity-60 text-[#16a34a]">👁 Watch</span>
+        <span className="text-[13px] font-semibold opacity-60 text-[#dc2626]">✕ Dismiss</span>
       </div>
 
       {/* Draggable card */}
@@ -75,20 +76,25 @@ function SwipeableCard({
         dragElastic={0.6}
         onDragEnd={handleDragEnd}
         whileDrag={{ scale: 0.98 }}
-        className={`m-card ${pending ? 'pending' : ''}`}
+        className={cn(
+          'border border-[var(--ag-border)] rounded-xl py-3.5 px-4 cursor-pointer [-webkit-tap-highlight-color:transparent] transition-[background] duration-150',
+          'active:bg-[var(--ag-hover)]',
+          pending && 'opacity-60',
+        )}
+        data-card-id={item.id}
         onClick={onSelect}
         style={{ touchAction: 'pan-y' }}
       >
-        <div className="m-card-top">
-          <span className="m-grade">{GRADE_ICON[item.grade] ?? '•'}</span>
-          <span className="m-source">{item.source ?? item.agent_id}</span>
-          <span className="m-time">{relativeTime(item.created_at)}</span>
+        <div className="flex items-center gap-1.5 mb-1.5 text-xs">
+          <span className="text-sm">{GRADE_ICON[item.grade] ?? '•'}</span>
+          <span className="text-[var(--ag-text-2)]">{item.source ?? item.agent_id}</span>
+          <span className="ml-auto text-[var(--ag-text-2)]">{relativeTime(item.created_at)}</span>
         </div>
-        <div className="m-card-title">{item.title}</div>
+        <div className="text-[15px] font-semibold leading-[1.4] mb-1">{item.title}</div>
         {item.summary && (
-          <div className="m-card-summary">{item.summary.slice(0, 120)}</div>
+          <div className="text-[13px] text-[var(--ag-text-2)] leading-[1.5] line-clamp-2">{item.summary.slice(0, 120)}</div>
         )}
-        {pending && <div className="m-card-pending">{pending}</div>}
+        {pending && <div className="text-[11px] text-[var(--clr-bolt,#d97706)] mt-1">{pending}</div>}
       </motion.div>
     </motion.div>
   );
@@ -105,13 +111,16 @@ export default function MobileItemsList({
   const filters: GradeFilter[] = ['all', 'fire', 'bolt', 'bulb'];
 
   return (
-    <div className="m-items">
+    <div className="p-2">
       {/* Filter chips */}
-      <div className="m-filters">
+      <div className="flex gap-1.5 py-2 px-1 pb-3 overflow-x-auto">
         {filters.map((f) => (
           <button
             key={f}
-            className={`m-filter-chip ${filter === f ? 'active' : ''}`}
+            className={cn(
+              'py-1.5 px-3.5 rounded-[20px] border border-[var(--ag-border)] bg-transparent text-[var(--ag-text-2)] text-[13px] whitespace-nowrap cursor-pointer [-webkit-tap-highlight-color:transparent]',
+              filter === f && 'bg-[var(--ag-text)] text-[var(--ag-bg)] border-transparent',
+            )}
             onClick={() => onFilterChange(f)}
           >
             {f === 'all' ? 'All' : GRADE_ICON[f]}
@@ -120,9 +129,9 @@ export default function MobileItemsList({
       </div>
 
       {/* Item cards */}
-      <div className="m-cards">
+      <div className="flex flex-col gap-2">
         {items.length === 0 && (
-          <div className="m-empty">No items in this view.</div>
+          <div className="py-10 px-4 text-center text-[var(--ag-text-2)] text-sm">No items in this view.</div>
         )}
         <AnimatePresence mode="popLayout">
           {items.map((item) => (

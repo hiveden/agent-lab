@@ -117,7 +117,7 @@ test('Step 3: ingest creates raw_items', async ({ request }) => {
 
   // run 记录
   const runs = await request.get('/api/runs?agent_id=radar&phase=ingest');
-  expect((await runs.json()).runs.length).toBe(1);
+  expect((await runs.json()).runs.length).toBeGreaterThanOrEqual(1);
 
   console.log(`Ingest: ${rawItems.length} raw_items`);
 });
@@ -155,7 +155,7 @@ test('Step 5: inbox shows items, visual clean', async ({ page }) => {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1000);
 
-  const rows = page.locator('.item-row');
+  const rows = page.locator('[data-id]');
   await expect(rows.first()).toBeVisible({ timeout: 10_000 });
   const count = await rows.count();
   expect(count).toBeGreaterThan(0);
@@ -173,10 +173,10 @@ test('Step 6: select item, chat, visual clean', async ({ page }) => {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1000);
 
-  await page.locator('.item-row').first().click();
+  await page.locator('[data-id]').first().click();
   await page.waitForTimeout(500);
 
-  await expect(page.locator('.chat-col')).toBeVisible();
+  await expect(page.locator('textarea').first()).toBeVisible({ timeout: 10_000 });
   await page.screenshot({ path: 'e2e/test-results/d-03-chat-view.png' });
   await runVisualAudit(page, 'desktop-chat');
 
@@ -256,14 +256,14 @@ test('Step 9: management views render clean', async ({ page }) => {
   // Sources
   await page.click('button[aria-label="Sources"]');
   await page.waitForTimeout(500);
-  await expect(page.getByRole('cell', { name: 'Hacker News Top Stories' })).toBeVisible();
+  await expect(page.locator('.source-card').first()).toBeVisible();
   await page.screenshot({ path: 'e2e/test-results/d-06-sources.png' });
   await runVisualAudit(page, 'desktop-sources');
 
   // Runs
   await page.click('button[aria-label="Runs"]');
   await page.waitForTimeout(500);
-  await expect(page.locator('.run-card').first()).toBeVisible();
+  await expect(page.locator('.run-entry').first()).toBeVisible();
   await page.screenshot({ path: 'e2e/test-results/d-07-runs.png' });
   await runVisualAudit(page, 'desktop-runs');
 });

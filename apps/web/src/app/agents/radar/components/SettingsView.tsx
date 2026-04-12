@@ -167,15 +167,15 @@ export default function SettingsView() {
   };
 
   if (loading) {
-    return <div className="settings-view"><p className="att-empty">Loading settings...</p></div>;
+    return <div className="max-w-[600px]"><p className="att-empty">Loading settings...</p></div>;
   }
 
   return (
-    <div className="settings-view">
-      <div className="settings-header">
-        <h2>LLM Settings</h2>
+    <div className="max-w-[600px]">
+      <div className="mb-1">
+        <h2 className="text-base font-semibold m-0">LLM Settings</h2>
       </div>
-      <p className="att-subtitle">Configure the LLM provider for Radar agent.</p>
+      <p className="text-[13px] text-[var(--ag-text-2)] mb-5">Configure the LLM provider for Radar agent.</p>
 
       <div className="settings-form">
         {/* Provider */}

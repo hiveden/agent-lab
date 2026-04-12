@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemWithState } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 export interface PaletteAction {
   id: string;
@@ -88,7 +89,7 @@ export default function CommandPalette({
       }}
     >
       <div className="cmdk" role="dialog" aria-label="Command palette">
-        <div className="cmdk-input-row">
+        <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[var(--border)]">
           <svg
             width="16"
             height="16"
@@ -102,7 +103,7 @@ export default function CommandPalette({
           </svg>
           <input
             ref={inputRef}
-            className="cmdk-input"
+            className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text)] placeholder:text-[var(--text-faint)]"
             placeholder="Search items, run actions, navigate…"
             value={q}
             onChange={(e) => {
@@ -127,25 +128,29 @@ export default function CommandPalette({
               }
             }}
           />
-          <span className="cmdk-hint-esc">esc</span>
+          <span className="text-[10px] text-[var(--text-3)] font-[var(--mono)]">esc</span>
         </div>
-        <div className="cmdk-list">
+        <div className="flex-1 overflow-y-auto py-1.5">
           {filteredItems.length > 0 ? (
             <>
               <div className="cmdk-group">Resources</div>
               {filteredItems.map((it, i) => (
                 <div
                   key={it.id}
-                  className={`cmdk-item ${focused === i ? 'focused' : ''}`}
+                  className={cn(
+                    'flex items-center gap-2.5 py-2 px-4 cursor-pointer text-[12.5px] text-[var(--text)] transition-[background] duration-[.08s]',
+                    focused === i && 'bg-[var(--accent-soft)]',
+                    focused !== i && 'hover:bg-[var(--accent-soft)]',
+                  )}
                   onMouseEnter={() => setFocused(i)}
                   onClick={() => {
                     onClose();
                     onPickItem(it);
                   }}
                 >
-                  <span className={`grade-dot ${it.grade}`} />
-                  <span className="label">{it.title}</span>
-                  <span className="hint">{it.source ?? ''}</span>
+                  <span className={cn('grade-dot w-2 h-2', it.grade)} />
+                  <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">{it.title}</span>
+                  <span className={cn('text-[10.5px] font-[var(--mono)]', focused === i ? 'text-[var(--accent)]' : 'text-[var(--text-3)]')}>{it.source ?? ''}</span>
                 </div>
               ))}
             </>
@@ -158,16 +163,20 @@ export default function CommandPalette({
                 return (
                   <div
                     key={a.id}
-                    className={`cmdk-item ${focused === idx ? 'focused' : ''}`}
+                    className={cn(
+                      'flex items-center gap-2.5 py-2 px-4 cursor-pointer text-[12.5px] text-[var(--text)] transition-[background] duration-[.08s]',
+                      focused === idx && 'bg-[var(--accent-soft)]',
+                      focused !== idx && 'hover:bg-[var(--accent-soft)]',
+                    )}
                     onMouseEnter={() => setFocused(idx)}
                     onClick={() => {
                       onClose();
                       a.run();
                     }}
                   >
-                    <span className="grade-dot" style={{ background: 'var(--text-faint)' }} />
-                    <span className="label">{a.label}</span>
-                    <span className="hint">{a.hint}</span>
+                    <span className="grade-dot w-2 h-2" style={{ background: 'var(--text-faint)' }} />
+                    <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">{a.label}</span>
+                    <span className={cn('text-[10.5px] font-[var(--mono)]', focused === idx ? 'text-[var(--accent)]' : 'text-[var(--text-3)]')}>{a.hint}</span>
                   </div>
                 );
               })}
@@ -186,7 +195,7 @@ export default function CommandPalette({
             </div>
           ) : null}
         </div>
-        <div className="cmdk-footer">
+        <div className="flex items-center gap-3.5 py-2 px-4 border-t border-[var(--border)] bg-[var(--surface-hi)] text-[10.5px] text-[var(--text-3)]">
           <span>
             <kbd className="k">↑</kbd>
             <kbd className="k">↓</kbd> navigate

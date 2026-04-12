@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MockTrace, MockSpan } from '../traceMock';
 
 interface Props {
   open: boolean;
   trace: MockTrace | null;
-  width: number;
-  onResize: (w: number) => void;
   onClose: () => void;
   highlightSpanId: string | null;
   expandAllSignal: number;
@@ -16,8 +14,6 @@ interface Props {
 
 export default function TraceDrawer({
   trace,
-  width,
-  onResize,
   onClose,
   highlightSpanId,
   expandAllSignal,
@@ -48,37 +44,6 @@ export default function TraceDrawer({
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [highlightSpanId]);
 
-  // Divider drag
-  const draggingRef = useRef(false);
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      if (!draggingRef.current) return;
-      const content = document.querySelector('.content');
-      if (!content) return;
-      const rect = (content as HTMLElement).getBoundingClientRect();
-      let w = rect.right - e.clientX;
-      if (w < 320) w = 320;
-      if (w > 720) w = 720;
-      onResize(w);
-    }
-    function onUp() {
-      if (draggingRef.current) {
-        draggingRef.current = false;
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        document
-          .querySelector('.trace-divider')
-          ?.classList.remove('dragging');
-      }
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [onResize]);
-
   const stats = useMemo(() => {
     if (!trace) return { spans: 0, tokens: 0, ms: 0 };
     return {
@@ -89,30 +54,16 @@ export default function TraceDrawer({
   }, [trace]);
 
   return (
-    <>
-      <div
-        className="trace-divider"
-        onMouseDown={(e) => {
-          draggingRef.current = true;
-          (e.currentTarget as HTMLElement).classList.add('dragging');
-          document.body.style.cursor = 'col-resize';
-          document.body.style.userSelect = 'none';
-          e.preventDefault();
-        }}
-      />
-      <aside
-        className="trace-col"
-        style={{ ['--trace-w' as string]: `${width}px` }}
-      >
-        <div className="trace-head">
-          <h3>{trace?.source === 'push' ? 'Collection Trace' : 'Trace'}</h3>
-          <span className="desc">
+      <aside className="trace-col">
+        <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
+          <h3 className="text-xs font-semibold">{trace?.source === 'push' ? 'Collection Trace' : 'Trace'}</h3>
+          <span className="text-[11px] text-[var(--text-3)]">
             {trace?.source === 'push'
               ? 'radar-push pipeline'
               : 'agent execution log'}
           </span>
           <button
-            className="icon-btn close"
+            className="icon-btn ml-auto"
             onClick={onClose}
             title="Close (esc)"
             aria-label="Close trace"
@@ -181,7 +132,6 @@ export default function TraceDrawer({
           )}
         </div>
       </aside>
-    </>
   );
 }
 
