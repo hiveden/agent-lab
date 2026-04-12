@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface Source {
   id: string;
@@ -42,7 +51,7 @@ const CONFIG_TEMPLATES: Record<string, string> = {
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   'hacker-news': 'Hacker News',
-  'http': 'HTTP API (通用)',
+  'http': 'HTTP API',
   'rss': 'RSS / Atom',
   'grok': 'Grok (Twitter/X)',
 };
@@ -118,21 +127,27 @@ function getConfigSummary(source: Source): string {
   }
 }
 
+const emptyForm: EditingSource = {
+  name: '',
+  source_type: 'hacker-news',
+  config: CONFIG_TEMPLATES['hacker-news'],
+  attention_weight: 0,
+  enabled: true,
+};
+
 export default function SourcesView() {
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditingSource | null>(null);
-  const [adding, setAdding] = useState(false);
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // null = adding
+  const [form, setForm] = useState<EditingSource>({ ...emptyForm });
+  const [saving, setSaving] = useState(false);
+
+  // Test state
   const [testResult, setTestResult] = useState<{ ok: boolean; count?: number; items?: unknown[]; error?: string } | null>(null);
   const [testing, setTesting] = useState(false);
-  const [newForm, setNewForm] = useState<EditingSource>({
-    name: '',
-    source_type: 'hacker-news',
-    config: CONFIG_TEMPLATES['hacker-news'],
-    attention_weight: 0,
-    enabled: true,
-  });
 
   const fetchSources = useCallback(async () => {
     setLoading(true);
@@ -153,58 +168,45 @@ export default function SourcesView() {
 
   const totalWeight = sources.reduce((sum, s) => sum + s.attention_weight, 0);
 
-  const handleEdit = (s: Source) => {
-    setEditing(s.id);
-    setEditForm({
+  const openAdd = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm });
+    setTestResult(null);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (s: Source) => {
+    setEditingId(s.id);
+    setForm({
       name: s.name,
       source_type: s.source_type,
       config: JSON.stringify(s.config, null, 2),
       attention_weight: s.attention_weight,
       enabled: s.enabled,
     });
+    setTestResult(null);
+    setDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!editing || !editForm) return;
-    let config: Record<string, unknown> = {};
-    try {
-      config = JSON.parse(editForm.config);
-    } catch {
-      return;
-    }
-    await fetch(`/api/sources/${editing}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: editForm.name,
-        config,
-        attention_weight: editForm.attention_weight,
-        enabled: editForm.enabled,
-      }),
-    });
-    setEditing(null);
-    setEditForm(null);
-    fetchSources();
-  };
-
-  const handleDelete = async (id: string) => {
-    await fetch(`/api/sources/${id}`, { method: 'DELETE' });
-    fetchSources();
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingId(null);
+    setTestResult(null);
   };
 
   const handleTypeChange = (type: string) => {
-    setNewForm({
-      ...newForm,
+    setForm(prev => ({
+      ...prev,
       source_type: type,
       config: CONFIG_TEMPLATES[type] || '{}',
-    });
+    }));
     setTestResult(null);
   };
 
   const handleTest = async () => {
     let config: Record<string, unknown> = {};
     try {
-      config = JSON.parse(newForm.config);
+      config = JSON.parse(form.config);
     } catch {
       setTestResult({ ok: false, error: 'Invalid JSON config' });
       return;
@@ -215,7 +217,7 @@ export default function SourcesView() {
       const res = await fetch('/api/sources/test', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ source_type: newForm.source_type, config }),
+        body: JSON.stringify({ source_type: form.source_type, config }),
       });
       const data = (await res.json()) as { ok: boolean; count?: number; items?: unknown[]; error?: string };
       setTestResult(data);
@@ -226,27 +228,51 @@ export default function SourcesView() {
     }
   };
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     let config: Record<string, unknown> = {};
     try {
-      config = JSON.parse(newForm.config);
+      config = JSON.parse(form.config);
     } catch {
       return;
     }
-    await fetch('/api/sources', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        agent_id: 'radar',
-        source_type: newForm.source_type,
-        name: newForm.name,
-        config,
-        attention_weight: newForm.attention_weight,
-        enabled: newForm.enabled,
-      }),
-    });
-    setAdding(false);
-    setNewForm({ name: '', source_type: 'hacker-news', config: '{}', attention_weight: 0, enabled: true });
+    setSaving(true);
+    try {
+      if (editingId) {
+        // Update existing
+        await fetch(`/api/sources/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: form.name,
+            config,
+            attention_weight: form.attention_weight,
+            enabled: form.enabled,
+          }),
+        });
+      } else {
+        // Create new
+        await fetch('/api/sources', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            agent_id: 'radar',
+            source_type: form.source_type,
+            name: form.name,
+            config,
+            attention_weight: form.attention_weight,
+            enabled: form.enabled,
+          }),
+        });
+      }
+      closeDialog();
+      fetchSources();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/sources/${id}`, { method: 'DELETE' });
     fetchSources();
   };
 
@@ -259,15 +285,17 @@ export default function SourcesView() {
     fetchSources();
   };
 
+  const isAdding = !editingId;
+
   if (loading) {
-    return <div className="max-w-[900px]"><p className="text-[var(--ag-text-2)] text-[13px] py-8 text-center">Loading sources…</p></div>;
+    return <div className="max-w-[900px]"><p className="text-[var(--ag-text-2)] text-[13px] py-8 text-center">Loading sources...</p></div>;
   }
 
   return (
     <div className="max-w-[900px]">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold m-0">Sources</h2>
-        <button className="sources-btn primary" onClick={() => setAdding(true)}>+ Add Source</button>
+        <Button size="sm" onClick={openAdd}>+ Add Source</Button>
       </div>
 
       {/* Weight bar */}
@@ -294,119 +322,176 @@ export default function SourcesView() {
         </div>
       )}
 
-      {/* Add form */}
-      {adding && (
-        <div className="source-form">
-          <div className="form-row">
-            <label>Name</label>
-            <input value={newForm.name} onChange={(e) => setNewForm({ ...newForm, name: e.target.value })} placeholder="e.g. Hacker News" />
-          </div>
-          <div className="form-row">
-            <label>Type</label>
-            <select value={newForm.source_type} onChange={(e) => handleTypeChange(e.target.value)}>
-              {Object.entries(SOURCE_TYPE_LABELS).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-row">
-            <label>Config (JSON)</label>
-            <textarea value={newForm.config} onChange={(e) => setNewForm({ ...newForm, config: e.target.value })} rows={3} />
-          </div>
-          <div className="form-row">
-            <label>Weight: {(newForm.attention_weight * 100).toFixed(0)}%</label>
-            <input type="range" min={0} max={1} step={0.05} value={newForm.attention_weight} onChange={(e) => setNewForm({ ...newForm, attention_weight: Number(e.target.value) })} />
-          </div>
-          <div className="form-actions">
-            <button className="sources-btn" onClick={handleTest} disabled={testing}>
-              {testing ? 'Testing...' : 'Test'}
-            </button>
-            <button className="sources-btn primary" onClick={handleAdd}>Create</button>
-            <button className="sources-btn" onClick={() => { setAdding(false); setTestResult(null); }}>Cancel</button>
-          </div>
-          {testResult && (
-            <div className={`test-result ${testResult.ok ? 'ok' : 'fail'}`}>
-              {testResult.ok ? (
-                <>
-                  <div className="test-ok">Fetched {testResult.count} items</div>
-                  {(testResult.items as Array<Record<string, unknown>> | undefined)?.map((item, i) => (
-                    <div key={i} className="test-item">{String((item as Record<string, unknown>).title ?? '')}</div>
-                  ))}
-                </>
-              ) : (
-                <div className="test-fail">{testResult.error}</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Sources grid */}
       <div className="sources-grid">
-        {sources.map((s) => (
-          <div key={s.id} className={cn('source-card', !s.enabled && 'disabled')}>
-            {editing === s.id && editForm ? (
-              <div className="source-card-edit">
-                <div className="form-row">
-                  <label>Name</label>
-                  <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+        {sources.map((s) => {
+          const pct = totalWeight > 0 ? (s.attention_weight / totalWeight) * 100 : 0;
+          const absPct = s.attention_weight * 100;
+          return (
+            <div key={s.id} className={cn('source-card', !s.enabled && 'disabled')}>
+              <div className="source-card-header">
+                <div className="source-card-icon">
+                  <SourceTypeIcon type={s.source_type} />
                 </div>
-                <div className="form-row">
-                  <label>Config (JSON)</label>
-                  <textarea value={editForm.config} onChange={(e) => setEditForm({ ...editForm, config: e.target.value })} rows={3} />
-                </div>
-                <div className="form-row">
-                  <label>Weight: {(editForm.attention_weight * 100).toFixed(0)}%</label>
-                  <input type="range" min={0} max={1} step={0.05} value={editForm.attention_weight} onChange={(e) => setEditForm({ ...editForm, attention_weight: Number(e.target.value) })} />
-                </div>
-                <div className="form-row">
-                  <label>Enabled</label>
-                  <button className="toggle-btn" onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}>
-                    {editForm.enabled ? '✓' : '✗'}
-                  </button>
-                </div>
-                <div className="form-actions">
-                  <button className="sources-btn primary" onClick={handleSave}>Save</button>
-                  <button className="sources-btn" onClick={() => setEditing(null)}>Cancel</button>
+                <div>
+                  <div className="source-card-name">{s.name}</div>
+                  <div className="source-card-type">{s.source_type} · {getConfigSummary(s)}</div>
                 </div>
               </div>
-            ) : (
-              <>
-                <div className="source-card-header">
-                  <div className="source-card-icon">
-                    <SourceTypeIcon type={s.source_type} />
-                  </div>
-                  <div>
-                    <div className="source-card-name">{s.name}</div>
-                    <div className="source-card-type">{s.source_type} · {getConfigSummary(s)}</div>
-                  </div>
+              <div className="source-card-status">
+                <span className={`status-dot ${s.enabled ? 'ok' : 'off'}`} />
+                {s.enabled ? 'Active' : 'Disabled'}
+                <button className="toggle-btn compact" onClick={() => handleToggle(s)} title={s.enabled ? 'Disable' : 'Enable'}>
+                  {s.enabled ? '\u2713' : '\u2717'}
+                </button>
+              </div>
+              <div className="source-card-footer">
+                <span className="source-card-weight">
+                  Weight: {absPct.toFixed(0)}%
+                  {totalWeight > 0 && (
+                    <span className="text-[10px] text-[var(--ag-text-2)] ml-1">
+                      ({pct.toFixed(0)}% of total)
+                    </span>
+                  )}
+                </span>
+                <div className="card-weight-bar">
+                  <div className="card-weight-fill" style={{ width: `${absPct.toFixed(0)}%` }} />
                 </div>
-                <div className="source-card-status">
-                  <span className={`status-dot ${s.enabled ? 'ok' : 'off'}`} />
-                  {s.enabled ? 'Active' : 'Disabled'}
-                  <button className="toggle-btn compact" onClick={() => handleToggle(s)} title={s.enabled ? 'Disable' : 'Enable'}>
-                    {s.enabled ? '✓' : '✗'}
-                  </button>
-                </div>
-                <div className="source-card-footer">
-                  <span className="source-card-weight">Weight: {(s.attention_weight * 100).toFixed(0)}%</span>
-                  <div className="card-weight-bar">
-                    <div className="card-weight-fill" style={{ width: `${(s.attention_weight * 100).toFixed(0)}%` }} />
-                  </div>
-                </div>
-                <div className="source-card-actions">
-                  <button className="sources-btn" onClick={() => handleEdit(s)}>Edit</button>
-                  <button className="sources-btn danger" onClick={() => handleDelete(s.id)}>Delete</button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
+              </div>
+              {totalWeight > 1.01 && s.enabled && (
+                <div className="text-[10px] text-[#e55] mt-1">Total weight exceeds 100%</div>
+              )}
+              <div className="source-card-actions">
+                <button className="sources-btn" onClick={() => openEdit(s)}>Edit</button>
+                <button className="sources-btn danger" onClick={() => handleDelete(s.id)}>Delete</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {sources.length === 0 && (
         <p className="text-[var(--ag-text-2)] text-[13px] py-8 text-center">No sources configured. Add one to start collecting content.</p>
       )}
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{isAdding ? 'Add Source' : 'Edit Source'}</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              {isAdding ? 'Configure a new content source for the Radar agent.' : 'Update the source configuration.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            {/* Name */}
+            <div className="form-row">
+              <label>Name</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. Hacker News"
+              />
+            </div>
+
+            {/* Type (only for add) */}
+            <div className="form-row">
+              <label>Type</label>
+              {isAdding ? (
+                <select value={form.source_type} onChange={(e) => handleTypeChange(e.target.value)}>
+                  {Object.entries(SOURCE_TYPE_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-[13px] text-[var(--ag-text-2)]">
+                  {SOURCE_TYPE_LABELS[form.source_type] ?? form.source_type}
+                </span>
+              )}
+            </div>
+
+            {/* Config JSON */}
+            <div className="form-row" style={{ alignItems: 'flex-start' }}>
+              <label className="pt-1.5">Config (JSON)</label>
+              <textarea
+                value={form.config}
+                onChange={(e) => setForm(prev => ({ ...prev, config: e.target.value }))}
+                rows={5}
+                className="font-mono text-xs"
+              />
+            </div>
+
+            {/* Weight */}
+            <div className="form-row">
+              <label>Weight: {(form.attention_weight * 100).toFixed(0)}%</label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={form.attention_weight}
+                onChange={(e) => setForm(prev => ({ ...prev, attention_weight: Number(e.target.value) }))}
+              />
+            </div>
+
+            {/* Enabled toggle */}
+            <div className="form-row">
+              <label>Enabled</label>
+              <button
+                type="button"
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                  form.enabled ? 'bg-primary' : 'bg-muted',
+                )}
+                onClick={() => setForm(prev => ({ ...prev, enabled: !prev.enabled }))}
+              >
+                <span
+                  className={cn(
+                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                    form.enabled ? 'translate-x-5' : 'translate-x-0',
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Test result */}
+            {testResult && (
+              <div className={`test-result ${testResult.ok ? 'ok' : 'fail'}`}>
+                {testResult.ok ? (
+                  <>
+                    <div className="test-ok">Fetched {testResult.count} items</div>
+                    {(testResult.items as Array<Record<string, unknown>> | undefined)?.map((item, i) => (
+                      <div key={i} className="test-item">{String((item as Record<string, unknown>).title ?? '')}</div>
+                    ))}
+                  </>
+                ) : (
+                  <div className="test-fail">{testResult.error}</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testing}
+            >
+              {testing ? 'Testing...' : 'Test'}
+            </Button>
+            <div className="flex-1" />
+            <Button type="button" variant="ghost" size="sm" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={handleSave} disabled={saving || !form.name.trim()}>
+              {saving ? 'Saving...' : isAdding ? 'Create' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

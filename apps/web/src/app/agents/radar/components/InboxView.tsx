@@ -7,6 +7,7 @@ import type { ViewType } from './NavRail';
 import ChatView from './ChatView';
 import TraceDrawer from './TraceDrawer';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type CategoryTab = 'inbox' | 'watching' | 'archive';
 
@@ -144,22 +145,16 @@ export default function InboxView() {
     <div className="flex flex-col min-h-0 overflow-hidden">
       {/* Category tabs + grade filter */}
       <div className="flex items-center px-4 border-b border-[var(--border)] shrink-0">
-        <div className="flex">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              className={cn(
-                'py-2.5 px-3.5 cursor-pointer border-none border-b-2 border-transparent -mb-px text-[13px] text-[var(--text-3)] font-medium bg-transparent',
-                activeTab === t.key && 'text-[var(--text)] border-b-[var(--accent)]',
-                activeTab !== t.key && 'hover:text-[var(--text)]',
-              )}
-              onClick={() => handleTabChange(t.key)}
-            >
-              {t.label}
-              <span className="text-[11px] text-[var(--text-3)] ml-1">{tabCounts[t.key]}</span>
-            </button>
-          ))}
-        </div>
+        <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as CategoryTab)}>
+          <TabsList>
+            {tabs.map((t) => (
+              <TabsTrigger key={t.key} value={t.key}>
+                {t.label}
+                <span className="text-[11px] text-muted-foreground ml-1">{tabCounts[t.key]}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="ml-auto flex gap-1">
           {gradeChips.map((c) => (
             <button

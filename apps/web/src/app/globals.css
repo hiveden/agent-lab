@@ -602,14 +602,6 @@ kbd.k {
 .source-name { font-weight: 500; flex: 1; font-size: 13px; }
 .source-count { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--green, #16a34a); font-size: 12px; }
 .source-time { font-size: 11px; color: var(--text-3); }
-.run-funnel-card { border: 1px solid var(--border); border-radius: var(--radius, 10px); overflow: hidden; }
-.run-funnel { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
-.run-funnel-bar { display: flex; align-items: center; gap: 10px; }
-.run-funnel-label { width: 70px; font-size: 12px; color: var(--text-2); text-align: right; flex-shrink: 0; }
-.run-funnel-fill { height: 24px; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 500; min-width: 28px; transition: width 0.3s ease; }
-.run-funnel-fill.fetched { background: var(--accent-soft, #eef0ff); color: var(--text); }
-.run-funnel-fill.promoted { background: var(--green-bg, #f0fdf4); color: var(--green, #16a34a); }
-.run-funnel-fill.rejected { background: var(--fire-bg, #fef2f2); color: var(--fire, #dc2626); }
 .run-error-block { padding: 12px; border-radius: 6px; background: var(--fire-bg, #fef2f2); color: var(--fire, #dc2626); font-size: 12px; line-height: 1.5; }
 .run-trace-pre { font-size: 11px; background: var(--bg-sunk); padding: 12px; border-radius: 6px; overflow-x: auto; max-height: 400px; overflow-y: auto; }
 
@@ -619,20 +611,6 @@ kbd.k {
 
 .att-empty { color: var(--ag-text-2); font-size: 13px; padding: 32px 0; text-align: center; }
 .att-notice { background: var(--ag-hover); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--ag-text-2); margin-bottom: 20px; }
-.att-bars { display: flex; flex-direction: column; gap: 20px; margin-bottom: 28px; }
-.att-row { display: flex; flex-direction: column; gap: 6px; }
-.att-source-name { font-size: 13px; font-weight: 600; }
-.att-bar-pair { display: flex; flex-direction: column; gap: 4px; }
-.att-bar-group { display: flex; align-items: center; gap: 8px; }
-.att-bar-label { font-size: 11px; color: var(--ag-text-2); width: 60px; flex-shrink: 0; }
-.att-bar-track { flex: 1; height: 20px; background: var(--ag-hover); border-radius: 4px; overflow: hidden; }
-.att-bar { height: 100%; border-radius: 4px; transition: width 0.3s ease; min-width: 4px; }
-.att-bar.expected { background: var(--ag-text-2); opacity: 0.4; }
-.att-bar.actual { background: var(--ag-text); }
-.att-bar.actual.dev-over { background: #e55; }
-.att-bar.actual.dev-under { background: #2563eb; }
-.att-bar.actual.dev-ok { background: #16a34a; }
-.att-bar-value { font-size: 12px; font-variant-numeric: tabular-nums; width: 36px; text-align: right; flex-shrink: 0; }
 .att-deviation { font-size: 12px; font-weight: 500; }
 .att-deviation.dev-over { color: #e55; }
 .att-deviation.dev-under { color: #2563eb; }
@@ -668,7 +646,6 @@ kbd.k {
 @media (max-width: 640px) {
   .sources-view, .runs-view, .attention-view { padding: 16px; max-width: 100%; box-sizing: border-box; overflow-x: hidden; }
   .sources-grid { grid-template-columns: 1fr; }
-  .att-bar-label { width: 48px; font-size: 10px; }
   .att-detail { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .att-table { font-size: 11px; white-space: nowrap; }
   .att-table th, .att-table td { padding: 4px 6px; }

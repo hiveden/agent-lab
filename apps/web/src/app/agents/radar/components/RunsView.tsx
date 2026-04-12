@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRuns, type Run } from '@/lib/hooks/use-runs';
 import { cn } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export interface RunsViewProps {
   onSelectRun?: (run: Run) => void;
@@ -127,6 +128,29 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   );
 }
 
+function FunnelChart({ fetched, promoted, rejected }: { fetched: number; promoted: number; rejected: number }) {
+  const funnelData = [
+    { name: 'Fetched', value: fetched, fill: 'var(--text-2)' },
+    { name: 'Promoted', value: promoted, fill: 'var(--green, #16a34a)' },
+    { name: 'Rejected', value: rejected, fill: 'var(--fire, #dc2626)' },
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height={120}>
+      <BarChart data={funnelData} layout="vertical" margin={{ left: 60, right: 20 }}>
+        <XAxis type="number" hide />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} />
+        <Tooltip />
+        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+          {funnelData.map((entry, i) => (
+            <Cell key={i} fill={entry.fill} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 function RunDetail({ run }: { run: Run }) {
   const stats = run.stats as Record<string, number>;
   const perSource = (run.stats as Record<string, unknown>).per_source as
@@ -202,32 +226,7 @@ function RunDetail({ run }: { run: Run }) {
           <h3 className="section-title">
             {run.phase === 'evaluate' ? 'Evaluate \u2014 Funnel' : 'Ingest \u2014 Funnel'}
           </h3>
-          <div className="run-funnel-card">
-            <div className="run-funnel">
-              <div className="run-funnel-bar">
-                <div className="run-funnel-label">Fetched</div>
-                <div className="run-funnel-fill fetched" style={{ width: '100%' }}>{fetched}</div>
-              </div>
-              <div className="run-funnel-bar">
-                <div className="run-funnel-label">Promoted</div>
-                <div
-                  className="run-funnel-fill promoted"
-                  style={{ width: `${Math.max(fetched > 0 ? (promoted / fetched) * 100 : 0, 4)}%` }}
-                >
-                  {promoted}
-                </div>
-              </div>
-              <div className="run-funnel-bar">
-                <div className="run-funnel-label">Rejected</div>
-                <div
-                  className="run-funnel-fill rejected"
-                  style={{ width: `${Math.max(fetched > 0 ? (rejected / fetched) * 100 : 0, 4)}%` }}
-                >
-                  {rejected}
-                </div>
-              </div>
-            </div>
-          </div>
+          <FunnelChart fetched={fetched} promoted={promoted} rejected={rejected} />
         </div>
       ) : null}
 

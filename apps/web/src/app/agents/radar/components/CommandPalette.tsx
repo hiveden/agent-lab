@@ -1,8 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { ItemWithState } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut,
+} from '@/components/ui/command';
 
 export interface PaletteAction {
   id: string;
@@ -27,187 +36,60 @@ export default function CommandPalette({
   actions,
   onPickItem,
 }: Props) {
-  const [q, setQ] = useState('');
-  const [focused, setFocused] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const topItems = useMemo(() => items.slice(0, 8), [items]);
 
-  useEffect(() => {
-    if (open) {
-      setQ('');
-      setFocused(0);
-      // Focus next tick so the overlay is mounted first
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [open]);
-
-  const filteredItems = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    const base = qq
-      ? items.filter(
-          (it) =>
-            it.title.toLowerCase().includes(qq) ||
-            (it.summary ?? '').toLowerCase().includes(qq),
-        )
-      : items;
-    return base.slice(0, 8);
-  }, [q, items]);
-
-  const filteredActions = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    return actions
-      .filter((a) => a.enabled !== false)
-      .filter((a) => !qq || a.label.toLowerCase().includes(qq));
-  }, [q, actions]);
-
-  const flat = useMemo(
-    () => [
-      ...filteredItems.map((it) => ({ type: 'item' as const, item: it })),
-      ...filteredActions.map((a) => ({ type: 'action' as const, action: a })),
-    ],
-    [filteredItems, filteredActions],
+  const enabledActions = useMemo(
+    () => actions.filter((a) => a.enabled !== false),
+    [actions],
   );
 
-  useEffect(() => {
-    if (focused >= flat.length) setFocused(0);
-  }, [flat.length, focused]);
-
-  if (!open) return null;
-
-  function executeFocused() {
-    const r = flat[focused];
-    if (!r) return;
-    onClose();
-    if (r.type === 'item') onPickItem(r.item);
-    else r.action.run();
-  }
-
   return (
-    <div
-      className="cmdk-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="cmdk" role="dialog" aria-label="Command palette">
-        <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[var(--border)]">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-          <input
-            ref={inputRef}
-            className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text)] placeholder:text-[var(--text-faint)]"
-            placeholder="Search items, run actions, navigate…"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setFocused(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setFocused((f) => (flat.length ? (f + 1) % flat.length : 0));
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setFocused((f) =>
-                  flat.length ? (f - 1 + flat.length) % flat.length : 0,
-                );
-              } else if (e.key === 'Enter') {
-                e.preventDefault();
-                executeFocused();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                onClose();
-              }
-            }}
-          />
-          <span className="text-[10px] text-[var(--text-3)] font-[var(--mono)]">esc</span>
-        </div>
-        <div className="flex-1 overflow-y-auto py-1.5">
-          {filteredItems.length > 0 ? (
-            <>
-              <div className="cmdk-group">Resources</div>
-              {filteredItems.map((it, i) => (
-                <div
-                  key={it.id}
-                  className={cn(
-                    'flex items-center gap-2.5 py-2 px-4 cursor-pointer text-[12.5px] text-[var(--text)] transition-[background] duration-[.08s]',
-                    focused === i && 'bg-[var(--accent-soft)]',
-                    focused !== i && 'hover:bg-[var(--accent-soft)]',
-                  )}
-                  onMouseEnter={() => setFocused(i)}
-                  onClick={() => {
-                    onClose();
-                    onPickItem(it);
-                  }}
-                >
-                  <span className={cn('grade-dot w-2 h-2', it.grade)} />
-                  <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">{it.title}</span>
-                  <span className={cn('text-[10.5px] font-[var(--mono)]', focused === i ? 'text-[var(--accent)]' : 'text-[var(--text-3)]')}>{it.source ?? ''}</span>
-                </div>
-              ))}
-            </>
-          ) : null}
-          {filteredActions.length > 0 ? (
-            <>
-              <div className="cmdk-group">Actions</div>
-              {filteredActions.map((a, i) => {
-                const idx = filteredItems.length + i;
-                return (
-                  <div
-                    key={a.id}
-                    className={cn(
-                      'flex items-center gap-2.5 py-2 px-4 cursor-pointer text-[12.5px] text-[var(--text)] transition-[background] duration-[.08s]',
-                      focused === idx && 'bg-[var(--accent-soft)]',
-                      focused !== idx && 'hover:bg-[var(--accent-soft)]',
-                    )}
-                    onMouseEnter={() => setFocused(idx)}
-                    onClick={() => {
-                      onClose();
-                      a.run();
-                    }}
-                  >
-                    <span className="grade-dot w-2 h-2" style={{ background: 'var(--text-faint)' }} />
-                    <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis">{a.label}</span>
-                    <span className={cn('text-[10.5px] font-[var(--mono)]', focused === idx ? 'text-[var(--accent)]' : 'text-[var(--text-3)]')}>{a.hint}</span>
-                  </div>
-                );
-              })}
-            </>
-          ) : null}
-          {flat.length === 0 ? (
-            <div
-              style={{
-                padding: 30,
-                textAlign: 'center',
-                color: 'var(--text-3)',
-                fontSize: 12.5,
-              }}
-            >
-              No results for &quot;{q}&quot;
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-3.5 py-2 px-4 border-t border-[var(--border)] bg-[var(--surface-hi)] text-[10.5px] text-[var(--text-3)]">
-          <span>
-            <kbd className="k">↑</kbd>
-            <kbd className="k">↓</kbd> navigate
-          </span>
-          <span>
-            <kbd className="k">↵</kbd> select
-          </span>
-          <span>
-            <kbd className="k">esc</kbd> close
-          </span>
-        </div>
-      </div>
-    </div>
+    <CommandDialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <CommandInput placeholder="Search items, run actions, navigate…" />
+      <CommandList>
+        <CommandEmpty>No results found.</CommandEmpty>
+
+        {topItems.length > 0 && (
+          <CommandGroup heading="Resources">
+            {topItems.map((it) => (
+              <CommandItem
+                key={it.id}
+                value={`${it.title} ${it.summary ?? ''}`}
+                onSelect={() => {
+                  onClose();
+                  onPickItem(it);
+                }}
+              >
+                <span className={cn('grade-dot w-2 h-2 shrink-0', it.grade)} />
+                <span className="flex-1 min-w-0 truncate">{it.title}</span>
+                <CommandShortcut>{it.source ?? ''}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {enabledActions.length > 0 && (
+          <CommandGroup heading="Actions">
+            {enabledActions.map((a) => (
+              <CommandItem
+                key={a.id}
+                value={a.label}
+                onSelect={() => {
+                  onClose();
+                  a.run();
+                }}
+              >
+                <span
+                  className="grade-dot w-2 h-2 shrink-0"
+                  style={{ background: 'var(--text-faint)' }}
+                />
+                <span className="flex-1 min-w-0 truncate">{a.label}</span>
+                <CommandShortcut>{a.hint}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+      </CommandList>
+    </CommandDialog>
   );
 }

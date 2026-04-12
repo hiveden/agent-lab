@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface SourceDetail {
   total_items: number;
@@ -93,36 +93,36 @@ export default function AttentionView() {
         </div>
       )}
 
-      {/* Bar comparison */}
-      <div className="att-bars">
+      {/* Bar comparison chart */}
+      <div className="att-chart" style={{ marginBottom: 28 }}>
+        <ResponsiveContainer width="100%" height={Math.max(200, snapshot.sources.length * 60)}>
+          <BarChart
+            data={snapshot.sources.map((s) => ({
+              name: s.source_name,
+              expected: +(s.expected_weight * 100).toFixed(1),
+              actual: hasActivity ? +(s.actual_weight * 100).toFixed(1) : 0,
+            }))}
+            layout="vertical"
+            margin={{ left: 100, right: 20 }}
+          >
+            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={90} />
+            <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
+            <Legend />
+            <Bar dataKey="expected" fill="var(--text-3)" name="Expected" radius={[0, 3, 3, 0]} />
+            <Bar dataKey="actual" fill="var(--accent)" name="Actual" radius={[0, 3, 3, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Deviation labels */}
+      <div className="att-deviations" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
         {snapshot.sources.map((src) => {
           const dev = deviationLabel(src.deviation);
           return (
-            <div key={src.source_id} className="att-row">
-              <div className="att-source-name">{src.source_name}</div>
-              <div className="att-bar-pair">
-                <div className="att-bar-group">
-                  <div className="att-bar-label">Expected</div>
-                  <div className="att-bar-track">
-                    <div
-                      className="att-bar expected"
-                      style={{ width: `${Math.max(src.expected_weight * 100, 2)}%` }}
-                    />
-                  </div>
-                  <span className="att-bar-value">{pct(src.expected_weight)}</span>
-                </div>
-                <div className="att-bar-group">
-                  <div className="att-bar-label">Actual</div>
-                  <div className="att-bar-track">
-                    <div
-                      className={`att-bar actual ${dev.cls}`}
-                      style={{ width: `${Math.max(src.actual_weight * 100, 2)}%` }}
-                    />
-                  </div>
-                  <span className="att-bar-value">{hasActivity ? pct(src.actual_weight) : '—'}</span>
-                </div>
-              </div>
-              <div className={`att-deviation ${dev.cls}`}>{hasActivity ? dev.text : '—'}</div>
+            <div key={src.source_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <span style={{ fontWeight: 500 }}>{src.source_name}</span>
+              <span className={`att-deviation ${dev.cls}`}>{hasActivity ? dev.text : '—'}</span>
             </div>
           );
         })}

@@ -19,6 +19,8 @@ import MobileItemsList from './components/MobileItemsList';
 import MobileChatView from './components/MobileChatView';
 import { useIsMobile } from '@/lib/hooks/useMediaQuery';
 import type { MockTrace } from './traceMock';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 
 export default function RadarWorkspace() {
   const isMobile = useIsMobile();
@@ -29,7 +31,6 @@ export default function RadarWorkspace() {
   const selectedId = useRadarStore((s) => s.selectedId);
   const focusedIndex = useRadarStore((s) => s.focusedIndex);
   const paletteOpen = useRadarStore((s) => s.paletteOpen);
-  const toast = useRadarStore((s) => s.toast);
   const chatHeight = useRadarStore((s) => s.chatHeight);
   const traceWidth = useRadarStore((s) => s.traceWidth);
   const traceOpen = useRadarStore((s) => s.traceOpen);
@@ -56,7 +57,6 @@ export default function RadarWorkspace() {
   const setSelectedId = useRadarStore((s) => s.setSelectedId);
   const setFocusedIndex = useRadarStore((s) => s.setFocusedIndex);
   const setPaletteOpen = useRadarStore((s) => s.setPaletteOpen);
-  const setToast = useRadarStore((s) => s.setToast);
   const setChatHeight = useRadarStore((s) => s.setChatHeight);
   const setTraceWidth = useRadarStore((s) => s.setTraceWidth);
   const setTraceOpen = useRadarStore((s) => s.setTraceOpen);
@@ -95,13 +95,6 @@ export default function RadarWorkspace() {
   useEffect(() => {
     if (selectedId) loadSession(selectedId);
   }, [selectedId, loadSession]);
-
-  // ── Toast auto-dismiss ────────────────────────────────────────────
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 1800);
-    return () => clearTimeout(t);
-  }, [toast, setToast]);
 
   // ── Derived state ─────────────────────────────────────────────────
 
@@ -155,7 +148,7 @@ export default function RadarWorkspace() {
     async (limit = 30) => {
       if (pushBusy) return;
       setPushBusy(true);
-      setToast('Triggering Radar collection…');
+      toast('Triggering Radar collection…');
 
       const trace: MockTrace = {
         spans: [],
@@ -257,7 +250,7 @@ export default function RadarWorkspace() {
               trace.totalMs = Number(ev.total_ms ?? Date.now() - t0);
               setActiveTrace({ ...trace, spans: [...trace.spans] });
             } else if (type === 'error') {
-              setToast(
+              toast.error(
                 `Pipeline failed: ${String(ev.message ?? 'unknown')}`,
               );
             }
@@ -269,20 +262,20 @@ export default function RadarWorkspace() {
         await consumeSSE('/api/cron/radar/ingest', 'ingest');
         await consumeSSE('/api/cron/radar/evaluate', 'evaluate');
       } catch (e) {
-        setToast(`Pipeline failed: ${String(e)}`);
+        toast.error(`Pipeline failed: ${String(e)}`);
       } finally {
         setPushBusy(false);
       }
 
       if (receivedResult !== null) {
         const r = receivedResult as { inserted: number; skipped: number };
-        setToast(
-          `✓ Collected: ${r.inserted} new · ${r.skipped} duplicate`,
+        toast.success(
+          `Collected: ${r.inserted} new · ${r.skipped} duplicate`,
         );
         await mutateItems();
       }
     },
-    [pushBusy, mutateItems, setToast, setActiveTrace, setTraceOpen, setHighlightSpanId],
+    [pushBusy, mutateItems, setActiveTrace, setTraceOpen, setHighlightSpanId],
   );
 
   // ── Keyboard layer ────────────────────────────────────────────────
@@ -347,7 +340,7 @@ export default function RadarWorkspace() {
         setPaletteOpen(true);
       } else if (key === '?') {
         e.preventDefault();
-        setToast('⌘K search · J/K navigate · T trace · W/D/X mark · Esc back');
+        toast('⌘K search · J/K navigate · T trace · W/D/X mark · Esc back');
       } else if (key === 'w' || key === 'd' || key === 'x') {
         e.preventDefault();
         const it = filteredItems[focusedIndex];
@@ -372,7 +365,6 @@ export default function RadarWorkspace() {
     setSelectedId,
     setFocusedIndex,
     setActiveTrace,
-    setToast,
   ]);
 
   // ── Palette actions ───────────────────────────────────────────────
@@ -545,7 +537,7 @@ export default function RadarWorkspace() {
             <TabBar activeView={activeView} onViewChange={handleViewChange} />
           </>
         )}
-        {toast ? <div className="toast">{toast}</div> : null}
+        <Toaster position="bottom-center" />
       </div>
     );
   }
@@ -603,7 +595,11 @@ export default function RadarWorkspace() {
       <PendingChangesBanner
         pending={pending}
         busy={applyBusy}
-        onApply={applyPending}
+        onApply={async () => {
+          await applyPending();
+          const storeToast = useRadarStore.getState().toast;
+          if (storeToast) toast(storeToast);
+        }}
         onDiscard={discardPending}
       />
 
@@ -646,7 +642,7 @@ export default function RadarWorkspace() {
         }}
       />
 
-      {toast ? <div className="toast">{toast}</div> : null}
+      <Toaster position="bottom-center" />
     </div>
   );
 }
