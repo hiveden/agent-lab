@@ -278,7 +278,7 @@ export default function InboxView() {
               <div className="drag-bar" />
             </Separator>
             <Panel defaultSize={30} minSize={15}>
-              <Group orientation="horizontal" className="border-t border-[var(--border)] flex overflow-hidden min-h-0 h-full">
+              <Group orientation="horizontal" className="border-t border-[var(--border)] overflow-hidden min-h-0 h-full">
                 <Panel id="chat" minSize={30}>
                   <ChatView
                     key={selectedItem.id}
