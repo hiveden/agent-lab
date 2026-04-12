@@ -20,6 +20,7 @@
     "@libsql/client": "^0.17.2",
     "ai": "^3.4.33",
     "drizzle-orm": "^0.45.2",
+    "framer-motion": "^12.38.0",
     "next": "15.1.6",
     "react": "19.0.0",
     "react-dom": "19.0.0",

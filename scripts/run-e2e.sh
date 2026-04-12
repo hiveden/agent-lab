@@ -45,6 +45,11 @@ echo "📦 Step 1: Initializing D1 database..."
 cd "$WEB_DIR"
 bash scripts/init-local-db.sh 2>&1 | grep -E "^\[|done"
 
+echo "📦 Step 1b: Clearing test data (keep schema + seed)..."
+pnpm exec wrangler d1 execute agent-lab-dev --local --command \
+  "DELETE FROM chat_messages; DELETE FROM chat_sessions; DELETE FROM user_states; DELETE FROM items; DELETE FROM raw_items; DELETE FROM runs; DELETE FROM sources WHERE id != 'src_hn_top'; UPDATE sources SET attention_weight = 1.0 WHERE id = 'src_hn_top';" 2>/dev/null || true
+echo "   Done — clean state"
+
 # ── Step 2: Start Next.js ──
 echo ""
 echo "🌐 Step 2: Starting Next.js dev server on :8788..."

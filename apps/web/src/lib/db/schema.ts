@@ -36,6 +36,7 @@ export const userStates = sqliteTable(
       .references(() => items.id, { onDelete: 'cascade' }),
     user_id: text('user_id').notNull(),
     status: text('status').notNull(),
+    view_duration_ms: integer('view_duration_ms').notNull().default(0),
     updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
   },
   (table) => [

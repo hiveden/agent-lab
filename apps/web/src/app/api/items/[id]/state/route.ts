@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
 import { upsertUserState } from '@/lib/items';
 import { stateUpdateSchema } from '@/lib/validations';
+import type { ItemStatus } from '@/lib/types';
 
 export const runtime = 'edge';
 
@@ -20,10 +21,21 @@ export async function PATCH(
   const parsed = stateUpdateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'invalid status', issues: parsed.error.issues },
+      { error: 'invalid payload', issues: parsed.error.issues },
       { status: 400 },
     );
   }
-  await upsertUserState(env.DB, id, parsed.data.status);
+  if (!parsed.data.status && !parsed.data.dwell_ms) {
+    return NextResponse.json(
+      { error: 'must provide status or dwell_ms' },
+      { status: 400 },
+    );
+  }
+  await upsertUserState(
+    env.DB,
+    id,
+    parsed.data.status as ItemStatus | undefined,
+    parsed.data.dwell_ms,
+  );
   return NextResponse.json({ ok: true });
 }

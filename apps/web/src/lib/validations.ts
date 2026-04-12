@@ -25,7 +25,8 @@ export const itemBatchInputSchema = z.object({
 export type ItemBatchBody = z.infer<typeof itemBatchInputSchema>;
 
 export const stateUpdateSchema = z.object({
-  status: z.enum(['unread', 'watching', 'discussed', 'dismissed', 'applied', 'rejected']),
+  status: z.enum(['unread', 'watching', 'discussed', 'dismissed', 'applied', 'rejected']).optional(),
+  dwell_ms: z.number().int().min(0).optional(),
 });
 
 // ── Sources ──

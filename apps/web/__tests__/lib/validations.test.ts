@@ -55,7 +55,15 @@ describe('stateUpdateSchema', () => {
 
   it('rejects invalid status', () => {
     expect(stateUpdateSchema.safeParse({ status: 'invalid' }).success).toBe(false);
-    expect(stateUpdateSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('accepts empty body (dwell_ms only use case)', () => {
+    // Both status and dwell_ms are optional in schema; route validates at least one is present
+    expect(stateUpdateSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts dwell_ms', () => {
+    expect(stateUpdateSchema.safeParse({ dwell_ms: 5000 }).success).toBe(true);
   });
 });
 

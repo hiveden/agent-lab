@@ -7,30 +7,35 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never' }]],
 
   use: {
     baseURL: 'http://127.0.0.1:8788',
-    // 录屏：视频尺寸 = viewport 尺寸（1:1，不缩放）
     video: { mode: 'on', size: { width: 1440, height: 900 } },
-    // 截图
     screenshot: 'on',
-    // Trace
     trace: 'on',
-    // 视口 + 2x deviceScaleFactor 模拟 Retina
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
   },
 
   outputDir: './e2e/test-results',
 
   projects: [
     {
-      name: 'chromium',
-      use: { browserName: 'chromium' },
+      name: 'desktop',
+      testMatch: 'desktop.spec.ts',
+      use: {
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 2,
+      },
+    },
+    {
+      name: 'mobile',
+      testMatch: 'mobile.spec.ts',
+      dependencies: ['desktop'], // mobile 在 desktop 之后跑（复用数据）
+      use: {
+        viewport: { width: 375, height: 812 },
+        deviceScaleFactor: 2,
+        video: { mode: 'on', size: { width: 375, height: 812 } },
+      },
     },
   ],
-
-  // 不自动启动 webServer — 需要手动启动 Next.js + Python Agent
-  // 因为两个进程都需要提前初始化 D1 数据
 });

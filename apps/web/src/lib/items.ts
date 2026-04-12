@@ -185,23 +185,31 @@ export async function insertItemsBatch(
 export async function upsertUserState(
   d1: D1Database,
   itemId: string,
-  status: ItemStatus,
+  status?: ItemStatus,
+  dwellMs?: number,
 ): Promise<void> {
   const db = getDb(d1);
+
+  const set: Record<string, unknown> = {
+    updated_at: sql`(datetime('now'))`,
+  };
+  if (status) set.status = status;
+  if (dwellMs && dwellMs > 0) {
+    set.view_duration_ms = sql`view_duration_ms + ${dwellMs}`;
+  }
+
   await db
     .insert(userStates)
     .values({
       item_id: itemId,
       user_id: DEFAULT_USER_ID,
-      status: status,
+      status: status ?? 'unread',
+      view_duration_ms: dwellMs ?? 0,
       updated_at: sql`(datetime('now'))`,
     })
     .onConflictDoUpdate({
       target: [userStates.item_id, userStates.user_id],
-      set: {
-        status: status,
-        updated_at: sql`(datetime('now'))`,
-      },
+      set,
     });
 }
 

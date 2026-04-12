@@ -20,6 +20,10 @@ import PendingChangesBanner from './components/PendingChangesBanner';
 import SourcesView from './components/SourcesView';
 import RunsView from './components/RunsView';
 import AttentionView from './components/AttentionView';
+import TabBar from './components/TabBar';
+import MobileItemsList from './components/MobileItemsList';
+import MobileChatView from './components/MobileChatView';
+import { useIsMobile } from '@/lib/hooks/useMediaQuery';
 import { buildMockTrace, type MockTrace } from './traceMock';
 
 const LS = {
@@ -52,6 +56,8 @@ interface SessionState {
 }
 
 export default function RadarWorkspace() {
+  const isMobile = useIsMobile();
+
   // Data
   const [items, setItems] = useState<ItemWithState[]>([]);
   const [loading, setLoading] = useState(true);
@@ -613,6 +619,77 @@ export default function RadarWorkspace() {
     [filteredItems, effectiveStatus],
   );
 
+  // ─── Mobile Layout ──────────────────────────────────────────
+  if (isMobile) {
+    const mobileSelectItem = (item: ItemWithState) => {
+      setSelectedId(item.id);
+    };
+    const mobileSwipeAction = async (itemId: string, action: 'watching' | 'dismissed') => {
+      // Optimistic: add to pending immediately
+      setPending((prev) => ({ ...prev, [itemId]: action }));
+      try {
+        await fetch(`/api/items/${itemId}/state`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ status: action }),
+        });
+        // Remove from pending, update local items
+        setItems((prev) =>
+          prev.map((it) => (it.id === itemId ? { ...it, status: action } : it)),
+        );
+      } catch {
+        // Revert on failure
+      }
+      setPending((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+    };
+
+    return (
+      <div className="m-app">
+        {/* Mobile: selected item → full-screen chat */}
+        {selectedItem && currentSession !== undefined ? (
+          <MobileChatView
+            key={selectedItem.id}
+            item={selectedItem}
+            initialMessages={currentSession?.messages ?? []}
+            sessionId={currentSession?.session_id ?? null}
+            onBack={() => setSelectedId(null)}
+            onChatUpdate={handleChatUpdate}
+          />
+        ) : (
+          <>
+            {/* Mobile content area */}
+            <div className="m-content">
+              {activeView === 'sources' ? (
+                <SourcesView />
+              ) : activeView === 'runs' ? (
+                <RunsView />
+              ) : activeView === 'attention' ? (
+                <AttentionView />
+              ) : (
+                <MobileItemsList
+                  items={itemsForList}
+                  filter={filter}
+                  onFilterChange={(f) => { setFilter(f); }}
+                  onSelect={mobileSelectItem}
+                  onSwipeAction={mobileSwipeAction}
+                  pendingMap={pending}
+                />
+              )}
+            </div>
+            {/* Tab Bar */}
+            <TabBar activeView={activeView} onViewChange={handleViewChange} />
+          </>
+        )}
+        {toast ? <div className="toast">{toast}</div> : null}
+      </div>
+    );
+  }
+
+  // ─── Desktop Layout ────────────────────────────────────────
   return (
     <div className="app">
       <div className="topbar">
