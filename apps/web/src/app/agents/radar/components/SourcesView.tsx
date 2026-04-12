@@ -22,16 +22,42 @@ interface EditingSource {
   enabled: boolean;
 }
 
+const CONFIG_TEMPLATES: Record<string, string> = {
+  'hacker-news': JSON.stringify({ limit: 30 }, null, 2),
+  'http': JSON.stringify({
+    url: 'https://api.example.com/data',
+    method: 'GET',
+    items_path: 'data',
+    mapping: { external_id: 'id', title: 'title', url: 'url' },
+  }, null, 2),
+  'rss': JSON.stringify({ feed_url: 'https://example.com/feed', limit: 20 }, null, 2),
+  'grok': JSON.stringify({
+    accounts: ['karpathy', 'swyx'],
+    batch_size: 10,
+    api_url: 'https://api.apiyi.com/v1/responses',
+    model: 'grok-4-fast-non-reasoning',
+  }, null, 2),
+};
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  'hacker-news': 'Hacker News',
+  'http': 'HTTP API (通用)',
+  'rss': 'RSS / Atom',
+  'grok': 'Grok (Twitter/X)',
+};
+
 export default function SourcesView() {
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditingSource | null>(null);
   const [adding, setAdding] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; count?: number; items?: unknown[]; error?: string } | null>(null);
+  const [testing, setTesting] = useState(false);
   const [newForm, setNewForm] = useState<EditingSource>({
     name: '',
     source_type: 'hacker-news',
-    config: '{}',
+    config: CONFIG_TEMPLATES['hacker-news'],
     attention_weight: 0,
     enabled: true,
   });
@@ -92,6 +118,40 @@ export default function SourcesView() {
   const handleDelete = async (id: string) => {
     await fetch(`/api/sources/${id}`, { method: 'DELETE' });
     fetchSources();
+  };
+
+  const handleTypeChange = (type: string) => {
+    setNewForm({
+      ...newForm,
+      source_type: type,
+      config: CONFIG_TEMPLATES[type] || '{}',
+    });
+    setTestResult(null);
+  };
+
+  const handleTest = async () => {
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(newForm.config);
+    } catch {
+      setTestResult({ ok: false, error: 'Invalid JSON config' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/sources/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source_type: newForm.source_type, config }),
+      });
+      const data = (await res.json()) as { ok: boolean; count?: number; items?: unknown[]; error?: string };
+      setTestResult(data);
+    } catch (e) {
+      setTestResult({ ok: false, error: String(e) });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleAdd = async () => {
@@ -171,10 +231,10 @@ export default function SourcesView() {
           </div>
           <div className="form-row">
             <label>Type</label>
-            <select value={newForm.source_type} onChange={(e) => setNewForm({ ...newForm, source_type: e.target.value })}>
-              <option value="hacker-news">Hacker News</option>
-              <option value="rss">RSS</option>
-              <option value="twitter">Twitter</option>
+            <select value={newForm.source_type} onChange={(e) => handleTypeChange(e.target.value)}>
+              {Object.entries(SOURCE_TYPE_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
             </select>
           </div>
           <div className="form-row">
@@ -186,9 +246,26 @@ export default function SourcesView() {
             <input type="range" min={0} max={1} step={0.05} value={newForm.attention_weight} onChange={(e) => setNewForm({ ...newForm, attention_weight: Number(e.target.value) })} />
           </div>
           <div className="form-actions">
+            <button className="sources-btn" onClick={handleTest} disabled={testing}>
+              {testing ? 'Testing...' : 'Test'}
+            </button>
             <button className="sources-btn primary" onClick={handleAdd}>Create</button>
-            <button className="sources-btn" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="sources-btn" onClick={() => { setAdding(false); setTestResult(null); }}>Cancel</button>
           </div>
+          {testResult && (
+            <div className={`test-result ${testResult.ok ? 'ok' : 'fail'}`}>
+              {testResult.ok ? (
+                <>
+                  <div className="test-ok">Fetched {testResult.count} items</div>
+                  {(testResult.items as Array<Record<string, unknown>> | undefined)?.map((item, i) => (
+                    <div key={i} className="test-item">{String((item as Record<string, unknown>).title ?? '')}</div>
+                  ))}
+                </>
+              ) : (
+                <div className="test-fail">{testResult.error}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

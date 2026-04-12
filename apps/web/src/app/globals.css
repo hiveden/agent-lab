@@ -1292,6 +1292,13 @@ kbd.k {
 .form-row input, .form-row select, .form-row textarea { flex: 1; padding: 6px 10px; border: 1px solid var(--ag-border); border-radius: 6px; font-size: 13px; background: var(--ag-bg); color: var(--ag-text); font-family: inherit; }
 .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 
+.test-result { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 12px; }
+.test-result.ok { background: #16a34a15; border: 1px solid #16a34a30; }
+.test-result.fail { background: #dc262615; border: 1px solid #dc262630; color: #dc2626; }
+.test-ok { color: #16a34a; font-weight: 600; margin-bottom: 4px; }
+.test-item { color: var(--ag-text-2); padding: 2px 0; }
+.test-fail { color: #dc2626; }
+
 .weight-bar-container { margin-bottom: 20px; }
 .weight-bar { display: flex; height: 24px; border-radius: 6px; overflow: hidden; border: 1px solid var(--ag-border); }
 .weight-segment { display: flex; align-items: center; justify-content: center; background: var(--ag-hover); border-right: 1px solid var(--ag-border); }

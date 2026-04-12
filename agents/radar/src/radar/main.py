@@ -50,6 +50,47 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# ── Source Types ──
+
+
+@app.get("/source-types")
+async def source_types() -> dict:
+    from .collectors.base import get_source_types
+    return {"source_types": get_source_types()}
+
+
+# ── Test Collect ──
+
+
+class TestCollectRequest(BaseModel):
+    source_type: str
+    config: dict[str, Any] = {}
+
+
+@app.post("/test-collect")
+async def test_collect(
+    req: TestCollectRequest,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    _check_auth(authorization)
+    from .collectors.base import get_collector
+
+    try:
+        collector = get_collector(req.source_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 限制测试抓取数量
+    test_config = {**req.config}
+    test_config.setdefault("limit", 3)
+
+    try:
+        items = await collector.collect(test_config)
+        return {"ok": True, "count": len(items), "items": items[:3]}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 # ── Ingest ──
 
 

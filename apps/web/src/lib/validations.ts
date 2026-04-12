@@ -33,7 +33,7 @@ export const stateUpdateSchema = z.object({
 
 export const sourceCreateSchema = z.object({
   agent_id: z.string(),
-  source_type: z.string(),
+  source_type: z.enum(['hacker-news', 'http', 'rss', 'grok']),
   name: z.string(),
   config: z.record(z.string(), z.unknown()).optional().default({}),
   attention_weight: z.number().min(0).max(1).optional().default(0),
@@ -93,6 +93,7 @@ export const llmSettingsUpdateSchema = z.object({
   model_tool: z.string().min(1).optional(),
   base_url: z.string().min(1).optional(),
   api_key: z.string().optional(),
+  grok_api_key: z.string().optional(),
 });
 
 export const testConnectionSchema = z.object({

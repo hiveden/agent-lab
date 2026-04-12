@@ -20,4 +20,10 @@ pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0003_dwe
 echo "[init-local-db] applying migrations/0004_llm_settings.sql ..."
 pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0004_llm_settings.sql 2>/dev/null || echo "[init-local-db] (0004 already applied, skipping)"
 
+echo "[init-local-db] applying migrations/0005_grok_api_key.sql ..."
+pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0005_grok_api_key.sql 2>/dev/null || echo "[init-local-db] (0005 already applied, skipping)"
+
+echo "[init-local-db] applying migrations/0005_seed_sources.sql ..."
+pnpm exec wrangler d1 execute agent-lab-dev --local --file=./migrations/0005_seed_sources.sql 2>/dev/null || echo "[init-local-db] (0005 seed already applied, skipping)"
+
 echo "[init-local-db] done. Local state at: $WEB_DIR/.wrangler/state"

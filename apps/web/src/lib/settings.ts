@@ -14,6 +14,7 @@ export interface LlmSettingsRow {
   model_tool: string;
   base_url: string;
   api_key_encrypted: string | null;
+  grok_api_key_encrypted: string | null;
   updated_at: string;
 }
 
@@ -24,6 +25,7 @@ export interface LlmSettingsPublic {
   model_tool: string;
   base_url: string;
   api_key_masked: string;
+  grok_api_key_masked: string;
   updated_at: string;
 }
 
@@ -34,6 +36,7 @@ export interface LlmSettingsInternal {
   model_tool: string;
   base_url: string;
   api_key: string;
+  grok_api_key: string;
 }
 
 export async function getRawSettings(d1: D1Database): Promise<LlmSettingsRow | null> {
@@ -48,19 +51,15 @@ export async function getPublicSettings(d1: D1Database, secretHex: string): Prom
     return {
       provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
       model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
-      api_key_masked: '', updated_at: '',
+      api_key_masked: '', grok_api_key_masked: '', updated_at: '',
     };
   }
 
-  let masked = '';
-  if (row.api_key_encrypted && secretHex) {
-    try {
-      const plain = await decrypt(row.api_key_encrypted, secretHex);
-      masked = maskKey(plain);
-    } catch {
-      masked = '(decrypt error)';
-    }
-  }
+  const decryptField = async (encrypted: string | null) => {
+    if (!encrypted || !secretHex) return '';
+    try { return maskKey(await decrypt(encrypted, secretHex)); }
+    catch { return '(decrypt error)'; }
+  };
 
   return {
     provider: row.provider,
@@ -68,7 +67,8 @@ export async function getPublicSettings(d1: D1Database, secretHex: string): Prom
     model_chat: row.model_chat,
     model_tool: row.model_tool,
     base_url: row.base_url,
-    api_key_masked: masked,
+    api_key_masked: await decryptField(row.api_key_encrypted),
+    grok_api_key_masked: await decryptField(row.grok_api_key_encrypted),
     updated_at: row.updated_at,
   };
 }
@@ -78,18 +78,16 @@ export async function getInternalSettings(d1: D1Database, secretHex: string): Pr
   if (!row) {
     return {
       provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
-      model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4', api_key: '',
+      model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
+      api_key: '', grok_api_key: '',
     };
   }
 
-  let apiKey = '';
-  if (row.api_key_encrypted && secretHex) {
-    try {
-      apiKey = await decrypt(row.api_key_encrypted, secretHex);
-    } catch {
-      // fallback empty
-    }
-  }
+  const decryptField = async (encrypted: string | null) => {
+    if (!encrypted || !secretHex) return '';
+    try { return await decrypt(encrypted, secretHex); }
+    catch { return ''; }
+  };
 
   return {
     provider: row.provider,
@@ -97,7 +95,8 @@ export async function getInternalSettings(d1: D1Database, secretHex: string): Pr
     model_chat: row.model_chat,
     model_tool: row.model_tool,
     base_url: row.base_url,
-    api_key: apiKey,
+    api_key: await decryptField(row.api_key_encrypted),
+    grok_api_key: await decryptField(row.grok_api_key_encrypted),
   };
 }
 
@@ -107,7 +106,8 @@ export interface SettingsUpdateInput {
   model_chat?: string;
   model_tool?: string;
   base_url?: string;
-  api_key?: string; // plaintext, will be encrypted
+  api_key?: string;
+  grok_api_key?: string;
 }
 
 export async function upsertSettings(
@@ -126,6 +126,9 @@ export async function upsertSettings(
   if (input.base_url !== undefined) set.base_url = input.base_url;
   if (input.api_key !== undefined && input.api_key !== '') {
     set.api_key_encrypted = await encrypt(input.api_key, secretHex);
+  }
+  if (input.grok_api_key !== undefined && input.grok_api_key !== '') {
+    set.grok_api_key_encrypted = await encrypt(input.grok_api_key, secretHex);
   }
 
   // Upsert: try update first

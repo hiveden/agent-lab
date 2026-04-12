@@ -1,4 +1,4 @@
-"""Collector 协议与注册表。"""
+"""Collector 协议、注册表、源类型元数据。"""
 
 from __future__ import annotations
 
@@ -20,14 +20,68 @@ class Collector(Protocol):
     async def collect(self, config: dict[str, Any]) -> list[RawCollectorItem]: ...
 
 
+def _registry() -> dict[str, type[Collector]]:
+    """延迟导入，避免循环依赖。"""
+    from .grok_collector import GrokCollector
+    from .hn import HNCollector
+    from .http_collector import HttpCollector
+    from .rss_collector import RssCollector
+
+    return {
+        "hacker-news": HNCollector,
+        "http": HttpCollector,
+        "rss": RssCollector,
+        "grok": GrokCollector,
+    }
+
+
 def get_collector(source_type: str) -> Collector:
     """按 source_type 返回对应 collector 实例。"""
-    from .hn import HNCollector
-
-    registry: dict[str, type[Collector]] = {
-        "hacker-news": HNCollector,
-    }
+    registry = _registry()
     cls = registry.get(source_type)
     if cls is None:
         raise ValueError(f"Unknown source_type: {source_type}")
     return cls()
+
+
+SOURCE_TYPE_META: dict[str, dict[str, Any]] = {
+    "hacker-news": {
+        "label": "Hacker News",
+        "description": "HN Top Stories via Firebase API",
+        "config_hint": {"limit": 30},
+    },
+    "http": {
+        "label": "HTTP API (通用)",
+        "description": "任意返回 JSON 的 REST API，配置 URL + 字段映射",
+        "config_hint": {
+            "url": "https://api.example.com/data",
+            "method": "GET",
+            "items_path": "data",
+            "mapping": {
+                "external_id": "id",
+                "title": "title",
+                "url": "url",
+            },
+        },
+    },
+    "rss": {
+        "label": "RSS / Atom",
+        "description": "RSS 或 Atom feed",
+        "config_hint": {"feed_url": "https://example.com/feed", "limit": 20},
+    },
+    "grok": {
+        "label": "Grok (Twitter/X)",
+        "description": "通过 Grok API x_search 采集推文，需要 GROK_API_KEY",
+        "config_hint": {
+            "accounts": ["karpathy", "swyx"],
+            "batch_size": 10,
+            "api_url": "https://api.apiyi.com/v1/responses",
+            "model": "grok-4-fast-non-reasoning",
+        },
+    },
+}
+
+
+def get_source_types() -> dict[str, dict[str, Any]]:
+    """返回所有已注册的 source type 元数据。"""
+    return SOURCE_TYPE_META

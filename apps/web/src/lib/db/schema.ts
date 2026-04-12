@@ -150,5 +150,6 @@ export const llmSettings = sqliteTable('llm_settings', {
   model_tool: text('model_tool').notNull().default('glm-4.6'),
   base_url: text('base_url').notNull().default('https://open.bigmodel.cn/api/paas/v4'),
   api_key_encrypted: text('api_key_encrypted'),
+  grok_api_key_encrypted: text('grok_api_key_encrypted'),
   updated_at: text('updated_at').notNull().default(sql`(datetime('now'))`),
 });
