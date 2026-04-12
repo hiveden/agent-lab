@@ -1,15 +1,48 @@
 # 技术栈 (Tech Stack)
 
-| 需求场景 (Requirement) | 技术选型 (Tech/Library) | 选型理由 (Rationale) |
+## Control Plane (Next.js)
+
+| 需求场景 | 技术选型 | 选型理由 |
 | :--- | :--- | :--- |
-| **数据库 ORM** | `drizzle-orm` + `drizzle-kit` | 原生支持 Cloudflare D1，提供端到端类型安全与迁移管理。 |
-| **大模型通信** | `ai` + `@ai-sdk/openai` | 接管 SSE 流式响应、网络重连及乐观 UI 状态。 |
-| **基础 UI 组件** | `shadcn/ui` (`radix-ui`) | 无头组件设计，内置无障碍 (a11y) 与焦点管理逻辑。 |
-| **移动端抽屉** | `vaul` | 解决移动端滚动穿透、虚拟键盘适配与多级高度吸附问题。 |
-| **手势交互** | `framer-motion` | 提供物理阻尼，规避 iOS Safari 侧滑冲突。 |
-| **图标库** | `lucide-react` | 轻量级，深度对齐 shadcn 生态。 |
-| **页面可见性追踪** | `ahooks` (`useDocumentVisibility`) | 剥离应用切后台时间，精准计算用户停留时长。 |
-| **数据离线上报** | `navigator.sendBeacon` | 确保页面卸载时隐式行为数据能够可靠送达后端。 |
-| **表单状态与校验** | `react-hook-form` + `zod` | 消除受控组件性能开销，实现前后端统一强校验。 |
-| **定时任务** | `Cloudflare Cron Triggers` | 原生集成至 Wrangler，零运维成本实现定时任务调度。 |
-| **后台异步调度** | FastAPI `BackgroundTasks` | 立即响应防 Serverless 网关超时，后台协程静默执行耗时大模型推理。 |
+| **数据库 ORM** | `drizzle-orm` + `drizzle-kit` | 原生支持 Cloudflare D1，端到端类型安全与迁移管理 |
+| **大模型通信** | `ai` + `@ai-sdk/openai` | SSE 流式响应、网络重连、乐观 UI 状态 |
+| **手势交互** | `framer-motion` | 移动端卡片滑动，物理阻尼，规避 iOS Safari 侧滑 |
+| **API 校验** | `zod` | 前后端统一强校验，source_type enum 验证 |
+| **API Key 加密** | Web Crypto API (AES-256-GCM) | Edge runtime 原生支持，API key 加密落库 |
+| **停留时长追踪** | Page Visibility API + `sendBeacon` | 精准计时（排除后台），页面卸载时可靠上报 |
+| **E2E 测试** | `@playwright/test` | 录屏 + trace + 视觉审计（DOM 规则检查） |
+| **单元测试** | `vitest` | 快速，ESM 原生支持 |
+| **定时任务** | Cloudflare Cron Triggers | 零运维定时调度 |
+
+## Data Plane (Python)
+
+| 需求场景 | 技术选型 | 选型理由 |
+| :--- | :--- | :--- |
+| **HTTP 服务** | `FastAPI` | 异步，SSE streaming，OpenAPI 自动文档 |
+| **HTTP 客户端** | `httpx` | 异步支持，代理配置，trust_env 控制 |
+| **LLM 集成** | `langchain` + `langchain-openai` | 链式组合，所有 provider 走 OpenAI-compatible API |
+| **RSS 解析** | `feedparser` | 标准 RSS/Atom 解析 |
+| **配置管理** | `pydantic-settings` | 类型安全的 env var 加载 + 生产校验 |
+| **代码质量** | `ruff` | lint + format 一体，py312 target |
+| **测试** | `pytest` + `pytest-asyncio` + `pytest-httpx` | async collector mock 测试 |
+
+## 多 LLM Provider
+
+所有 provider 走 `ChatOpenAI` (OpenAI-compatible API)，通过 `base_url` + `api_key` 切换：
+
+| Provider | base_url | 用途 |
+| :--- | :--- | :--- |
+| GLM (智谱) | `open.bigmodel.cn/api/paas/v4` | 默认 LLM |
+| Ollama | `localhost:11434/v1` | 本地开发，免费 |
+| Gemini (CPA) | `localhost:8317/v1` | CPA 代理 → Google |
+| Anthropic (CPA) | `localhost:8317/v1` | CPA 代理 → Anthropic |
+| Custom | 任意 | 自定义 OpenAI-compatible 端点 |
+
+## 多 Source Collector
+
+| Collector | 技术 | 外部依赖 |
+| :--- | :--- | :--- |
+| HN | httpx → HN Firebase API | 无 |
+| HTTP (通用) | httpx → 任意 JSON API | 无 |
+| RSS | httpx + feedparser | 无 |
+| Grok (Twitter/X) | httpx → Grok API x_search | GROK_API_KEY |

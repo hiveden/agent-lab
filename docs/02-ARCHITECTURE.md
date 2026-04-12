@@ -1,21 +1,19 @@
 # ARCHITECTURE: Radar 系统架构
 
 > **定位**: 单用户多设备、重度数据追踪的 Agent 系统。
-> **原则**: 控制面与数据面严格解耦。
+> **原则**: 控制面与数据面严格解耦；Ingestion 与 Intelligence 两阶段分离。
 
 ---
 
-## 一、 核心架构图 (Core Architecture)
-
-系统整体分为四层，通过明确的边界分离了 UI 渲染、状态调度、重度计算与持久化存储。
+## 一、核心架构图
 
 ```text
 =====================================================================================
                           1. Client Layer (前端展现层)
 =====================================================================================
-    📱 Mobile PWA                                  💻 Web Desktop
- (流式卡片 / 注意力追踪)                           (多栏指挥中心 / Trace 监控)
-          |                                               |
+    📱 Mobile (响应式)                               💻 Web Desktop
+ Tab Bar / 卡片滑动 / 全屏对话                     NavRail / 三栏布局 / Trace 监控
+ 停留时长追踪 (Visibility API)                      键盘导航 / Command Palette
           |                                               |
           +-----------------------+-----------------------+
                                   |
@@ -25,27 +23,30 @@
 =====================================================================================
                          2. Control Plane (核心编排层)
 =====================================================================================
-                          [ Next.js App Router (BFF) ]
+                          [ Next.js 15 App Router (BFF) ]
                                   |
-          +-----------------------+-----------------------+
-          |                       |                       |
-  [ API Routes ]          [ State Management ]        [ Auth & Guard ]
- (/api/items, /api/chat)   (Vercel AI SDK)
+          +-----------+-----------+-----------+-----------+
+          |           |           |           |           |
+    [ API Routes ]  [ Sources ]  [ Settings ] [ Attention ]
+    /api/items      /api/sources /api/settings /api/attention
+    /api/raw-items  /api/runs    (AES-GCM)    /snapshot
+    /api/chat       /api/cron/*
           |
-          | REST API / Context
+          | REST API (Bearer auth)
           v
 =====================================================================================
                          3. Data Plane (智能体算力层)
 =====================================================================================
-                          [ Python Engine (FastAPI) ]
+                          [ Python FastAPI (无状态) ]
                                   |
-          +-----------------------+-----------------------+
-          |                       |                       |
-   [ Scraper Engine ]   [ RAG & Context Builder ]    [ LLM Router ]
- (HN, RSS, Twitter)                               (GLM-4 / GLM-4-Flash)
-          |
-          |
-          | (Data Processing & AI Inference)
+    +------------+----------------+----------------+
+    |            |                |                |
+[ Collectors ] [ Pipelines ]  [ Chains ]     [ Endpoints ]
+  ├─ HN         ├─ ingest.py   ├─ recommend   /ingest
+  ├─ HTTP(通用)  └─ evaluate.py └─ chat        /evaluate
+  ├─ RSS                                       /test-collect
+  └─ Grok(X)                                   /source-types
+                                               /v1/chat/completions
           |
           v
 =====================================================================================
@@ -53,123 +54,112 @@
 =====================================================================================
                              [ Drizzle ORM ]
                                   |
-                                  v
                        [ Cloudflare D1 (SQLite) ]
                                   |
-          +-----------------------+-----------------------+
-          |                       |                       |
-      [ sources ]             [ items ]           [ user_states & chats ]
-     (基线配置)             (物料/文章)             (行为日志 / 对话记录)
+    +----------+----------+----------+----------+----------+
+    |          |          |          |          |          |
+ sources   raw_items    items    user_states  runs     llm_settings
+ (配置)    (原始内容)  (评判后)   (行为追踪)  (执行记录) (LLM配置)
+           +run_id     +grade    +dwell_ms              +加密API key
 =====================================================================================
 
-* 外部触发: ⏰ Cron Triggers (Cloudflare Workers) -> Invoke API Routes -> Wake up Python Engine
+* 外部触发: ⏰ Cron Triggers → /api/cron/radar/ingest → /api/cron/radar/evaluate
+* 配置优先级: env var > DB (测试环境覆盖生产)
 ```
-
-### 架构说明
-- **Client (前端展现层)**
-  - **Mobile PWA**: 流式卡片分发、毫秒级注意力追踪、沉浸式对话框。
-  - **Web Desktop**: 多栏指挥中心、基线配置、全链路 Trace 监控。
-- **Control Plane (核心编排层 - Next.js)**
-  - **职责**: 路由、鉴权、数据库 CRUD (Drizzle ORM)、状态机跃迁控制、Vercel AI SDK 对话流转流。掌握所有持久化状态。
-- **Data Plane (智能体算力层 - Python)**
-  - **职责**: 无状态执行节点。被动唤醒 -> 执行爬虫/大模型推理 -> 结果与日志推至 Control Plane 落库。执行完毕即销毁。
-- **Data Storage (持久化层 - Cloudflare D1)**
-  - **核心实体**: `sources` (基线)、`items` (物料)、`user_states` (高保真行为日志)、`runs` (执行快照)、`chat_messages` (对话历史)。
 
 ---
 
-## 二、 核心业务流转 (Business Workflows)
+## 二、数据流
 
-### 1. 信息摄取与白盒化 (Ingestion)
-*目标：Agent 抓取并过滤，全程留痕。*
+### 1. Ingestion（采集）— 配置驱动，多 Collector
 
 ```text
-[⏰ Cron]
-   | (触发)
+sources 表 (D1)
+   | CP 读 enabled sources
    v
-[Next.js API: /api/cron/radar]
-   | (唤醒)
-   v
-[Python Agent] === (1. 抓取) ===> [外部信息源: HN/RSS]
-   | 
-   +============= (2. 评分) ===> [LLM: GLM-4-Flash]
+POST Python /ingest {sources: [{id, source_type, config}]}
    |
-   | (3. 推送 Items & Trace)
+   v (按 source_type 分发)
+┌──────────────────────────────────────────┐
+│ Collector Registry                       │
+│  hacker-news → HNCollector (HN API)     │
+│  http        → HttpCollector (通用 JSON) │
+│  rss         → RssCollector (feedparser) │
+│  grok        → GrokCollector (x_search)  │
+└──────────────────────────────────────────┘
+   |
    v
-[Next.js API: /api/items/batch]
-   | (写入)
-   v
-[D1: items & runs]
+POST /api/raw-items/batch → D1 raw_items (run_id 关联)
+POST /api/runs            → D1 runs (stats + trace)
 ```
 
-### 2. 移动端隐式捕获 (Implicit Tracking)
-*目标：无感记录真实注意力消耗。*
+### 2. Intelligence（评判）— LLM 筛选
 
 ```text
-[🧑 User] ---> (点击卡片) ---> [Mobile Client]
-                                  |
-                                  | (状态: unread -> viewing)
-                                  v
-                            [Visibility API (计时器)]
-                                  |
-                                  | (切后台/卸载时暂停)
-                                  v
-                             [Mobile Client]
-                                  |
-                                  | (sendBeacon: PATCH /api/items/[id]/state)
-                                  v
-                           [Next.js API]
-                                  |
-                                  | (更新状态与累计时长)
-                                  v
-                        [D1: user_states]
+POST Python /evaluate
+   |
+   v
+GET /api/raw-items?status=pending
+   |
+   v
+LLM 评分筛选 (mock / GLM / Ollama / Gemini / Anthropic)
+   |
+   v
+POST /api/items/batch     → D1 items (promoted)
+PATCH /api/raw-items/status → D1 raw_items (promoted/rejected)
 ```
 
-### 3. 周度认知反思 (Cognitive Mirror Reflection)
-*目标：对比“理想设定”与“真实消耗”，生成反思报告。*
+### 3. 隐式追踪
 
 ```text
-[⏰ Weekly Cron]
-   | (唤醒反思任务)
-   v
-[Python Agent]
-   | (GET 聚合数据)
-   v
-[Next.js API] === (查询基线 vs 实际消耗) ===> [D1: sources & user_states]
-   |
-   | (返回偏差数据集)
-   v
-[Python Agent] === (生成分析报告) ===> [LLM]
-   |
-   | (POST Markdown 报告)
-   v
-[Next.js API: Report]
-   | (落库)
-   v
-[D1]
+用户点击 item → 自动 PATCH status=watching
+停留计时 (Visibility API) → 离开时 sendBeacon dwell_ms
+发送 chat 消息 → 自动升级 status=discussed
 ```
 
-### 4. 深度追问与流式响应 (Chat Interaction)
-*目标：移动端碎片化提问，状态升级，流式渲染。*
+### 4. 认知镜像
 
 ```text
-[Mobile Client (Vercel AI SDK)]
+GET /api/attention/snapshot
    |
-   | (发送首条消息)
    v
-[Next.js BFF: /api/chat] === (强升 status 为 discussing) ===> [D1: user_states]
+按 source 聚合: consumed×1 + watching×2 + chat_rounds×3
    |
-   +======================== (提取原文与历史组装上下文) ===> [D1: items & chats]
-   |
-   | (转发完整上下文)
    v
-[Python Agent] === (LLM 推理) ===> [LLM: GLM-4]
+actual_weight vs expected_weight (sources.attention_weight)
    |
-   | (SSE 流式返回 OpenAI 格式)
    v
-[Next.js BFF: /api/chat] - - - (Vercel AI SDK 透传流) - - -> [Mobile Client]
-   |
-   | (接收到 [DONE] 信号后)
-   v
-[D1: chat_messages (onFinish 落库)]
+偏差可视化 (AttentionView)
+```
+
+---
+
+## 三、Collector 统一接口
+
+```python
+class Collector(Protocol):
+    async def collect(self, config: dict) -> list[RawCollectorItem]
+
+RawCollectorItem = {external_id, title, url, raw_payload}
+```
+
+| Collector | 采集方式 | 需要 API Key |
+|-----------|---------|-------------|
+| HNCollector | HN Firebase API | 否 |
+| HttpCollector | 通用 REST API (config: url + mapping) | 按需 |
+| RssCollector | RSS/Atom feed (feedparser) | 否 |
+| GrokCollector | Grok API x_search (Twitter/X) | 是 (GROK_API_KEY) |
+
+新增 collector: 实现 Protocol → 注册到 `collectors/base.py` registry → 用户在 Sources UI 配置即可使用。
+
+---
+
+## 四、配置管理
+
+```
+读取优先级: env var > DB > defaults
+
+测试环境: .env 文件 (agents/radar/.env)
+生产环境: D1 llm_settings 表 (API key 用 AES-256-GCM 加密)
+          Cloudflare Pages env vars / Fly.io secrets
 ```

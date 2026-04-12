@@ -88,6 +88,13 @@ uv tool run ruff format agents/
 | **Triggers** | | |
 | POST | `/api/cron/radar/ingest` | CP 触发采集（读 sources → 调 Python /ingest） |
 | POST | `/api/cron/radar/evaluate` | CP 触发评判（调 Python /evaluate） |
+| **Settings** | | |
+| GET/PUT | `/api/settings` | LLM 配置（GET 脱敏，PUT 加密存储） |
+| POST | `/api/settings/test-connection` | LLM 连通性测试 |
+| **Sources Testing** | | |
+| POST | `/api/sources/test` | 代理到 Python /test-collect，验证采集配置 |
+| **Attention** | | |
+| GET | `/api/attention/snapshot` | 注意力偏差快照（expected vs actual） |
 | **Chat** | | |
 | POST | `/api/chat` | SSE 流式对话 |
 | GET | `/api/chat/sessions/:itemId` | 对话历史 |
@@ -100,8 +107,11 @@ uv tool run ruff format agents/
 - **环境变量**: 通过 `apps/web/src/lib/env.ts` 的 `getEnv()` 获取 Cloudflare bindings
 - **Python 配置**: `agents/shared` 使用 Pydantic Settings 从环境变量加载
 - **Python Pipeline**: `agents/radar/src/radar/pipelines/` 下 `ingest.py`（采集）和 `evaluate.py`（评判）
-- **Collector Protocol**: `agents/radar/src/radar/collectors/base.py` 定义 `Collector` 协议，新 source 类型实现此协议并注册
+- **Collector Protocol**: `agents/radar/src/radar/collectors/base.py` 定义 `Collector` 协议，4 种已注册：hacker-news / http / rss / grok
+- **LLM Settings**: `apps/web/src/lib/settings.ts` + `llm_settings` 表，API key 用 AES-GCM 加密，`SETTINGS_SECRET` env var
+- **LLM 多 Provider**: 所有 provider 走 `ChatOpenAI`（OpenAI-compatible），通过 `base_url` 切换
 - **LLM Mock**: `LLM_MOCK=1` 启用 mock 模式（开发默认开启）
+- **注意力聚合**: `apps/web/src/lib/attention.ts`，信号权重独立可调（SIGNAL_WEIGHTS）
 - **Type 同步**: 修改类型时需同步更新 `packages/types/src/index.ts` 和 `agents/shared/src/agent_lab_shared/schema.py`
 - **SSE 工具**: `agents/shared/src/agent_lab_shared/sse.py` 提供 `progress_sse()` 和 `openai_sse_chunk()`
 
@@ -109,6 +119,19 @@ uv tool run ruff format agents/
 
 需要 `.env` 文件（参考 `.env.example`）。关键变量：
 - `LLM_MOCK` / `LLM_PROVIDER` / `GLM_API_KEY`: LLM 配置
+- `GROK_API_KEY`: Grok API key（Twitter/X 采集用）
 - `RADAR_WRITE_TOKEN`: Agent 写入认证 token
 - `PLATFORM_API_BASE`: Python Agent 回调 Next.js 的地址（默认 `http://127.0.0.1:8788`）
+- `SETTINGS_SECRET`: LLM Settings 加密密钥（64 字符 hex，`openssl rand -hex 32`）
 - `HTTPS_PROXY` / `HTTP_PROXY`: 代理配置（外网请求需要）
+
+## Testing
+
+```bash
+pnpm test                                              # Vitest (16 tests)
+uv run --package agent-lab-radar pytest agents/radar/tests/ -v  # pytest (22 tests)
+bash scripts/run-e2e.sh                                # Playwright E2E (17 tests, desktop + mobile)
+E2E_FILTER="Step 2b" bash scripts/run-e2e.sh           # 单个测试过滤
+```
+
+E2E 产出：`apps/web/e2e/test-results/` 下录屏 (.webm) + 截图 (.png) + trace (.zip)
