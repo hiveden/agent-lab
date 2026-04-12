@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radar UI v2 — Desktop Prototype</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #fafaf9; --surface: #fff; --surface-hi: #f5f4f2;
+  --text: #1a1a1a; --text-2: #888; --text-3: #bbb;
+  --border: #e8e6e3; --border-subtle: #f0eeeb;
+  --accent: #1a1a1a; --accent-light: #f5f4f2;
+  --fire: #dc2626; --fire-bg: #fef2f2;
+  --bolt: #d97706; --bolt-bg: #fef3c7;
+  --bulb: #2563eb; --bulb-bg: #eff6ff;
+  --green: #16a34a; --green-bg: #f0fdf4;
+  --red: #dc2626; --red-bg: #fef2f2;
+  --radius: 10px; --radius-sm: 6px;
+  font-family: -apple-system, 'Inter', sans-serif;
+  font-size: 13px; color: var(--text); background: var(--bg);
+}
+
+/* ── Layout ── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* Nav Rail */
+.nav { width: 52px; background: var(--surface-hi); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; flex-shrink: 0; }
+.nav-item { width: 34px; height: 34px; border-radius: var(--radius-sm); border: none; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+.nav-item.active { background: var(--accent); color: white; }
+.nav-item:hover:not(.active) { background: var(--border); }
+.nav-item svg { width: 16px; height: 16px; }
+.nav-sep { width: 24px; height: 1px; background: var(--border); margin: 6px 0; }
+.nav .spacer { flex: 1; }
+.nav-letter { font-size: 13px; font-weight: 700; }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Top Bar */
+.topbar { height: 44px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 8px; flex-shrink: 0; background: var(--surface); }
+.topbar .brand { font-weight: 700; font-size: 14px; }
+.topbar .sep { color: var(--text-3); }
+.topbar .crumb { color: var(--text-2); }
+.topbar .spacer { flex: 1; }
+.btn { padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 12px; }
+.btn.primary { background: var(--accent); color: white; border-color: transparent; }
+
+.page-content { flex: 1; overflow: hidden; display: none; }
+.page-content.active { display: flex; flex-direction: column; }
+
+/* ── Page: Inbox ── */
+.inbox-layout { display: flex; flex-direction: column; height: 100%; }
+.inbox-top { flex: 1; min-height: 200px; overflow: hidden; display: flex; flex-direction: column; }
+.inbox-bottom { flex-shrink: 0; overflow: hidden; }
+
+/* Category Tabs */
+.category-tabs { display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 0; }
+.cat-tab { padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; color: var(--text-2); font-weight: 500; background: none; border-top: none; border-left: none; border-right: none; }
+.cat-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.cat-tab:hover:not(.active) { color: var(--text); }
+.cat-count { font-size: 11px; color: var(--text-3); margin-left: 4px; }
+.filter-chips { display: flex; gap: 4px; }
+.filter-chip { padding: 3px 10px; border-radius: 14px; border: 1px solid var(--border); background: none; cursor: pointer; font-size: 11px; color: var(--text-2); }
+.filter-chip.active { background: var(--accent); color: white; border-color: transparent; }
+
+/* Card Grid */
+.cards-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+
+.feed-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; background: var(--surface); cursor: pointer; transition: box-shadow 0.15s; }
+.feed-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.feed-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.feed-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.feed-source { font-size: 11px; color: var(--text-2); }
+.feed-time { font-size: 11px; color: var(--text-3); margin-left: auto; }
+.feed-card-title { font-weight: 600; font-size: 15px; line-height: 1.5; margin-bottom: 6px; }
+.feed-card-summary { font-size: 13px; color: var(--text-2); line-height: 1.6; margin-bottom: 8px; }
+.feed-card-why { font-size: 12px; color: var(--bolt); line-height: 1.5; padding: 8px 10px; background: var(--bolt-bg); border-radius: var(--radius-sm); margin-bottom: 10px; }
+.feed-card-foot { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-3); }
+.feed-card-foot a { color: var(--text-2); text-decoration: none; }
+.feed-card-foot a:hover { text-decoration: underline; }
+.feed-card-actions { margin-left: auto; display: flex; gap: 4px; }
+
+.grade-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.grade-dot.fire { background: var(--fire); }
+.grade-dot.bolt { background: var(--bolt); }
+.grade-dot.bulb { background: var(--bulb); }
+
+.item-action { width: 26px; height: 26px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-2); font-size: 11px; }
+.item-action:hover { background: var(--border); }
+
+/* Drag Handle */
+.drag-handle { height: 6px; background: var(--border); cursor: row-resize; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.drag-handle:hover { background: var(--text-3); }
+.drag-bar { width: 40px; height: 3px; border-radius: 2px; background: var(--text-3); }
+
+/* Chat Panel */
+.chat-panel { height: 100%; display: flex; flex-direction: column; background: var(--surface); }
+.chat-header { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.chat-header .title { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-header .close { background: none; border: none; cursor: pointer; color: var(--text-2); font-size: 16px; padding: 4px; }
+.trace-toggle { padding: 3px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; cursor: pointer; font-size: 11px; color: var(--text-2); }
+.trace-toggle.active { background: var(--accent); color: white; border-color: transparent; }
+.chat-body { flex: 1; display: flex; overflow: hidden; }
+.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+.chat-msg.user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+.chat-msg.assistant { align-self: flex-start; background: var(--accent-light); border-bottom-left-radius: 4px; }
+.chat-input { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border-subtle); flex-shrink: 0; }
+.chat-input input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 13px; }
+.chat-input input:focus { outline: none; border-color: var(--accent); }
+.chat-input button { width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--accent); color: white; cursor: pointer; font-size: 14px; }
+
+/* Horizontal drag handle (chat ↔ trace) */
+.drag-handle-h { width: 6px; background: var(--border); cursor: col-resize; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.drag-handle-h:hover { background: var(--text-3); }
+.drag-bar-h { width: 3px; height: 40px; border-radius: 2px; background: var(--text-3); }
+
+/* Trace Panel (chat 右侧并列) */
+.trace-panel { width: 320px; border-left: 1px solid var(--border); overflow-y: auto; display: none; flex-shrink: 0; background: var(--surface-hi); }
+.trace-panel.open { display: block; }
+.trace-header { padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
+.trace-spans { padding: 8px; }
+.trace-span { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); margin-bottom: 6px; overflow: hidden; }
+.trace-span.done { border-left: 3px solid var(--green); }
+.trace-span.running { border-left: 3px solid var(--bulb); }
+.trace-span-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; }
+.trace-kind { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.trace-kind.ctx { background: #e0f2fe; color: #0284c7; }
+.trace-kind.llm { background: var(--fire-bg); color: var(--fire); }
+.trace-kind.system { background: var(--accent-light); color: var(--text-2); }
+.trace-kind.tool { background: var(--bolt-bg); color: var(--bolt); }
+.trace-span-title { flex: 1; font-weight: 500; }
+.trace-span-ms { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.trace-span-detail { padding: 4px 10px 8px 10px; font-size: 11px; color: var(--text-2); line-height: 1.5; }
+
+/* ── Page: Runs (master-detail) ── */
+.runs-layout { display: grid; grid-template-columns: 280px 1fr; height: 100%; overflow: hidden; }
+.runs-sidebar { border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+.runs-sidebar-header { padding: 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.runs-sidebar-header span { font-weight: 600; font-size: 13px; }
+.runs-timeline { }
+.run-entry { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
+.run-entry:hover { background: var(--accent-light); }
+.run-entry.selected { background: var(--bulb-bg); border-left: 3px solid var(--accent); }
+.run-entry-phases { display: flex; gap: 2px; flex-shrink: 0; }
+.run-phase { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.run-phase.ingest { background: var(--bolt-bg); color: var(--bolt); }
+.run-phase.evaluate { background: var(--fire-bg); color: var(--fire); }
+.run-entry-info { flex: 1; min-width: 0; }
+.run-entry-title { font-weight: 500; font-size: 12px; }
+.run-entry-stats { font-size: 11px; color: var(--text-2); }
+.run-entry-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.run-entry-time { font-size: 10px; color: var(--text-3); }
+.run-status { font-size: 12px; }
+.run-status.done { color: var(--green); }
+.run-status.running { color: var(--bulb); }
+
+.run-detail { overflow-y: auto; padding: 24px 32px; }
+.run-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.run-header h2 { font-size: 18px; font-weight: 700; }
+.status-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.status-badge.done { background: var(--green-bg); color: var(--green); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.stat-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat-label { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.stat-value { font-size: 24px; font-weight: 700; }
+.stat-sub { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+
+.section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.card { border: 1px solid var(--border); border-radius: var(--radius); padding: 0; background: var(--surface); margin-bottom: 24px; overflow: hidden; }
+
+.source-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); }
+.source-row:last-child { border-bottom: none; }
+.source-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--accent-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.source-icon svg { width: 14px; height: 14px; color: var(--text-2); }
+.source-name { font-weight: 500; flex: 1; }
+.source-count { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--green); }
+.source-time { font-size: 11px; color: var(--text-3); }
+
+.funnel { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+.funnel-bar { display: flex; align-items: center; gap: 10px; }
+.funnel-label { width: 70px; font-size: 12px; color: var(--text-2); text-align: right; flex-shrink: 0; }
+.funnel-fill { height: 24px; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 500; }
+.funnel-fill.fetched { background: var(--accent-light); color: var(--text); }
+.funnel-fill.promoted { background: var(--green-bg); color: var(--green); }
+.funnel-fill.rejected { background: var(--red-bg); color: var(--red); }
+
+/* ── Page: Sources ── */
+.sources-page { padding: 24px 32px; overflow-y: auto; height: 100%; }
+.sources-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; max-width: 900px; }
+.sources-header h2 { font-size: 16px; font-weight: 600; }
+.sources-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; max-width: 900px; }
+.source-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.source-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.source-card-icon { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--accent-light); display: flex; align-items: center; justify-content: center; }
+.source-card-icon svg { width: 16px; height: 16px; color: var(--text-2); }
+.source-card-name { font-weight: 600; font-size: 14px; }
+.source-card-type { font-size: 11px; color: var(--text-2); }
+.source-card-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.ok { background: var(--green); }
+.source-card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.weight-bar { width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.weight-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+
+/* ── Page: Attention ── */
+.att-page { padding: 24px 32px; overflow-y: auto; height: 100%; }
+.att-container { max-width: 700px; }
+.att-source { margin-bottom: 24px; }
+.att-source-name { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.att-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.att-bar-label { width: 60px; font-size: 11px; color: var(--text-2); }
+.att-bar-track { flex: 1; height: 20px; background: var(--accent-light); border-radius: 4px; overflow: hidden; }
+.att-bar-fill { height: 100%; border-radius: 4px; }
+.att-bar-fill.expected { background: var(--text-3); }
+.att-bar-fill.over { background: var(--red); }
+.att-bar-fill.under { background: var(--bulb); }
+.att-bar-fill.ok { background: var(--green); }
+.att-bar-val { width: 36px; font-size: 12px; font-weight: 500; text-align: right; }
+.att-dev { font-size: 12px; font-weight: 500; margin-top: 4px; }
+.att-dev.over { color: var(--red); }
+.att-dev.under { color: var(--bulb); }
+.att-dev.ok { color: var(--green); }
+
+/* ── Page: Settings ── */
+.settings-page { padding: 24px 32px; overflow-y: auto; height: 100%; }
+.settings-form { max-width: 500px; display: flex; flex-direction: column; gap: 16px; }
+.s-group { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.s-group-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-2); margin-bottom: 12px; }
+.s-field { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.s-field:last-child { margin-bottom: 0; }
+.s-field label { width: 90px; font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+.s-field input, .s-field select { flex: 1; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; }
+.s-field input:focus, .s-field select:focus { outline: none; border-color: var(--accent); }
+.s-hint { font-size: 11px; color: var(--text-3); }
+.s-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* SVG icon helper */
+.icon { display: inline-flex; align-items: center; justify-content: center; }
+.icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Nav Rail (和真实实现一致的 SVG icon) -->
+  <nav class="nav">
+    <button class="nav-item active" title="Radar"><span class="nav-letter">R</span></button>
+    <button class="nav-item" title="Pulse" style="opacity:0.3"><span class="nav-letter">P</span></button>
+    <button class="nav-item" title="Scout" style="opacity:0.3"><span class="nav-letter">S</span></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" title="Inbox" onclick="showPage('inbox')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg></button>
+    <button class="nav-item" title="Watching" onclick="showPage('inbox')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
+    <button class="nav-item" title="Archive" onclick="showPage('inbox')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="5" rx="2" ry="2"/><path d="M4 9v9a2 2 0 002 2h12a2 2 0 002-2V9"/><path d="M10 13h4"/></svg></button>
+    <div class="nav-sep"></div>
+    <button class="nav-item" title="Sources" onclick="showPage('sources')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></button>
+    <button class="nav-item" title="Runs" onclick="showPage('runs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
+    <button class="nav-item" title="Attention" onclick="showPage('attention')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><line x1="2" y1="12" x2="22" y2="12"/></svg></button>
+    <div class="spacer"></div>
+    <button class="nav-item" title="Settings" onclick="showPage('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="brand">agent-lab</span>
+      <span class="sep">/</span>
+      <span class="crumb">radar</span>
+      <div class="spacer"></div>
+      <button class="btn primary" onclick="showPage('runs')">Trigger Collection</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: Inbox (卡片流 + 分类tab + 可拖拽chat)     -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page-content active" id="page-inbox">
+      <div class="inbox-layout">
+        <!-- 上：卡片流 -->
+        <div class="inbox-top" id="inbox-top">
+          <!-- 分类 Tab -->
+          <div class="category-tabs">
+            <button class="cat-tab active" onclick="switchTab(this)">Inbox <span class="cat-count">6</span></button>
+            <button class="cat-tab" onclick="switchTab(this)">Watching <span class="cat-count">2</span></button>
+            <button class="cat-tab" onclick="switchTab(this)">Archive <span class="cat-count">12</span></button>
+            <div style="flex:1"></div>
+            <div class="filter-chips">
+              <button class="filter-chip active">All</button>
+              <button class="filter-chip"><span class="grade-dot fire" style="width:8px;height:8px;display:inline-block;vertical-align:middle;margin-right:2px;"></span></button>
+              <button class="filter-chip"><span class="grade-dot bolt" style="width:8px;height:8px;display:inline-block;vertical-align:middle;margin-right:2px;"></span></button>
+              <button class="filter-chip"><span class="grade-dot bulb" style="width:8px;height:8px;display:inline-block;vertical-align:middle;margin-right:2px;"></span></button>
+            </div>
+          </div>
+          <!-- 卡片网格 -->
+          <div class="cards-scroll">
+            <div class="cards-grid">
+
+              <div class="feed-card selected" onclick="toggleChat()">
+                <div class="feed-card-head"><div class="grade-dot fire"></div><span class="feed-source">hacker-news</span><span class="feed-time">2h ago</span></div>
+                <div class="feed-card-title">OpenAI 发布 GPT-5 API，支持原生多模态推理</div>
+                <div class="feed-card-summary">OpenAI 正式开放 GPT-5 API 访问，首次原生支持图像、音频和视频的联合推理能力。开发者可以用单个 API 调用完成跨模态任务，无需拼接多个模型。</div>
+                <div class="feed-card-why">Agent 工程师可以用单个 API 调用完成多模态任务编排，大幅简化 pipeline 设计。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><span>score: 892</span><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+              <div class="feed-card" onclick="toggleChat()">
+                <div class="feed-card-head"><div class="grade-dot fire"></div><span class="feed-source">hacker-news</span><span class="feed-time">3h ago</span></div>
+                <div class="feed-card-title">Anthropic 开源 Claude Code 的 Agent 调度框架</div>
+                <div class="feed-card-summary">Anthropic 将 Claude Code 内部的 Agent 编排逻辑开源，包含子任务拆分、工具选择和上下文管理模块。</div>
+                <div class="feed-card-why">对 Agent 架构学习极有价值，可以直接参考其子任务拆分和上下文管理的实现模式。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><span>score: 654</span><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+              <div class="feed-card">
+                <div class="feed-card-head"><div class="grade-dot bolt"></div><span class="feed-source">github</span><span class="feed-time">4h ago</span></div>
+                <div class="feed-card-title">dagger/dagger: AI-native CI/CD with LLM pipelines</div>
+                <div class="feed-card-summary">Dagger 新增 LLM pipeline 支持，可以在 CI/CD 流程中内嵌 AI 代码审查、测试生成和安全扫描步骤。</div>
+                <div class="feed-card-why">对自动化工程实践有启发，可以将 AI 评审嵌入现有 CI 流程。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><span>★ 2.4k</span><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+              <div class="feed-card">
+                <div class="feed-card-head"><div class="grade-dot bolt"></div><span class="feed-source">ai-news-rss</span><span class="feed-time">5h ago</span></div>
+                <div class="feed-card-title">Meta 发布 Llama 4 Scout：10B 参数但推理质量接近 GPT-4</div>
+                <div class="feed-card-summary">Scout 模型在 10B 参数下实现了接近 GPT-4 的推理能力，本地部署可用 Ollama 跑。</div>
+                <div class="feed-card-why">Agent 应用的推理成本大幅降低，本地 Ollama 即可部署。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+              <div class="feed-card">
+                <div class="feed-card-head"><div class="grade-dot bulb"></div><span class="feed-source">hacker-news</span><span class="feed-time">6h ago</span></div>
+                <div class="feed-card-title">一个独立开发者用 Claude Code 3 天做完了整个 SaaS 后端</div>
+                <div class="feed-card-summary">从 schema 设计到 API、测试、部署，全程用 Claude Code 完成。作者分享了完整的 CLAUDE.md 配置和 prompt 技巧。</div>
+                <div class="feed-card-why">实战分享，附带完整的 prompt 工程经验，可直接参考。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><span>score: 312</span><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+              <div class="feed-card">
+                <div class="feed-card-head"><div class="grade-dot bulb"></div><span class="feed-source">ai-news-rss</span><span class="feed-time">7h ago</span></div>
+                <div class="feed-card-title">Why I switched from LangChain to plain Python for my Agent</div>
+                <div class="feed-card-summary">作者分析了 LangChain 在复杂 Agent 场景下的抽象泄漏问题，提出直接用 httpx + Pydantic 的轻量替代方案。</div>
+                <div class="feed-card-why">对当前项目使用 LangChain 的技术决策有参考价值。</div>
+                <div class="feed-card-foot"><a href="#">View original</a><div class="feed-card-actions"><button class="item-action" title="Watch">W</button><button class="item-action" title="Dismiss">D</button></div></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- 拖拽分隔线 -->
+        <div class="drag-handle" id="drag-handle">
+          <div class="drag-bar"></div>
+        </div>
+
+        <!-- 下：Chat Panel -->
+        <div class="inbox-bottom" id="chat-panel" style="height:300px;">
+          <div class="chat-panel">
+            <div class="chat-header">
+              <span class="title">Chat · OpenAI 发布 GPT-5 API，支持原生多模态推理</span>
+              <div style="margin-left:auto;display:flex;gap:4px;">
+                <button class="trace-toggle" onclick="toggleTrace()" id="trace-btn">Trace</button>
+                <button class="close" onclick="toggleChat()">×</button>
+              </div>
+            </div>
+            <div class="chat-body">
+              <!-- Chat 左侧 -->
+              <div class="chat-main">
+                <div class="chat-messages">
+                  <div class="chat-msg user">这篇文章的核心观点是什么？</div>
+                  <div class="chat-msg assistant">GPT-5 API 的核心突破是原生多模态推理——不再需要拼接多个模型来处理图文音视频。对 Agent 工程师来说，最大的变化是可以用单个 API 调用完成跨模态任务编排，pipeline 设计大幅简化。</div>
+                  <div class="chat-msg user">对我们当前的 Radar 项目有什么影响？</div>
+                  <div class="chat-msg assistant">直接影响不大，因为 Radar 主要处理文本内容。但如果后续扩展到视频/播客类信息源，GPT-5 的多模态能力可以让采集链路更简洁。</div>
+                </div>
+                <div class="chat-input">
+                  <input placeholder="Ask about this article..." />
+                  <button>↑</button>
+                </div>
+              </div>
+              <!-- Trace 拖拽分隔线 -->
+              <div class="drag-handle-h" id="trace-drag" style="display:none;">
+                <div class="drag-bar-h"></div>
+              </div>
+              <!-- Trace 右侧（并列） -->
+              <div class="trace-panel" id="trace-panel">
+                <div class="trace-header">
+                  <span style="font-weight:600;font-size:12px;">Trace</span>
+                  <span style="font-size:11px;color:var(--text-3);">3 spans · 1.2s</span>
+                </div>
+                <div class="trace-spans">
+                  <div class="trace-span done">
+                    <div class="trace-span-head">
+                      <span class="trace-kind ctx">ctx</span>
+                      <span class="trace-span-title">Load item context</span>
+                      <span class="trace-span-ms">12ms</span>
+                    </div>
+                    <div class="trace-span-detail">Fetched item + chat history from D1</div>
+                  </div>
+                  <div class="trace-span done">
+                    <div class="trace-span-head">
+                      <span class="trace-kind llm">llm</span>
+                      <span class="trace-span-title">gemini-2.5-flash</span>
+                      <span class="trace-span-ms">1,180ms</span>
+                    </div>
+                    <div class="trace-span-detail">
+                      <div>input: 2,340 tokens</div>
+                      <div>output: 186 tokens</div>
+                      <div>temperature: 0.7</div>
+                    </div>
+                  </div>
+                  <div class="trace-span done">
+                    <div class="trace-span-head">
+                      <span class="trace-kind system">system</span>
+                      <span class="trace-span-title">Save messages to D1</span>
+                      <span class="trace-span-ms">8ms</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: Runs (左列表 + 右报告)                    -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page-content" id="page-runs">
+      <div class="runs-layout">
+        <div class="runs-sidebar">
+          <div class="runs-sidebar-header">
+            <span>Runs</span>
+            <button class="btn primary" style="font-size:11px;padding:4px 10px;">Trigger</button>
+          </div>
+          <div class="runs-timeline">
+            <div class="run-entry selected">
+              <div class="run-entry-phases"><span class="run-phase ingest">I</span><span class="run-phase evaluate">E</span></div>
+              <div class="run-entry-info">
+                <div class="run-entry-title">#42 · 3 sources</div>
+                <div class="run-entry-stats">48 → 6 items · 8.2s</div>
+              </div>
+              <div class="run-entry-meta"><span class="run-status done">✓</span><span class="run-entry-time">14:30</span></div>
+            </div>
+            <div class="run-entry">
+              <div class="run-entry-phases"><span class="run-phase ingest">I</span><span class="run-phase evaluate">E</span></div>
+              <div class="run-entry-info">
+                <div class="run-entry-title">#41 · 3 sources</div>
+                <div class="run-entry-stats">45 → 4 items · 7.5s</div>
+              </div>
+              <div class="run-entry-meta"><span class="run-status done">✓</span><span class="run-entry-time">08:00</span></div>
+            </div>
+            <div class="run-entry">
+              <div class="run-entry-phases"><span class="run-phase ingest">I</span></div>
+              <div class="run-entry-info">
+                <div class="run-entry-title">#40 · evaluating...</div>
+                <div class="run-entry-stats">42 fetched</div>
+              </div>
+              <div class="run-entry-meta"><span class="run-status running">⋯</span><span class="run-entry-time">Yesterday</span></div>
+            </div>
+            <div class="run-entry">
+              <div class="run-entry-phases"><span class="run-phase ingest">I</span><span class="run-phase evaluate">E</span></div>
+              <div class="run-entry-info">
+                <div class="run-entry-title">#39 · 2 sources</div>
+                <div class="run-entry-stats">35 → 5 items</div>
+              </div>
+              <div class="run-entry-meta"><span class="run-status done">✓</span><span class="run-entry-time">Apr 11</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="run-detail">
+          <div class="run-header">
+            <h2>Run #42</h2>
+            <span class="status-badge done">Done</span>
+            <span style="color:var(--text-2);font-size:12px;">2026-04-12 14:30 · 8.2s</span>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">Sources</div><div class="stat-value">3</div><div class="stat-sub">HN · GitHub · RSS</div></div>
+            <div class="stat-card"><div class="stat-label">Fetched</div><div class="stat-value">48</div><div class="stat-sub">raw items</div></div>
+            <div class="stat-card"><div class="stat-label">Promoted</div><div class="stat-value" style="color:var(--green)">6</div><div class="stat-sub">12.5%</div></div>
+            <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-value" style="color:var(--text-3)">42</div></div>
+          </div>
+          <div class="section-title">Ingest — 按 Source</div>
+          <div class="card">
+            <div class="source-row"><div class="source-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/></svg></div><div class="source-name">Hacker News Top</div><div class="source-count">30 条</div><div class="source-time">3.2s</div></div>
+            <div class="source-row"><div class="source-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div><div class="source-name">GitHub Trending</div><div class="source-count">10 条</div><div class="source-time">1.8s</div></div>
+            <div class="source-row"><div class="source-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11a9 9 0 0118 0"/><path d="M4 4a16 16 0 0118 0"/><circle cx="12" cy="20" r="2"/></svg></div><div class="source-name">AI News (RSS)</div><div class="source-count">8 条</div><div class="source-time">0.9s</div></div>
+          </div>
+          <div class="section-title">Evaluate — 漏斗</div>
+          <div class="card">
+            <div class="funnel">
+              <div class="funnel-bar"><div class="funnel-label">Fetched</div><div class="funnel-fill fetched" style="width:100%">48</div></div>
+              <div class="funnel-bar"><div class="funnel-label">Promoted</div><div class="funnel-fill promoted" style="width:12.5%">6</div></div>
+              <div class="funnel-bar"><div class="funnel-label">Rejected</div><div class="funnel-fill rejected" style="width:87.5%">42</div></div>
+            </div>
+          </div>
+          <div class="section-title">本次推荐 · 6 条</div>
+          <div class="card">
+            <div class="item-card" style="cursor:default;">
+              <div class="item-grade"><div class="grade-dot fire"></div></div>
+              <div class="item-body">
+                <div class="item-title">OpenAI 发布 GPT-5 API，支持原生多模态推理</div>
+                <div class="item-meta"><span>hacker-news</span><span>·</span><span>score: 892</span></div>
+              </div>
+            </div>
+            <div class="item-card" style="cursor:default;">
+              <div class="item-grade"><div class="grade-dot fire"></div></div>
+              <div class="item-body">
+                <div class="item-title">Anthropic 开源 Claude Code Agent 框架</div>
+                <div class="item-meta"><span>hacker-news</span><span>·</span><span>score: 654</span></div>
+              </div>
+            </div>
+            <div class="item-card" style="cursor:default;">
+              <div class="item-grade"><div class="grade-dot bolt"></div></div>
+              <div class="item-body">
+                <div class="item-title">dagger/dagger: AI-native CI/CD</div>
+                <div class="item-meta"><span>github</span><span>·</span><span>★ 2.4k</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: Sources                                  -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page-content" id="page-sources">
+      <div class="sources-page">
+        <div class="sources-header"><h2>Sources</h2><button class="btn primary">+ Add Source</button></div>
+        <div class="sources-grid">
+          <div class="source-card">
+            <div class="source-card-header">
+              <div class="source-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/></svg></div>
+              <div><div class="source-card-name">Hacker News Top</div><div class="source-card-type">hacker-news · limit: 30</div></div>
+            </div>
+            <div class="source-card-status"><span class="status-dot ok"></span> Verified · last: 14:30</div>
+            <div class="source-card-footer"><span style="font-size:12px;color:var(--text-2)">Weight: 50%</span><div class="weight-bar"><div class="weight-fill" style="width:50%"></div></div></div>
+          </div>
+          <div class="source-card">
+            <div class="source-card-header">
+              <div class="source-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div>
+              <div><div class="source-card-name">GitHub Trending</div><div class="source-card-type">http · GitHub API</div></div>
+            </div>
+            <div class="source-card-status"><span class="status-dot ok"></span> Verified · last: 14:30</div>
+            <div class="source-card-footer"><span style="font-size:12px;color:var(--text-2)">Weight: 20%</span><div class="weight-bar"><div class="weight-fill" style="width:20%"></div></div></div>
+          </div>
+          <div class="source-card">
+            <div class="source-card-header">
+              <div class="source-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11a9 9 0 0118 0"/><path d="M4 4a16 16 0 0118 0"/><circle cx="12" cy="20" r="2"/></svg></div>
+              <div><div class="source-card-name">AI News (smol.ai)</div><div class="source-card-type">rss · buttondown.com</div></div>
+            </div>
+            <div class="source-card-status"><span class="status-dot ok"></span> Verified</div>
+            <div class="source-card-footer"><span style="font-size:12px;color:var(--text-2)">Weight: 15%</span><div class="weight-bar"><div class="weight-fill" style="width:15%"></div></div></div>
+          </div>
+          <div class="source-card">
+            <div class="source-card-header">
+              <div class="source-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/></svg></div>
+              <div><div class="source-card-name">Twitter AI Leaders</div><div class="source-card-type">grok · 12 accounts</div></div>
+            </div>
+            <div class="source-card-status"><span class="status-dot ok"></span> Verified</div>
+            <div class="source-card-footer"><span style="font-size:12px;color:var(--text-2)">Weight: 15%</span><div class="weight-bar"><div class="weight-fill" style="width:15%"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: Attention                                -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page-content" id="page-attention">
+      <div class="att-page">
+        <h2 style="font-size:16px;font-weight:600;margin-bottom:4px;">Attention Mirror</h2>
+        <p style="font-size:12px;color:var(--text-2);margin-bottom:20px;">Comparing intended attention allocation vs actual behavior.</p>
+        <div class="att-container">
+          <div class="att-source"><div class="att-source-name">Hacker News Top</div><div class="att-bar-row"><div class="att-bar-label">Expected</div><div class="att-bar-track"><div class="att-bar-fill expected" style="width:50%"></div></div><div class="att-bar-val">50%</div></div><div class="att-bar-row"><div class="att-bar-label">Actual</div><div class="att-bar-track"><div class="att-bar-fill over" style="width:72%"></div></div><div class="att-bar-val">72%</div></div><div class="att-dev over">+22% over</div></div>
+          <div class="att-source"><div class="att-source-name">GitHub Trending</div><div class="att-bar-row"><div class="att-bar-label">Expected</div><div class="att-bar-track"><div class="att-bar-fill expected" style="width:20%"></div></div><div class="att-bar-val">20%</div></div><div class="att-bar-row"><div class="att-bar-label">Actual</div><div class="att-bar-track"><div class="att-bar-fill ok" style="width:18%"></div></div><div class="att-bar-val">18%</div></div><div class="att-dev ok">on track</div></div>
+          <div class="att-source"><div class="att-source-name">AI News (RSS)</div><div class="att-bar-row"><div class="att-bar-label">Expected</div><div class="att-bar-track"><div class="att-bar-fill expected" style="width:15%"></div></div><div class="att-bar-val">15%</div></div><div class="att-bar-row"><div class="att-bar-label">Actual</div><div class="att-bar-track"><div class="att-bar-fill under" style="width:5%"></div></div><div class="att-bar-val">5%</div></div><div class="att-dev under">-10% under</div></div>
+          <div class="att-source"><div class="att-source-name">Twitter AI Leaders</div><div class="att-bar-row"><div class="att-bar-label">Expected</div><div class="att-bar-track"><div class="att-bar-fill expected" style="width:15%"></div></div><div class="att-bar-val">15%</div></div><div class="att-bar-row"><div class="att-bar-label">Actual</div><div class="att-bar-track"><div class="att-bar-fill under" style="width:5%"></div></div><div class="att-bar-val">5%</div></div><div class="att-dev under">-10% under</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- PAGE: Settings                                 -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page-content" id="page-settings">
+      <div class="settings-page">
+        <h2 style="font-size:16px;font-weight:600;margin-bottom:16px;">LLM Settings</h2>
+        <div class="settings-form">
+          <div class="s-group">
+            <div class="s-group-title">LLM Provider</div>
+            <div class="s-field"><label>Provider</label><select><option>GLM (智谱)</option><option>Ollama (本地)</option><option selected>Gemini (CPA)</option><option>Anthropic (CPA)</option><option>Custom</option></select></div>
+            <div class="s-field"><label>Base URL</label><input value="http://localhost:8317/v1" /></div>
+            <div class="s-field"><label>Model (Push)</label><input value="gemini-2.5-flash-lite" /></div>
+            <div class="s-field"><label>Model (Chat)</label><input value="gemini-2.5-flash" /></div>
+            <div class="s-field"><label>API Key</label><input type="password" placeholder="sk-***Dp3n" /></div>
+          </div>
+          <div class="s-group">
+            <div class="s-group-title">Grok API (Twitter/X)</div>
+            <div class="s-field"><label>API Key</label><input type="password" placeholder="sk-***1234" /></div>
+            <div class="s-hint">用于 Grok x_search 采集 Twitter 推文</div>
+          </div>
+          <div class="s-actions">
+            <button class="btn">Test Connection</button>
+            <button class="btn primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showPage(id) {
+  document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+}
+function switchTab(el) {
+  el.parentElement.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+function toggleTrace() {
+  const panel = document.getElementById('trace-panel');
+  const btn = document.getElementById('trace-btn');
+  const drag = document.getElementById('trace-drag');
+  const isOpen = panel.classList.toggle('open');
+  btn.classList.toggle('active');
+  drag.style.display = isOpen ? '' : 'none';
+}
+function toggleChat() {
+  const panel = document.getElementById('chat-panel');
+  const handle = document.getElementById('drag-handle');
+  if (panel.style.height === '0px') {
+    panel.style.height = '300px';
+    handle.style.display = '';
+  } else {
+    panel.style.height = '0px';
+    handle.style.display = 'none';
+  }
+}
+
+// Horizontal drag: chat ↔ trace
+(function() {
+  const handle = document.getElementById('trace-drag');
+  const panel = document.getElementById('trace-panel');
+  let dragging = false, startX, startW;
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true; startX = e.clientX; startW = panel.offsetWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const newW = Math.max(200, Math.min(600, startW + (startX - e.clientX)));
+    panel.style.width = newW + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+// Vertical drag: cards ↔ chat
+(function() {
+  const handle = document.getElementById('drag-handle');
+  const panel = document.getElementById('chat-panel');
+  let dragging = false, startY, startH;
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true; startY = e.clientY; startH = panel.offsetHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const newH = Math.max(100, Math.min(window.innerHeight - 200, startH + (startY - e.clientY)));
+    panel.style.height = newH + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+</script>
+</body>
+</html>
