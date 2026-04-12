@@ -350,10 +350,10 @@ kbd.k {
 
 .trace-divider {
   width: 6px; background: var(--border); position: relative;
-  transition: background .15s; flex-shrink: 0;
+  transition: background .15s; flex-shrink: 0; cursor: col-resize;
 }
 .trace-divider:hover, .trace-divider:active { background: var(--accent); }
-.trace-divider::before { content: ''; position: absolute; inset: 0 -3px; }
+.trace-divider::before { content: ''; position: absolute; inset: 0 -3px; cursor: col-resize; }
 
 /* ═══════════════════════════════════════════════════════════
    Toast

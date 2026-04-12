@@ -279,7 +279,7 @@ export default function InboxView() {
             </Separator>
             <Panel defaultSize={30} minSize={15}>
               <Group orientation="horizontal" className="border-t border-[var(--border)] flex overflow-hidden min-h-0 h-full">
-                <Panel minSize={30}>
+                <Panel id="chat" minSize={30}>
                   <ChatView
                     key={selectedItem.id}
                     item={selectedItem}
@@ -294,7 +294,7 @@ export default function InboxView() {
                 {traceOpen && (
                   <>
                     <Separator className="trace-divider" />
-                    <Panel defaultSize={40} minSize={20} maxSize={60}>
+                    <Panel id="trace" defaultSize={40} minSize={20} maxSize={60}>
                       <TraceDrawer
                         open={traceOpen}
                         trace={activeTrace}
