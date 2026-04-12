@@ -32,9 +32,15 @@ export async function insertRawItemsBatch(
     run_id: runId ?? null,
   }));
 
-  const res = await db.insert(rawItems).values(values).onConflictDoNothing();
-  const inserted = res.meta.changes ?? 0;
-  return { inserted, skipped: values.length - inserted };
+  // D1 has a binding parameter limit (~100). Chunk inserts to stay safe.
+  const CHUNK = 10;
+  let totalInserted = 0;
+  for (let i = 0; i < values.length; i += CHUNK) {
+    const chunk = values.slice(i, i + CHUNK);
+    const res = await db.insert(rawItems).values(chunk).onConflictDoNothing();
+    totalInserted += res.meta.changes ?? 0;
+  }
+  return { inserted: totalInserted, skipped: values.length - totalInserted };
 }
 
 export interface ListRawItemsOpts {
