@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-type Provider = 'glm' | 'ollama' | 'anthropic';
+type Provider = 'glm' | 'ollama' | 'anthropic' | 'gemini' | 'custom';
 
 interface SettingsForm {
   provider: Provider;
@@ -10,8 +10,8 @@ interface SettingsForm {
   model_chat: string;
   model_tool: string;
   base_url: string;
-  api_key: string; // 新输入的 key（空=不修改）
-  api_key_masked: string; // 已存的脱敏值
+  api_key: string;
+  api_key_masked: string;
 }
 
 const PROVIDER_DEFAULTS: Record<Provider, Omit<SettingsForm, 'api_key' | 'api_key_masked'>> = {
@@ -36,12 +36,28 @@ const PROVIDER_DEFAULTS: Record<Provider, Omit<SettingsForm, 'api_key' | 'api_ke
     model_chat: 'claude-sonnet-4-20250514',
     model_tool: 'claude-sonnet-4-20250514',
   },
+  gemini: {
+    provider: 'gemini',
+    base_url: 'http://localhost:8317/v1',
+    model_push: 'gemini-2.5-flash-lite',
+    model_chat: 'gemini-2.5-flash',
+    model_tool: 'gemini-2.5-flash',
+  },
+  custom: {
+    provider: 'custom',
+    base_url: '',
+    model_push: '',
+    model_chat: '',
+    model_tool: '',
+  },
 };
 
 const PROVIDER_LABELS: Record<Provider, string> = {
   glm: 'GLM (智谱)',
   ollama: 'Ollama (本地)',
   anthropic: 'Anthropic (CPA)',
+  gemini: 'Gemini (CPA)',
+  custom: 'Custom (OpenAI-compatible)',
 };
 
 export default function SettingsView() {

@@ -87,7 +87,7 @@ export const runUpdateSchema = z.object({
 // ── LLM Settings ──
 
 export const llmSettingsUpdateSchema = z.object({
-  provider: z.enum(['glm', 'ollama', 'anthropic']).optional(),
+  provider: z.enum(['glm', 'ollama', 'anthropic', 'gemini', 'custom']).optional(),
   model_push: z.string().min(1).optional(),
   model_chat: z.string().min(1).optional(),
   model_tool: z.string().min(1).optional(),
@@ -96,7 +96,7 @@ export const llmSettingsUpdateSchema = z.object({
 });
 
 export const testConnectionSchema = z.object({
-  provider: z.enum(['glm', 'ollama', 'anthropic']),
+  provider: z.enum(['glm', 'ollama', 'anthropic', 'gemini', 'custom']),
   base_url: z.string().min(1),
   api_key: z.string().optional().default(''),
   model: z.string().min(1),
