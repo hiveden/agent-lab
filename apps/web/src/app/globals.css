@@ -48,39 +48,69 @@
   --shadow:    0 1px 3px rgba(20,20,30,0.06), 0 1px 2px rgba(20,20,30,0.04);
   --shadow-lg: 0 10px 38px -10px rgba(20,20,30,0.16), 0 10px 20px -15px rgba(20,20,30,0.1);
 
-  /* shadcn/ui CSS variables (neutral base) */
-  --background: 0 0% 100%;
-  --foreground: 0 0% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 3.9%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 0 0% 96.1%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
-  --accent: 0 0% 96.1%;
-  --accent-foreground: 0 0% 9%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 89.8%;
-  --input: 0 0% 89.8%;
-  --ring: 0 0% 3.9%;
-  --chart-1: 12 76% 61%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 197 37% 24%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
-  --sidebar-background: 0 0% 98%;
-  --sidebar-foreground: 240 5.3% 26.1%;
-  --sidebar-primary: 240 5.9% 10%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 240 4.8% 95.9%;
-  --sidebar-accent-foreground: 240 5.9% 10%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-ring: 217.2 91.2% 59.8%;
+  /* shadcn/ui bridge — map to our design tokens (NOT raw HSL) */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-sunk);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-sunk);
+  --muted-foreground: var(--text-3);
+  --accent-ui: var(--bg-sunk);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --input: var(--border);
+  --ring: var(--accent);
+  --chart-1: var(--fire);
+  --chart-2: var(--bolt);
+  --chart-3: var(--bulb);
+  --chart-4: var(--warn);
+  --chart-5: var(--accent-2);
+  --radius: 6px;
+}
+
+/* ── Dark mode ─────────────────────────────────────────── */
+.dark {
+  color-scheme: dark;
+
+  --bg:           #1a1916;
+  --bg-sunk:      #141311;
+  --surface:      #21201c;
+  --surface-hi:   #2a2824;
+  --border:       #3a3732;
+  --border-hi:    #4a4640;
+  --border-strong:#5a5650;
+
+  --text:         #e8e6e0;
+  --text-2:       #a09c94;
+  --text-3:       #6b6760;
+  --text-faint:   #4a4640;
+
+  --accent:       #818cf8;
+  --accent-2:     #a5b4fc;
+  --accent-soft:  rgba(129,140,248,0.12);
+  --accent-line:  rgba(129,140,248,0.25);
+
+  --fire:         #fb923c;
+  --fire-soft:    rgba(251,146,60,0.12);
+  --bolt:         #60a5fa;
+  --bolt-soft:    rgba(96,165,250,0.12);
+  --bulb:         #34d399;
+  --bulb-soft:    rgba(52,211,153,0.12);
+
+  --success:      #22c55e;
+  --warn:         #f59e0b;
+  --danger:       #ef4444;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow:    0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 38px -10px rgba(0,0,0,0.5), 0 10px 20px -15px rgba(0,0,0,0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════
