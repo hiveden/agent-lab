@@ -47,7 +47,7 @@ bash scripts/init-local-db.sh 2>&1 | grep -E "^\[|done"
 
 echo "📦 Step 1b: Clearing test data (keep schema + seed)..."
 pnpm exec wrangler d1 execute agent-lab-dev --local --command \
-  "DELETE FROM chat_messages; DELETE FROM chat_sessions; DELETE FROM user_states; DELETE FROM items; DELETE FROM raw_items; DELETE FROM runs; DELETE FROM sources WHERE id != 'src_hn_top'; UPDATE sources SET attention_weight = 1.0 WHERE id = 'src_hn_top';" 2>/dev/null || true
+  "DELETE FROM chat_messages; DELETE FROM chat_sessions; DELETE FROM user_states; DELETE FROM items; DELETE FROM raw_items; DELETE FROM runs; DELETE FROM sources WHERE id NOT IN ('src_hn_top','src_github_trending','src_ai_news_rss'); UPDATE sources SET attention_weight = 1.0 WHERE id = 'src_hn_top';" 2>/dev/null || true
 echo "   Done — clean state"
 
 # ── Step 2: Start Next.js ──
@@ -62,7 +62,8 @@ echo "   PID: $NEXTJS_PID"
 echo ""
 echo "🐍 Step 3: Starting Python Agent on :8001..."
 cd "$ROOT_DIR"
-uv run radar-serve > /tmp/agent-lab-python.log 2>&1 &
+uv sync --quiet 2>/dev/null
+uv run --package agent-lab-radar radar-serve > /tmp/agent-lab-python.log 2>&1 &
 PYTHON_PID=$!
 echo "   PID: $PYTHON_PID"
 

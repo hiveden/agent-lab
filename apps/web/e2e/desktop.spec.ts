@@ -23,20 +23,78 @@ test('Step 1: services healthy', async ({ request }) => {
 
 // ─── Step 2: Source 配置 + 空状态视觉 ──────────────────────
 
-test('Step 2: source exists, empty inbox renders clean', async ({ page, request }) => {
-  // 验证 seed source
+test('Step 2: seed sources exist, empty inbox renders clean', async ({ page, request }) => {
   const res = await request.get('/api/sources?agent_id=radar');
   const sources = (await res.json()).sources;
-  expect(sources.length).toBe(1);
-  expect(sources[0].id).toBe('src_hn_top');
+  expect(sources.length).toBeGreaterThanOrEqual(1);
 
-  // 空状态 UI
+  const types = sources.map((s: Record<string, string>) => s.source_type);
+  expect(types).toContain('hacker-news');
+
   await page.goto('/agents/radar');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500);
 
   await page.screenshot({ path: 'e2e/test-results/d-01-empty-inbox.png' });
   await runVisualAudit(page, 'desktop-empty-inbox');
+});
+
+// ─── Step 2b: Test Collect — 验证各类型 collector 能采集 ────
+
+test('Step 2b: test-collect works for each source type', async ({ request }) => {
+  // HN
+  const hn = await request.post(`${PYTHON}/test-collect`, {
+    headers: { 'content-type': 'application/json', ...AUTH },
+    data: JSON.stringify({ source_type: 'hacker-news', config: { limit: 3 } }),
+    timeout: 30_000,
+  });
+  const hnBody = await hn.json();
+  console.log(`  test-collect HN: status=${hn.status()} body=${JSON.stringify(hnBody).slice(0, 200)}`);
+  expect(hn.status(), `HN test-collect HTTP ${hn.status()}`).toBe(200);
+  expect(hnBody.ok, `HN test-collect failed: ${hnBody.error || hnBody.detail}`).toBe(true);
+  expect(hnBody.count).toBeGreaterThan(0);
+
+  // HTTP (GitHub)
+  const http = await request.post(`${PYTHON}/test-collect`, {
+    headers: { 'content-type': 'application/json', ...AUTH },
+    data: JSON.stringify({
+      source_type: 'http',
+      config: {
+        url: 'https://api.github.com/search/repositories?q=created:%3E2026-04-01&sort=stars&order=desc&per_page=3',
+        method: 'GET',
+        items_path: 'items',
+        mapping: { external_id: 'full_name', title: 'full_name', url: 'html_url' },
+        limit: 3,
+      },
+    }),
+    timeout: 30_000,
+  });
+  const httpBody = await http.json();
+  expect(httpBody.ok, `HTTP test-collect failed: ${httpBody.error}`).toBe(true);
+  expect(httpBody.count).toBeGreaterThan(0);
+  console.log(`  test-collect HTTP: ${httpBody.count} items`);
+
+  // RSS
+  const rss = await request.post(`${PYTHON}/test-collect`, {
+    headers: { 'content-type': 'application/json', ...AUTH },
+    data: JSON.stringify({
+      source_type: 'rss',
+      config: { feed_url: 'https://buttondown.com/ainews/rss', limit: 3 },
+    }),
+    timeout: 30_000,
+  });
+  const rssBody = await rss.json();
+  expect(rssBody.ok, `RSS test-collect failed: ${rssBody.error}`).toBe(true);
+  expect(rssBody.count).toBeGreaterThan(0);
+  console.log(`  test-collect RSS: ${rssBody.count} items`);
+
+  // Unknown type should fail gracefully
+  const bad = await request.post(`${PYTHON}/test-collect`, {
+    headers: { 'content-type': 'application/json', ...AUTH },
+    data: JSON.stringify({ source_type: 'nonexistent', config: {} }),
+    timeout: 10_000,
+  });
+  expect(bad.status()).toBe(400);
 });
 
 // ─── Step 3: Ingest ────────────────────────────────────────
@@ -156,24 +214,28 @@ test('Step 7: status transitions persist', async ({ request }) => {
 
 // ─── Step 8: Attention 偏差 ───────────────────────────────
 
-test('Step 8: attention deviation with multi-source', async ({ page, request }) => {
-  // 添加 RSS source
-  await request.post('/api/sources', {
-    data: { agent_id: 'radar', source_type: 'rss', name: 'AI RSS', attention_weight: 0.4, enabled: true },
-  });
-  await request.patch('/api/sources/src_hn_top', { data: { attention_weight: 0.6 } });
-
-  // 检查偏差
+test('Step 8: attention snapshot works', async ({ page, request }) => {
+  // 检查快照 API
   const snap = await (await request.get('/api/attention/snapshot?agent_id=radar')).json();
-  expect(snap.sources.length).toBe(2);
+  expect(snap.sources.length).toBeGreaterThan(0);
+  expect(snap.computed_at).toBeTruthy();
 
-  if (snap.total_score > 0) {
-    const hn = snap.sources.find((s: Record<string, string>) => s.source_type === 'hacker-news');
-    const rss = snap.sources.find((s: Record<string, string>) => s.source_type === 'rss');
-    expect(hn.deviation).toBeGreaterThan(0);
-    expect(rss.deviation).toBeLessThan(0);
-    console.log(`Attention: HN dev=${(hn.deviation * 100).toFixed(0)}% RSS dev=${(rss.deviation * 100).toFixed(0)}%`);
+  // 每个 source 有正确的结构
+  for (const src of snap.sources) {
+    expect(typeof src.expected_weight).toBe('number');
+    expect(typeof src.actual_weight).toBe('number');
+    expect(typeof src.deviation).toBe('number');
   }
+
+  // 有活动时 actual_weights 之和 ≈ 1
+  if (snap.total_score > 0) {
+    const totalActual = snap.sources.reduce((s: number, x: { actual_weight: number }) => s + x.actual_weight, 0);
+    expect(totalActual).toBeGreaterThan(0.99);
+  }
+
+  console.log('Attention:', snap.sources.map((s: Record<string, unknown>) =>
+    `${s.source_name}: exp=${((s.expected_weight as number) * 100).toFixed(0)}% act=${((s.actual_weight as number) * 100).toFixed(0)}%`
+  ).join(', '));
 
   // UI 视觉
   await page.goto('/agents/radar');

@@ -1,8 +1,8 @@
--- Seed: 掘金热榜 (http type)
+-- Seed: GitHub Trending (http type)
 INSERT OR IGNORE INTO sources (id, agent_id, source_type, name, config, attention_weight, enabled)
 VALUES (
-  'src_juejin_hot', 'radar', 'http', '掘金热榜',
-  '{"url":"https://api.juejin.cn/content_api/v1/content/article_rank?category_id=1&type=hot","method":"POST","headers":{"Content-Type":"application/json"},"body":{},"items_path":"data","mapping":{"external_id":"content.content_id","title":"content.title","url_template":"https://juejin.cn/post/{content.content_id}"},"limit":10}',
+  'src_github_trending', 'radar', 'http', 'GitHub Trending',
+  '{"url":"https://api.github.com/search/repositories?q=created:%3E2026-04-01&sort=stars&order=desc&per_page=10","method":"GET","items_path":"items","mapping":{"external_id":"full_name","title":"full_name","url":"html_url"},"limit":10}',
   0.0, 1
 );
 

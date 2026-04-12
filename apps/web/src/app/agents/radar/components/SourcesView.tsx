@@ -25,10 +25,10 @@ interface EditingSource {
 const CONFIG_TEMPLATES: Record<string, string> = {
   'hacker-news': JSON.stringify({ limit: 30 }, null, 2),
   'http': JSON.stringify({
-    url: 'https://api.example.com/data',
+    url: 'https://api.github.com/search/repositories?q=created:%3E2026-04-01&sort=stars&order=desc&per_page=10',
     method: 'GET',
-    items_path: 'data',
-    mapping: { external_id: 'id', title: 'title', url: 'url' },
+    items_path: 'items',
+    mapping: { external_id: 'full_name', title: 'full_name', url: 'html_url' },
   }, null, 2),
   'rss': JSON.stringify({ feed_url: 'https://example.com/feed', limit: 20 }, null, 2),
   'grok': JSON.stringify({
