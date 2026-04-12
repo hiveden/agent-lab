@@ -64,26 +64,25 @@ export default function RadarWorkspace() {
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  // UI state
-  const [activeView, setActiveView] = useState<ViewType>(() =>
-    loadLS(LS.view, 'inbox' as ViewType, (s) => s as ViewType),
-  );
-  const [filter, setFilter] = useState<GradeFilter>(() =>
-    loadLS(LS.filter, 'all' as GradeFilter, (s) => s as GradeFilter),
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(() =>
-    loadLS<string | null>(LS.selectedId, null, (s) => (s === 'null' ? null : s)),
-  );
+  // UI state — 初始值固定为 SSR-safe defaults，useEffect 里恢复 localStorage
+  const [activeView, setActiveView] = useState<ViewType>('inbox');
+  const [filter, setFilter] = useState<GradeFilter>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
-  const [listWidth, setListWidth] = useState(() =>
-    loadLS(LS.listW, 340, (s) => parseInt(s, 10) || 340),
-  );
-  const [traceWidth, setTraceWidth] = useState(() =>
-    loadLS(LS.traceW, 440, (s) => parseInt(s, 10) || 440),
-  );
-  const [traceOpen, setTraceOpen] = useState(() =>
-    loadLS(LS.traceOpen, false, (s) => s === 'true'),
-  );
+  const [listWidth, setListWidth] = useState(340);
+
+  // 客户端 hydrate 后从 localStorage 恢复
+  useEffect(() => {
+    setActiveView(loadLS(LS.view, 'inbox' as ViewType, (s) => s as ViewType));
+    setFilter(loadLS(LS.filter, 'all' as GradeFilter, (s) => s as GradeFilter));
+    setSelectedId(loadLS<string | null>(LS.selectedId, null, (s) => (s === 'null' ? null : s)));
+    setListWidth(loadLS(LS.listW, 340, (s) => parseInt(s, 10) || 340));
+    setTraceWidth(loadLS(LS.traceW, 440, (s) => parseInt(s, 10) || 440));
+    setTraceOpen(loadLS(LS.traceOpen, false, (s) => s === 'true'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [traceWidth, setTraceWidth] = useState(440);
+  const [traceOpen, setTraceOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -621,6 +620,11 @@ export default function RadarWorkspace() {
   );
 
   // ─── Mobile Layout ──────────────────────────────────────────
+  // SSR: isMobile 未确定时不渲染布局，避免 hydration mismatch
+  if (isMobile === undefined) {
+    return <div className="app" />;
+  }
+
   if (isMobile) {
     const mobileSelectItem = (item: ItemWithState) => {
       setSelectedId(item.id);

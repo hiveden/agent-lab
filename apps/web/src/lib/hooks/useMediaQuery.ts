@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from 'react';
 
-export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+/**
+ * SSR-safe media query hook。
+ *
+ * 首次渲染返回 undefined（服务端不知道屏幕宽度），
+ * effect 执行后返回真实值。消费方用 `if (isMobile === undefined)` 渲染骨架或 null。
+ */
+export function useMediaQuery(query: string): boolean | undefined {
+  const [matches, setMatches] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     const mql = window.matchMedia(query);
@@ -16,6 +22,6 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-export function useIsMobile(): boolean {
+export function useIsMobile(): boolean | undefined {
   return useMediaQuery('(max-width: 640px)');
 }
