@@ -278,34 +278,8 @@ export default function InboxView() {
               <div className="drag-bar" />
             </Separator>
             <Panel defaultSize={30} minSize={15}>
-              {traceOpen ? (
-                <Group orientation="horizontal" className="border-t border-[var(--border)] flex overflow-hidden min-h-0 h-full">
-                  <Panel minSize={30}>
-                    <ChatView
-                      key={selectedItem.id}
-                      item={selectedItem}
-                      initialMessages={currentSession?.messages ?? []}
-                      sessionId={currentSession?.session_id ?? null}
-                      onOpenTraceFromSpan={handleOpenFromSpan}
-                      onToggleTrace={() => setTraceOpen(!traceOpen)}
-                      traceOpen={traceOpen}
-                      onChatUpdate={handleChatUpdate}
-                    />
-                  </Panel>
-                  <Separator className="trace-divider" />
-                  <Panel defaultSize={40} minSize={20} maxSize={60}>
-                    <TraceDrawer
-                      open={traceOpen}
-                      trace={activeTrace}
-                      onClose={() => setTraceOpen(false)}
-                      highlightSpanId={highlightSpanId}
-                      expandAllSignal={expandAllSignal}
-                      collapseAllSignal={collapseAllSignal}
-                    />
-                  </Panel>
-                </Group>
-              ) : (
-                <div className="border-t border-[var(--border)] flex overflow-hidden min-h-0 h-full">
+              <Group orientation="horizontal" className="border-t border-[var(--border)] flex overflow-hidden min-h-0 h-full">
+                <Panel minSize={30}>
                   <ChatView
                     key={selectedItem.id}
                     item={selectedItem}
@@ -316,8 +290,23 @@ export default function InboxView() {
                     traceOpen={traceOpen}
                     onChatUpdate={handleChatUpdate}
                   />
-                </div>
-              )}
+                </Panel>
+                {traceOpen && (
+                  <>
+                    <Separator className="trace-divider" />
+                    <Panel defaultSize={40} minSize={20} maxSize={60}>
+                      <TraceDrawer
+                        open={traceOpen}
+                        trace={activeTrace}
+                        onClose={() => setTraceOpen(false)}
+                        highlightSpanId={highlightSpanId}
+                        expandAllSignal={expandAllSignal}
+                        collapseAllSignal={collapseAllSignal}
+                      />
+                    </Panel>
+                  </>
+                )}
+              </Group>
             </Panel>
           </>
         )}
