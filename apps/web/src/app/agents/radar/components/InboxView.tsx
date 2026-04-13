@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import type { ViewType } from './NavRail';
 import ChatView from './ChatView';
@@ -131,6 +131,15 @@ export default function InboxView() {
   );
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const tracePanelRef = usePanelRef();
+
+  // Sync traceOpen state with collapsible panel
+  useEffect(() => {
+    const panel = tracePanelRef.current;
+    if (!panel) return;
+    if (traceOpen && panel.isCollapsed()) panel.expand();
+    else if (!traceOpen && !panel.isCollapsed()) panel.collapse();
+  }, [traceOpen, tracePanelRef]);
 
   // Scroll selected card into view
   useEffect(() => {
@@ -277,8 +286,8 @@ export default function InboxView() {
             <Separator className="drag-handle">
               <div className="drag-bar" />
             </Separator>
-            <Panel defaultSize={30} minSize={15}>
-              <Group orientation="horizontal" className="border-t border-[var(--border)] overflow-hidden min-h-0 h-full">
+            <Panel id="bottom" defaultSize={30} minSize={15}>
+              <Group orientation="horizontal" id="chat-trace" className="border-t border-[var(--border)] min-h-0 h-full">
                 <Panel id="chat" minSize={30}>
                   <ChatView
                     key={selectedItem.id}
@@ -291,21 +300,33 @@ export default function InboxView() {
                     onChatUpdate={handleChatUpdate}
                   />
                 </Panel>
-                {traceOpen && (
-                  <>
-                    <Separator className="trace-divider" />
-                    <Panel id="trace" defaultSize={40} minSize={20} maxSize={60}>
-                      <TraceDrawer
-                        open={traceOpen}
-                        trace={activeTrace}
-                        onClose={() => setTraceOpen(false)}
-                        highlightSpanId={highlightSpanId}
-                        expandAllSignal={expandAllSignal}
-                        collapseAllSignal={collapseAllSignal}
-                      />
-                    </Panel>
-                  </>
-                )}
+                <Separator
+                  className="trace-divider"
+                  style={traceOpen ? undefined : { width: 0, minWidth: 0, opacity: 0 }}
+                />
+                <Panel
+                  id="trace"
+                  panelRef={tracePanelRef}
+                  collapsible
+                  collapsedSize={0}
+                  defaultSize={traceOpen ? 40 : 0}
+                  minSize={20}
+                  maxSize={60}
+                  onResize={(size) => {
+                    if (size.asPercentage === 0 && traceOpen) setTraceOpen(false);
+                  }}
+                >
+                  {traceOpen && (
+                    <TraceDrawer
+                      open={traceOpen}
+                      trace={activeTrace}
+                      onClose={() => setTraceOpen(false)}
+                      highlightSpanId={highlightSpanId}
+                      expandAllSignal={expandAllSignal}
+                      collapseAllSignal={collapseAllSignal}
+                    />
+                  )}
+                </Panel>
               </Group>
             </Panel>
           </>

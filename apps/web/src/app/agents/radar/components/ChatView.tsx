@@ -65,7 +65,7 @@ export default function ChatView({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden bg-[var(--bg)] min-w-0">
+    <div className="flex flex-col overflow-hidden bg-[var(--bg)] min-w-0 h-full">
       <div className="px-5 pt-3 pb-2.5 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
         <div className="flex items-start gap-2.5">
           <span className={cn(
