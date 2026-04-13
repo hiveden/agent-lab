@@ -1,8 +1,10 @@
 /**
- * Full walkthrough — one continuous recording of the complete user journey.
+ * Full walkthrough — one continuous recording of the production flow.
  *
- * Single test, single page, one video. This is the deliverable demo,
- * not a correctness check. Requires both Next.js and Python Agent running.
+ * Single test, single page, one video. Deliverable demo of:
+ * Sources → Trigger → wait → Runs result with stats.
+ *
+ * Requires both Next.js (:8788) and Python Agent (:8001) running.
  */
 
 import { test, expect } from '@playwright/test';
@@ -28,27 +30,37 @@ test('Full walkthrough: sources → trigger → runs result', async ({ page }) =
   await page.click('button[aria-label="Runs"]');
   await PAUSE(1000);
 
-  const triggerBtn = page.locator('button.trigger-btn:has-text("Trigger")').first();
+  const triggerBtn = page.locator('button.trigger-btn').first();
   await expect(triggerBtn).toBeVisible({ timeout: 5000 });
+  await expect(triggerBtn).toHaveText('Trigger');
   await triggerBtn.click();
 
-  // Wait for collection to finish (up to 90s)
-  await expect(triggerBtn).not.toHaveText('Running', { timeout: 90_000 });
-  await PAUSE(2000);
+  // Wait for SSE to finish — button goes "Running…" → "Trigger"
+  await expect(triggerBtn).toHaveText('Trigger', { timeout: 90_000 });
+  await PAUSE(1000);
 
-  // ── 3. Refresh Runs, view execution results ──
+  // ── 3. Refresh Runs, verify execution results ──
   await page.click('button:has-text("Refresh")');
-  await PAUSE(2000);
+  await PAUSE(1500);
 
   // Click the first run to see details
   const runEntry = page.locator('.run-entry').first();
-  if (await runEntry.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await runEntry.click();
-    await PAUSE(3000);
-  }
-
-  // ── 4. Final pause to show the result ──
+  await expect(runEntry).toBeVisible({ timeout: 5000 });
+  await runEntry.click();
   await PAUSE(1500);
+
+  // ── 4. Verify run detail is not empty ──
+  // Status should be "done"
+  const detail = page.locator('.run-detail');
+  await expect(detail).toBeVisible({ timeout: 5000 });
+
+  // Stats area should have non-zero values
+  const statsText = await detail.textContent() ?? '';
+  expect(statsText.length).toBeGreaterThan(0);
+  console.log(`Run detail text: ${statsText.slice(0, 200)}`);
+
+  // Hold for recording
+  await PAUSE(3000);
 
   console.log('Walkthrough complete: production flow verified in Runs view');
 });

@@ -41,9 +41,20 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   const handleTrigger = useCallback(async () => {
     if (triggerBusy) return;
     setTriggerBusy(true);
+
+    const drainSSE = async (url: string) => {
+      const res = await fetch(url, { method: 'POST' });
+      if (!res.ok || !res.body) return;
+      const reader = res.body.getReader();
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    };
+
     try {
-      await fetch('/api/cron/radar/ingest', { method: 'POST' });
-      await fetch('/api/cron/radar/evaluate', { method: 'POST' });
+      await drainSSE('/api/cron/radar/ingest');
+      await drainSSE('/api/cron/radar/evaluate');
     } catch {
       // ignore — runs list will reflect any failure
     } finally {
