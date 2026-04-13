@@ -140,11 +140,12 @@ async def ingest(
 
 class EvaluateRequest(BaseModel):
     agent_id: str = "radar"
+    prompt: str | None = None
 
 
-async def _evaluate_sse(agent_id: str) -> AsyncIterator[bytes]:
+async def _evaluate_sse(agent_id: str, user_prompt: str | None = None) -> AsyncIterator[bytes]:
     try:
-        async for ev in run_evaluate_stream(agent_id):
+        async for ev in run_evaluate_stream(agent_id, user_prompt=user_prompt):
             yield progress_sse(ev)
     except Exception as e:
         yield progress_sse({"type": "error", "message": f"unhandled: {e}"})
@@ -158,7 +159,7 @@ async def evaluate(
 ) -> StreamingResponse:
     _check_auth(authorization)
     return StreamingResponse(
-        _evaluate_sse(req.agent_id),
+        _evaluate_sse(req.agent_id, user_prompt=req.prompt),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )

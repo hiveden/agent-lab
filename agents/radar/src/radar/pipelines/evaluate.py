@@ -29,6 +29,7 @@ def _ev(payload: ProgressEvent) -> ProgressEvent:
 
 async def run_evaluate_stream(
     agent_id: str = "radar",
+    user_prompt: str | None = None,
 ) -> AsyncIterator[ProgressEvent]:
     """读取 pending raw_items → LLM 评判 → 写入 items + 更新状态。"""
     t0 = time.monotonic()
@@ -111,7 +112,7 @@ async def run_evaluate_stream(
     t = time.monotonic()
     try:
         items: list[ItemInput] = await asyncio.to_thread(
-            generate_recommendations, stories
+            generate_recommendations, stories, user_prompt
         )
     except Exception as e:
         ms = int((time.monotonic() - t) * 1000)

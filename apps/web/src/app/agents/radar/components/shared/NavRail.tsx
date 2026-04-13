@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/hooks/use-theme';
 
-export type ViewType = 'inbox' | 'watching' | 'archive' | 'sources' | 'runs' | 'attention' | 'settings';
+export type ViewType = 'inbox' | 'watching' | 'archive' | 'sources' | 'runs' | 'agent' | 'attention' | 'settings';
 
 export interface NavRailProps {
   activeView?: ViewType;
@@ -41,6 +41,19 @@ export default function NavRail({
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      </NavButton>
+
+      {/* Agent (Intelligence) */}
+      <NavButton
+        active={activeView === 'agent'}
+        tip="Agent"
+        onClick={() => onViewChange?.('agent')}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+          <circle cx="12" cy="6" r="1" fill="currentColor" />
         </svg>
       </NavButton>
 

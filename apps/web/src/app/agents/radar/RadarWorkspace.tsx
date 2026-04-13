@@ -11,6 +11,7 @@ import CommandPalette, {
 } from './components/shared/CommandPalette';
 import PendingChangesBanner from './components/consumption/PendingChangesBanner';
 import RunsView from './components/production/RunsView';
+import AgentView from './components/production/AgentView';
 import AttentionView from './components/consumption/AttentionView';
 import SettingsView from './components/shared/SettingsView';
 import TabBar from './components/shared/TabBar';
@@ -365,6 +366,8 @@ export default function RadarWorkspace() {
             <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               {activeView === 'sources' || activeView === 'runs' ? (
                 <RunsView />
+              ) : activeView === 'agent' ? (
+                <AgentView />
               ) : activeView === 'attention' ? (
                 <AttentionView />
               ) : activeView === 'settings' ? (
@@ -447,6 +450,8 @@ export default function RadarWorkspace() {
         <NavRail activeView={activeView} onViewChange={handleViewChange} />
         {activeView === 'sources' || activeView === 'runs' ? (
           <RunsView />
+        ) : activeView === 'agent' ? (
+          <AgentView />
         ) : activeView === 'attention' ? (
           <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
             <AttentionView />

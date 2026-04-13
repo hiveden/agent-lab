@@ -119,8 +119,14 @@ def _mock_recommendations(stories: list[dict[str, Any]]) -> list[ItemInput]:
     return out
 
 
-def generate_recommendations(stories: list[dict[str, Any]]) -> list[ItemInput]:
-    """从 stories 生成 ItemInput 列表。mock 模式直接取前 3 条。"""
+def generate_recommendations(
+    stories: list[dict[str, Any]],
+    user_prompt: str | None = None,
+) -> list[ItemInput]:
+    """从 stories 生成 ItemInput 列表。mock 模式直接取前 3 条。
+
+    user_prompt: 用户自定义提示词，非空时覆盖默认 system prompt。
+    """
     if not stories:
         return []
 
@@ -129,12 +135,14 @@ def generate_recommendations(stories: list[dict[str, Any]]) -> list[ItemInput]:
 
     llm = get_llm("push")
 
+    system = user_prompt if user_prompt else _SYSTEM
+
     story_text = "\n".join(
         f"- id={s['id']} score={s.get('score', 0)} title={s['title']} url={s['url']}"
         for s in stories
     )
     messages = [
-        SystemMessage(content=_SYSTEM),
+        SystemMessage(content=system),
         HumanMessage(content=_USER_PROMPT.format(stories=story_text)),
     ]
     response = llm.invoke(messages)

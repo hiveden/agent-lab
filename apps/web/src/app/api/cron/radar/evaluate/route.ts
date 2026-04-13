@@ -6,7 +6,7 @@ export const runtime = 'edge';
  * 触发 Radar Evaluate（LLM 评判筛选）。
  * 转发到 Python /evaluate → 透传 SSE 进度流。
  */
-export async function POST() {
+export async function POST(request: Request) {
   const env = getEnv();
   const base = env.RADAR_AGENT_BASE?.replace(/\/+$/, '');
   if (!base) {
@@ -16,6 +16,14 @@ export async function POST() {
     );
   }
 
+  let prompt: string | undefined;
+  try {
+    const body = await request.json() as { prompt?: string };
+    prompt = body.prompt;
+  } catch {
+    // no body or invalid JSON — use default prompt
+  }
+
   try {
     const upstream = await fetch(`${base}/evaluate`, {
       method: 'POST',
@@ -23,7 +31,7 @@ export async function POST() {
         'content-type': 'application/json',
         authorization: `Bearer ${env.RADAR_WRITE_TOKEN}`,
       },
-      body: JSON.stringify({ agent_id: 'radar' }),
+      body: JSON.stringify({ agent_id: 'radar', prompt }),
       signal: AbortSignal.timeout(180_000),
     });
 
