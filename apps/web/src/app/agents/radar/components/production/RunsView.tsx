@@ -1,11 +1,19 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRuns, type Run } from '@/lib/hooks/use-runs';
 import { cn } from '@/lib/utils';
 
 export interface RunsViewProps {
   onSelectRun?: (run: Run) => void;
+}
+
+interface RawItem {
+  id: string;
+  source_id: string;
+  title: string;
+  url: string | null;
+  external_id: string;
 }
 
 function formatDuration(start: string, end: string | null): string {
@@ -35,7 +43,6 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [triggerBusy, setTriggerBusy] = useState(false);
 
-  // Only show ingest runs — evaluate is a separate module
   const ingestRuns = runs.filter((r) => r.phase === 'ingest');
   const selected = ingestRuns.find((r) => r.id === selectedId) ?? null;
 
@@ -135,6 +142,27 @@ function RunDetail({ run }: { run: Run }) {
     | Record<string, { fetched?: number; ms?: number }>
     | undefined;
 
+  const [rawItems, setRawItems] = useState<RawItem[]>([]);
+  const [expandedSource, setExpandedSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/raw-items?run_id=${run.id}&limit=200`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setRawItems((data as { raw_items?: RawItem[] }).raw_items ?? []);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [run.id]);
+
+  const itemsBySource = rawItems.reduce<Record<string, RawItem[]>>((acc, item) => {
+    const key = item.source_id;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+
   const statCards = [
     { label: '抓取', value: stats.fetched ?? 0 },
     { label: '新增', value: stats.inserted ?? 0 },
@@ -167,16 +195,50 @@ function RunDetail({ run }: { run: Run }) {
           <div className="run-sources-card">
             {run.source_ids.map((sid) => {
               const ps = perSource?.[sid];
+              const sourceItems = itemsBySource[sid] ?? [];
+              const isExpanded = expandedSource === sid;
               return (
-                <div key={sid} className="source-row">
-                  <div className="source-name">{sid}</div>
-                  {ps?.fetched != null && (
-                    <div className="source-count">{ps.fetched} 条</div>
+                <div key={sid}>
+                  <div
+                    className={cn('source-row', sourceItems.length > 0 && 'cursor-pointer')}
+                    onClick={() => {
+                      if (sourceItems.length > 0) {
+                        setExpandedSource(isExpanded ? null : sid);
+                      }
+                    }}
+                  >
+                    {sourceItems.length > 0 && (
+                      <span className="text-[10px] text-[var(--text-3)] mr-1">{isExpanded ? '▼' : '▶'}</span>
+                    )}
+                    <div className="source-name">{sid}</div>
+                    {ps?.fetched != null && (
+                      <div className="source-count">{ps.fetched} 条</div>
+                    )}
+                    {ps?.ms != null && (
+                      <div className="source-time">{(ps.ms / 1000).toFixed(1)}s</div>
+                    )}
+                    {!ps && <div className="source-time" style={{ color: 'var(--text-3)' }}>--</div>}
+                  </div>
+                  {isExpanded && sourceItems.length > 0 && (
+                    <div className="pl-5 pb-2 flex flex-col gap-1.5">
+                      {sourceItems.map((item) => (
+                        <div key={item.id} className="flex items-start gap-2 text-[12px] leading-[1.5] py-1 border-b border-[var(--border)] last:border-0">
+                          <span className="text-[var(--text)] flex-1 min-w-0">{item.title}</span>
+                          {item.url && (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--accent)] shrink-0 text-[11px] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              ↗
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  {ps?.ms != null && (
-                    <div className="source-time">{(ps.ms / 1000).toFixed(1)}s</div>
-                  )}
-                  {!ps && <div className="source-time" style={{ color: 'var(--text-3)' }}>--</div>}
                 </div>
               );
             })}
