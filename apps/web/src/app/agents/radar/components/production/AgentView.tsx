@@ -1,18 +1,44 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useRuns, type Run } from '@/lib/hooks/use-runs';
-import { toast } from 'sonner';
+import { useRuns } from '@/lib/hooks/use-runs';
 import { errorMessage } from '@/lib/fetch';
 import type { Message, ToolInvocation } from 'ai';
 import MessageList from '../shared/MessageList';
 
-const DEFAULT_PROMPT = `你是 Radar,一个科技资讯策展 Agent,目标用户是正在转型 AI Agent 工程师的全栈开发者。
-你的任务:从给定的内容中,挑选 3-5 条最值得推荐给用户的条目。
+// ── Default documents ──────────────────────────────────────
 
-输出必须是严格合法的 JSON 数组,数组每个元素符合:
+const DEFAULT_RULES = `你是 Radar，一个科技资讯策展 Agent。
+
+## 核心使命
+替代用户刷社交媒体的时间，推荐比短视频更吸引人的内容。
+创意 > 准确，意外发现 > 预期内容。
+
+## 筛选偏好
+值得推：
+- 独立开发者创意项目和变现故事
+- CLI 工具、编辑器插件、开发者工具
+- AI / Agent / LLM infra 新玩法和实践
+- "我用 XX 做了 YY" 实战分享
+- 技术社区热门争论和八卦
+
+不推：
+- AI 模型/论文/框架深度评测
+- 大公司产品更新
+- "AI 零代码做了 XX" 类内容
+- 没有实际内容的炫技
+- 用户已知工具（除非重大更新）
+
+## 质量门槛
+- 不确定质量时宁可不推，不凑数
+- 每轮 ≤5 条
+- 分级：🔥 必看（fire）· ⚡ 值得看（bolt）· 💡 备选（bulb）
+
+## 输出格式
+严格合法的 JSON 数组，不要 markdown 代码块，每个元素：
 {
   "external_id_suffix": "<原始 id>",
   "grade": "fire | bolt | bulb",
@@ -21,10 +47,47 @@ const DEFAULT_PROMPT = `你是 Radar,一个科技资讯策展 Agent,目标用户
   "why": "<为什么推给这位用户>",
   "tags": ["<2-4 个标签>"],
   "url": "<原 url>"
+}`;
+
+const DEFAULT_PROFILE = `## 基本信息
+- 7年全栈开发经验，正在转型 AI Agent 工程师
+- 技术栈：Python + React/TypeScript
+- 日常工具：Claude Code、MCP Server、LangGraph
+
+## 信息偏好
+会说"卧槽"的：
+- 独立开发者的创意项目和变现故事
+- CLI 工具、编辑器插件、终端工作流优化
+- MCP / Agent 架构的新玩法和实践
+- 本地优先、自部署、隐私友好的工具
+- 技术社区的热门争论和八卦
+
+会翻白眼的：
+- "AI 零代码做了 XX"（自己天天 AI coding）
+- 大而全的工具列表、泛泛的推荐
+- AI 模型发布/评测/论文
+- 没有实际内容的炫技项目
+- 已经在用的工具（除非重大更新）
+
+## 质量门槛
+- AI 重度用户，推荐门槛按高水平开发者来
+- 不确定质量时宁可不推`;
+
+// ── Document config ──────────────────────────────────────
+
+type DocTab = 'rules' | 'profile';
+
+const DOC_TABS: { key: DocTab; label: string; storageKey: string; default: string }[] = [
+  { key: 'rules', label: 'Agent 规则', storageKey: 'agent-lab.doc-rules', default: DEFAULT_RULES },
+  { key: 'profile', label: '用户画像', storageKey: 'agent-lab.doc-profile', default: DEFAULT_PROFILE },
+];
+
+function loadDoc(tab: typeof DOC_TABS[number]): string {
+  if (typeof window === 'undefined') return tab.default;
+  return localStorage.getItem(tab.storageKey) ?? tab.default;
 }
 
-挑选偏好:AI / agent / LLM infra / 开发者工具 / 独立开发者故事。
-不要返回任何 JSON 之外的内容。`;
+// ── Types ──────────────────────────────────────────────────
 
 interface SpanEvent {
   id: string;
@@ -55,22 +118,49 @@ function relTime(iso: string): string {
   return `${d}天前`;
 }
 
+// ── Layout persistence ─────────────────────────────────────
+
+function saveLayout(key: string) {
+  return (layout: Layout) => {
+    try { localStorage.setItem(key, JSON.stringify(layout)); } catch { /* ignore */ }
+  };
+}
+function loadLayout(key: string): Layout | undefined {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : undefined;
+  } catch { return undefined; }
+}
+
+// ── Chat presets ───────────────────────────────────────────
+
+const PRESETS = [
+  { label: '执行评判', msg: '帮我执行一次内容评判' },
+  { label: '最近推荐质量', msg: '最近几次推荐质量怎么样？' },
+  { label: '调整偏好', msg: '我最近更关注 AI Agent 架构方面的内容' },
+];
+
+// ── Component ──────────────────────────────────────────────
+
 export default function AgentView() {
   // ── Run list ──
   const { runs: allRuns, mutate } = useRuns({ phase: 'evaluate', limit: 30 });
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  // ── Prompt ──
-  const [prompt, setPrompt] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('agent-lab.agent-prompt') ?? DEFAULT_PROMPT;
-    }
-    return DEFAULT_PROMPT;
-  });
-  const [editing, setEditing] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // ── Documents ──
+  const [activeDoc, setActiveDoc] = useState<DocTab>('rules');
+  const [docs, setDocs] = useState<Record<DocTab, string>>(() => ({
+    rules: loadDoc(DOC_TABS[0]),
+    profile: loadDoc(DOC_TABS[1]),
+  }));
+  const [editingDoc, setEditingDoc] = useState<DocTab | null>(null);
+  const docTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Execution state (current run) ──
+  // ── Chat state ──
+  const [chatInput, setChatInput] = useState('');
+  const chatRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Execution state ──
   const [running, setRunning] = useState(false);
   const [liveSpans, setLiveSpans] = useState<SpanEvent[]>([]);
   const [liveResult, setLiveResult] = useState<ResultEvent | null>(null);
@@ -79,31 +169,37 @@ export default function AgentView() {
   const [summarizing, setSummarizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ── Derived: selected run data ──
+  // ── Derived ──
   const selectedRun = allRuns.find((r) => r.id === selectedRunId) ?? null;
   const isLive = running && (!selectedRunId || selectedRunId === 'live');
 
-  // Auto-select first run on load
   useEffect(() => {
     if (!selectedRunId && allRuns.length > 0) {
       setSelectedRunId(allRuns[0].id);
     }
   }, [allRuns, selectedRunId]);
 
-  // ── Prompt helpers ──
-  const savePrompt = useCallback((value: string) => {
-    setPrompt(value);
-    localStorage.setItem('agent-lab.agent-prompt', value);
+  // ── Doc helpers ──
+  const updateDoc = useCallback((key: DocTab, value: string) => {
+    setDocs((prev) => ({ ...prev, [key]: value }));
+    const tab = DOC_TABS.find((t) => t.key === key)!;
+    localStorage.setItem(tab.storageKey, value);
   }, []);
 
-  const startEditing = useCallback(() => {
-    setEditing(true);
-    setTimeout(() => textareaRef.current?.focus(), 0);
+  const resetDoc = useCallback((key: DocTab) => {
+    const tab = DOC_TABS.find((t) => t.key === key)!;
+    updateDoc(key, tab.default);
+  }, [updateDoc]);
+
+  const startEditingDoc = useCallback((key: DocTab) => {
+    setActiveDoc(key);
+    setEditingDoc(key);
+    setTimeout(() => docTextareaRef.current?.focus(), 0);
   }, []);
 
-  const stopEditing = useCallback(() => {
-    setEditing(false);
-  }, []);
+  const buildPrompt = useCallback(() => {
+    return `${docs.rules}\n\n---\n\n## 用户画像\n\n${docs.profile}`;
+  }, [docs]);
 
   // ── Execute ──
   const handleExecute = useCallback(async () => {
@@ -114,6 +210,7 @@ export default function AgentView() {
     setLiveError(null);
     setSelectedRunId('live');
 
+    const prompt = buildPrompt();
     let runId: string | null = null;
     const collectedSpans: SpanEvent[] = [];
     let collectedResult: ResultEvent | null = null;
@@ -211,7 +308,6 @@ export default function AgentView() {
       }
       mutate();
 
-      // AI summary of results
       if (collectedResult && !collectedError) {
         setSummarizing(true);
         setSummary('');
@@ -234,7 +330,6 @@ export default function AgentView() {
               const { done, value } = await reader.read();
               if (done) break;
               const chunk = decoder.decode(value, { stream: true });
-              // Parse AI SDK data stream: lines starting with 0:" are text chunks
               for (const line of chunk.split('\n')) {
                 if (line.startsWith('0:')) {
                   try { text += JSON.parse(line.slice(2)); } catch { /* skip */ }
@@ -248,9 +343,20 @@ export default function AgentView() {
         }
       }
     }
-  }, [running, prompt, mutate]);
+  }, [running, buildPrompt, mutate]);
 
-  // ── Resolve display data: live or selected run ──
+  // ── Chat submit ──
+  const handleChatSubmit = useCallback(() => {
+    const msg = chatInput.trim();
+    if (!msg || running) return;
+    setChatInput('');
+    // For now, trigger evaluate when chat mentions it
+    if (msg.includes('评判') || msg.includes('执行')) {
+      handleExecute();
+    }
+  }, [chatInput, running, handleExecute]);
+
+  // ── Display data ──
   const displaySpans: SpanEvent[] = isLive
     ? liveSpans
     : selectedRun
@@ -278,16 +384,13 @@ export default function AgentView() {
 
   const displayError = isLive ? liveError : selectedRun?.error ?? null;
 
-  // ── Convert spans/result/summary into Message[] for MessageList ──
   const displayMessages: Message[] = useMemo(() => {
     const msgs: Message[] = [];
     const hasContent = displaySpans.length > 0 || displayResult || displayError;
     if (!hasContent && !summary && !summarizing) return msgs;
 
-    // User message
     msgs.push({ id: 'exec-user', role: 'user', content: '执行评判' });
 
-    // Assistant message with tool invocations + summary
     const toolInvocations: ToolInvocation[] = displaySpans.map((s) => {
       const isDone = s.status === 'done' || s.status === 'failed';
       const resultContent: Record<string, unknown> = {};
@@ -304,7 +407,6 @@ export default function AgentView() {
       } as ToolInvocation;
     });
 
-    // Build assistant content
     let content = '';
     if (displayError) {
       content += `**错误：** ${displayError}\n\n`;
@@ -403,55 +505,151 @@ export default function AgentView() {
         </div>
       </aside>
 
-      {/* Right: Prompt + Trace + Result */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Prompt section */}
-        <div className="p-4 border-b border-[var(--border)] shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-[13px]">提示词</span>
-            <div className="flex gap-2">
-              {editing && (
-                <button
-                  className="text-[11px] text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
-                  onClick={() => savePrompt(DEFAULT_PROMPT)}
-                >
-                  重置默认
-                </button>
-              )}
-              {editing ? (
-                <Button variant="outline" size="sm" onClick={stopEditing}>完成</Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={startEditing}>编辑</Button>
-              )}
-            </div>
-          </div>
-          {editing ? (
-            <textarea
-              ref={textareaRef}
-              value={prompt}
-              onChange={(e) => savePrompt(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Escape') stopEditing(); }}
-              className="w-full h-[200px] bg-[var(--bg-sunk)] border border-[var(--border)] rounded-[6px] p-3 text-[12.5px] leading-[1.6] text-[var(--text)] resize-none font-mono outline-none focus:border-[var(--accent-line)]"
-            />
-          ) : (
-            <div
-              className="text-[12.5px] leading-[1.6] text-[var(--text-2)] font-mono whitespace-pre-wrap max-h-[120px] overflow-y-auto cursor-pointer hover:bg-[var(--bg-sunk)] rounded-[6px] p-3 transition-colors"
-              onClick={startEditing}
-              title="点击编辑"
-            >
-              {prompt.length > 200 ? prompt.slice(0, 200) + '…' : prompt}
-            </div>
-          )}
-        </div>
+      {/* Right: Documents (top) ↔ Chat (bottom) — resizable */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <Group
+          orientation="vertical"
+          className="flex-1 min-h-0"
+          defaultLayout={loadLayout('agent.layout.vertical')}
+          onLayoutChanged={saveLayout('agent.layout.vertical')}
+        >
+          {/* Top panel: Document tabs */}
+          <Panel defaultSize={40} minSize={15}>
+            <div className="h-full flex flex-col overflow-hidden">
+              {/* Tab bar + actions */}
+              <div className="flex items-center justify-between px-4 pt-2.5 pb-0 shrink-0">
+                <div className="flex items-center gap-0.5">
+                  {DOC_TABS.map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={cn(
+                        'px-3 py-1.5 text-[12px] font-medium rounded-t-[6px] cursor-pointer transition-colors',
+                        activeDoc === tab.key
+                          ? 'text-[var(--text)] bg-[var(--bg-sunk)]'
+                          : 'text-[var(--text-3)] hover:text-[var(--text-2)]',
+                      )}
+                      onClick={() => {
+                        setActiveDoc(tab.key);
+                        if (editingDoc && editingDoc !== tab.key) setEditingDoc(null);
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  {editingDoc === activeDoc && (
+                    <button
+                      className="text-[11px] text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
+                      onClick={() => resetDoc(activeDoc)}
+                    >
+                      重置默认
+                    </button>
+                  )}
+                  {editingDoc === activeDoc ? (
+                    <Button variant="outline" size="sm" onClick={() => setEditingDoc(null)}>
+                      完成
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => startEditingDoc(activeDoc)}>
+                      编辑
+                    </Button>
+                  )}
+                </div>
+              </div>
 
-        {/* Chat-style message flow — reuses MessageList from inbox */}
-        <div className="chat-scroll flex-1" ref={scrollRef}>
-          <MessageList
-            messages={displayMessages}
-            isLoading={isMessageLoading}
-            emptyText={selectedRun ? '此次执行无详细记录' : '选择一条历史记录，或点击「执行」开始'}
-          />
-        </div>
+              {/* Document content */}
+              <div className="flex-1 overflow-y-auto px-4 pt-1 pb-3">
+                {editingDoc === activeDoc ? (
+                  <textarea
+                    ref={docTextareaRef}
+                    value={docs[activeDoc]}
+                    onChange={(e) => updateDoc(activeDoc, e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingDoc(null); }}
+                    className="w-full h-full min-h-[120px] bg-[var(--bg-sunk)] border border-[var(--border)] rounded-[6px] p-3 text-[12.5px] leading-[1.6] text-[var(--text)] resize-none font-mono outline-none focus:border-[var(--accent-line)]"
+                  />
+                ) : (
+                  <div
+                    className="text-[12.5px] leading-[1.6] text-[var(--text-2)] font-mono whitespace-pre-wrap cursor-pointer hover:bg-[var(--bg-sunk)] rounded-[6px] p-3 transition-colors"
+                    onClick={() => startEditingDoc(activeDoc)}
+                    title="点击编辑"
+                  >
+                    {docs[activeDoc]}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Panel>
+
+          <Separator className="drag-handle">
+            <div className="drag-bar" />
+          </Separator>
+
+          {/* Bottom panel: Chat messages + input */}
+          <Panel defaultSize={60} minSize={25}>
+            <div className="flex flex-col h-full overflow-hidden border-t border-[var(--border)]">
+              {/* Messages */}
+              <div className="chat-scroll flex-1" ref={scrollRef}>
+                <MessageList
+                  messages={displayMessages}
+                  isLoading={isMessageLoading}
+                  emptyText="与 Radar Agent 对话，或点击「执行」开始评判"
+                />
+              </div>
+
+              {/* Chat input */}
+              <div className="border-t border-[var(--border)] bg-[var(--surface-hi)] px-4 pt-2.5 pb-3 shrink-0">
+                <div className="flex gap-1.5 mb-2 flex-wrap">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      className="text-[11.5px] py-[3px] px-2.5 bg-[var(--surface)] border border-[var(--border-hi)] rounded-full text-[var(--text-2)] cursor-pointer transition-all duration-[.12s] hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+                      disabled={running}
+                      onClick={() => {
+                        if (running) return;
+                        setChatInput(p.msg);
+                        if (p.msg.includes('评判') || p.msg.includes('执行')) {
+                          handleExecute();
+                        }
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="input-row">
+                  <textarea
+                    ref={chatRef}
+                    rows={1}
+                    value={chatInput}
+                    placeholder="和 Radar 对话…"
+                    onChange={(e) => {
+                      setChatInput(e.target.value);
+                      const el = e.currentTarget;
+                      el.style.height = 'auto';
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        handleChatSubmit();
+                      }
+                    }}
+                    disabled={running}
+                  />
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={running || !chatInput.trim()}
+                    onClick={handleChatSubmit}
+                  >
+                    {running ? '执行中' : '发送'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </Group>
       </div>
     </div>
   );
