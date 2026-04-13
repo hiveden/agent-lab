@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import { useItems } from '@/lib/hooks/use-items';
@@ -18,10 +18,8 @@ import TabBar from './components/shared/TabBar';
 import MobileItemsList from './components/consumption/MobileItemsList';
 import MobileChatView from './components/consumption/MobileChatView';
 import { useIsMobile } from '@/lib/hooks/useMediaQuery';
-import type { MockTrace } from './traceMock';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 
 export default function RadarWorkspace() {
   const isMobile = useIsMobile();
@@ -142,142 +140,6 @@ export default function RadarWorkspace() {
     [filteredItems, effectiveStatus],
   );
 
-  // ─── Trigger Radar pipeline (ingest → evaluate) ──────────────────
-  const [pushBusy, setPushBusy] = useState(false);
-
-  const triggerRadarPush = useCallback(
-    async (limit = 30) => {
-      if (pushBusy) return;
-      setPushBusy(true);
-      toast('Triggering Radar collection…');
-
-      const trace: MockTrace = {
-        spans: [],
-        totalTokens: 0,
-        totalMs: 0,
-        mock: false,
-        source: 'push',
-      };
-      setActiveTrace({ ...trace });
-      setTraceOpen(true);
-      setHighlightSpanId(null);
-
-      const mapKind = (
-        k: string,
-      ): 'tool' | 'llm' | 'system' | 'ctx' | 'stream' => {
-        if (k === 'tool') return 'tool';
-        if (k === 'llm') return 'llm';
-        if (k === 'system') return 'system';
-        return 'ctx';
-      };
-
-      const t0 = Date.now();
-      let receivedResult: {
-        inserted: number;
-        skipped: number;
-        total: number;
-      } | null = null;
-
-      const consumeSSE = async (url: string, phasePrefix: string) => {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-        });
-        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const data = line.slice(5).trim();
-            if (!data || data === '[DONE]') continue;
-            let ev: Record<string, unknown>;
-            try {
-              ev = JSON.parse(data) as Record<string, unknown>;
-            } catch {
-              continue;
-            }
-            const type = ev.type as string | undefined;
-
-            if (type === 'span') {
-              const id = `${phasePrefix}-${String(ev.id ?? '')}`;
-              const kind = mapKind(String(ev.kind ?? 'system'));
-              const title = String(ev.title ?? '');
-              const status =
-                (ev.status as 'running' | 'done' | 'failed' | undefined) ??
-                'running';
-              const ms = typeof ev.ms === 'number' ? (ev.ms as number) : 0;
-              const detail = ev.detail as Record<string, unknown> | undefined;
-
-              const sections = detail
-                ? [{ label: 'detail', body: JSON.stringify(detail, null, 2) }]
-                : [];
-
-              trace.spans = (() => {
-                const existing = trace.spans.find((s) => s.id === id);
-                if (existing) {
-                  return trace.spans.map((s) =>
-                    s.id === id
-                      ? {
-                          ...s,
-                          title,
-                          status,
-                          ms: ms || s.ms,
-                          sections: sections.length ? sections : s.sections,
-                        }
-                      : s,
-                  );
-                }
-                return [
-                  ...trace.spans,
-                  { id, kind, title, status, ms, sections },
-                ];
-              })();
-              trace.totalMs = trace.spans.reduce((a, s) => a + s.ms, 0);
-              setActiveTrace({ ...trace, spans: [...trace.spans] });
-            } else if (type === 'result') {
-              receivedResult = {
-                inserted: Number(ev.inserted ?? ev.promoted ?? 0),
-                skipped: Number(ev.skipped ?? ev.rejected ?? 0),
-                total: Number(ev.total ?? ev.evaluated ?? 0),
-              };
-              trace.totalMs = Number(ev.total_ms ?? Date.now() - t0);
-              setActiveTrace({ ...trace, spans: [...trace.spans] });
-            } else if (type === 'error') {
-              toast.error(
-                `Pipeline failed: ${String(ev.message ?? 'unknown')}`,
-              );
-            }
-          }
-        }
-      };
-
-      try {
-        await consumeSSE('/api/cron/radar/ingest', 'ingest');
-        await consumeSSE('/api/cron/radar/evaluate', 'evaluate');
-      } catch (e) {
-        toast.error(`Pipeline failed: ${String(e)}`);
-      } finally {
-        setPushBusy(false);
-      }
-
-      if (receivedResult !== null) {
-        const r = receivedResult as { inserted: number; skipped: number };
-        toast.success(
-          `Collected: ${r.inserted} new · ${r.skipped} duplicate. Switch to Inbox to view.`,
-        );
-      }
-    },
-    [pushBusy, setActiveTrace, setTraceOpen, setHighlightSpanId],
-  );
-
   // ── Keyboard layer ────────────────────────────────────────────────
   useEffect(() => {
     function isTyping(e: KeyboardEvent) {
@@ -371,15 +233,6 @@ export default function RadarWorkspace() {
   const actions: PaletteAction[] = useMemo(() => {
     const list: PaletteAction[] = [
       {
-        id: 'trigger-radar',
-        label: pushBusy
-          ? 'Radar collection running…'
-          : 'Trigger Radar collection',
-        hint: 'Agent',
-        run: () => void triggerRadarPush(30),
-        enabled: !pushBusy,
-      },
-      {
         id: 'filter-all',
         label: 'Filter: all',
         hint: 'Filter',
@@ -458,8 +311,6 @@ export default function RadarWorkspace() {
     traceOpen,
     selectedId,
     markPending,
-    pushBusy,
-    triggerRadarPush,
     setFilter,
     setTraceOpen,
     triggerExpandAll,
@@ -574,9 +425,6 @@ export default function RadarWorkspace() {
             <kbd className="k">K</kbd>
           </span>
         </button>
-        <Button size="sm" disabled={pushBusy} onClick={() => triggerRadarPush(30)}>
-          {pushBusy ? 'Running…' : 'Trigger'}
-        </Button>
         <span className="py-0.5 px-2 border border-[var(--border-hi)] rounded-full font-[var(--mono)] text-[10.5px] text-[var(--text-2)] bg-[var(--bg)]">
           {loading
             ? 'loading…'

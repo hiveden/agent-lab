@@ -25,23 +25,20 @@ test('Full walkthrough: trigger → runs → inbox → chat', async ({ page, req
   await page.click('button[aria-label="Sources"]');
   await PAUSE(1500);
 
-  // ── 3. Trigger collection via UI ──
-  await page.click('button[aria-label="Radar"]');
-  await PAUSE(500);
+  // ── 3. Go to Runs and trigger collection ──
+  await page.click('button[aria-label="Runs"]');
+  await PAUSE(1000);
 
-  const triggerBtn = page.locator('button:has-text("Trigger")').first();
+  const triggerBtn = page.locator('button.trigger-btn:has-text("Trigger")').first();
   await expect(triggerBtn).toBeVisible({ timeout: 5000 });
   await triggerBtn.click();
-
-  // Wait for "Running..." state
-  await PAUSE(1000);
 
   // Wait for collection to finish (up to 90s)
   await expect(triggerBtn).not.toHaveText('Running', { timeout: 90_000 });
   await PAUSE(2000);
 
-  // ── 4. Check Runs — see execution results ──
-  await page.click('button[aria-label="Runs"]');
+  // ── 4. Refresh Runs — see execution results ──
+  await page.click('button:has-text("Refresh")');
   await PAUSE(2000);
 
   // Click the first run to see details
