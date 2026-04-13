@@ -36,7 +36,7 @@ export default function NavRail({
       {/* Sync (Sources + Runs merged) */}
       <NavButton
         active={activeView === 'sources' || activeView === 'runs'}
-        tip="同步"
+        tip="Sync"
         onClick={() => onViewChange?.('runs')}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
