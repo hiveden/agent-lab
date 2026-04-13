@@ -33,23 +33,10 @@ export default function NavRail({
       </NavButton>
       <div className="w-5 h-px bg-[var(--border)] my-1.5" />
 
-      {/* Sources */}
+      {/* Sync (Sources + Runs merged) */}
       <NavButton
-        active={activeView === 'sources'}
-        tip="Sources"
-        onClick={() => onViewChange?.('sources')}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <ellipse cx="12" cy="5" rx="9" ry="3" />
-          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-        </svg>
-      </NavButton>
-
-      {/* Runs */}
-      <NavButton
-        active={activeView === 'runs'}
-        tip="Runs"
+        active={activeView === 'sources' || activeView === 'runs'}
+        tip="同步"
         onClick={() => onViewChange?.('runs')}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

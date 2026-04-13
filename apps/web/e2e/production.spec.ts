@@ -127,23 +127,22 @@ test('Step 3: ingest creates raw_items', async ({ request }) => {
 
 // ─── Step 4: Management views ────────────────────────────────
 
-test('Step 4: management views render clean', async ({ page }) => {
+test('Step 4: sync view renders clean', async ({ page }) => {
   await page.goto('/agents/radar');
   await page.waitForLoadState('networkidle');
 
-  // Sources
-  await page.click('button[aria-label="Sources"]');
+  // Open sync view (merged Sources + Runs)
+  await page.click('button[aria-label="同步"]');
   await page.waitForTimeout(500);
-  await expect(page.locator('.source-card').first()).toBeVisible();
-  await page.screenshot({ path: 'e2e/test-results/p-02-sources.png' });
-  await runVisualAudit(page, 'production-sources');
 
-  // Runs
-  await page.click('button[aria-label="Runs"]');
-  await page.waitForTimeout(500);
+  // Sources checkboxes visible
+  await expect(page.locator('input[type="checkbox"]').first()).toBeVisible();
+
+  // Runs list visible
   await expect(page.locator('.run-entry').first()).toBeVisible();
-  await page.screenshot({ path: 'e2e/test-results/p-03-runs.png' });
-  await runVisualAudit(page, 'production-runs');
+
+  await page.screenshot({ path: 'e2e/test-results/p-02-sync.png' });
+  await runVisualAudit(page, 'production-sync');
 });
 
 // ─── Step 5: Data lineage ────────────────────────────────────

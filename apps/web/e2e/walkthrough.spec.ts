@@ -18,17 +18,13 @@ test.use({
 const PAUSE = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test('Full walkthrough: sources → trigger → runs result', async ({ page }) => {
-  // ── 1. Open radar, check Sources ──
+  // ── 1. Open sync view (sources + runs) ──
   await page.goto('/agents/radar');
   await page.waitForLoadState('networkidle');
   await PAUSE(1000);
 
-  await page.click('button[aria-label="Sources"]');
+  await page.click('button[aria-label="同步"]');
   await PAUSE(1500);
-
-  // ── 2. Go to Runs, trigger collection ──
-  await page.click('button[aria-label="Runs"]');
-  await PAUSE(1000);
 
   const triggerBtn = page.locator('button.trigger-btn').first();
   await expect(triggerBtn).toBeVisible({ timeout: 5000 });

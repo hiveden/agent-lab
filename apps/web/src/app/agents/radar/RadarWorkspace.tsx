@@ -10,7 +10,6 @@ import CommandPalette, {
   type PaletteAction,
 } from './components/shared/CommandPalette';
 import PendingChangesBanner from './components/consumption/PendingChangesBanner';
-import SourcesView from './components/production/SourcesView';
 import RunsView from './components/production/RunsView';
 import AttentionView from './components/consumption/AttentionView';
 import SettingsView from './components/shared/SettingsView';
@@ -364,9 +363,7 @@ export default function RadarWorkspace() {
         ) : (
           <>
             <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
-              {activeView === 'sources' ? (
-                <SourcesView />
-              ) : activeView === 'runs' ? (
+              {activeView === 'sources' || activeView === 'runs' ? (
                 <RunsView />
               ) : activeView === 'attention' ? (
                 <AttentionView />
@@ -448,11 +445,7 @@ export default function RadarWorkspace() {
 
       <div className="grid grid-cols-[52px_1fr] overflow-hidden min-h-0 relative">
         <NavRail activeView={activeView} onViewChange={handleViewChange} />
-        {activeView === 'sources' ? (
-          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
-            <SourcesView />
-          </div>
-        ) : activeView === 'runs' ? (
+        {activeView === 'sources' || activeView === 'runs' ? (
           <RunsView />
         ) : activeView === 'attention' ? (
           <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
