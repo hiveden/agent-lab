@@ -1,6 +1,6 @@
 'use client';
 
-import type { MockTrace, SpanKind } from '../traceMock';
+import type { MockTrace, SpanKind } from '../../traceMock';
 
 interface Props {
   trace: MockTrace;

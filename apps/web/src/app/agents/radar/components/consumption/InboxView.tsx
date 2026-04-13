@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { useRadarStore } from '@/lib/stores/radar-store';
-import type { ViewType } from './NavRail';
+import type { ViewType } from '../shared/NavRail';
 import ChatView from './ChatView';
 import TraceDrawer from './TraceDrawer';
 import { cn } from '@/lib/utils';
@@ -122,7 +122,7 @@ export default function InboxView() {
   );
 
   const handleOpenFromSpan = useCallback(
-    (trace: import('../traceMock').MockTrace, spanId: string | null) => {
+    (trace: import('../../traceMock').MockTrace, spanId: string | null) => {
       setActiveTrace(trace);
       setHighlightSpanId(spanId);
       setTraceOpen(true);

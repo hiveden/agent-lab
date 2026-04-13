@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { ItemWithState } from '@/lib/types';
-import type { MockTrace } from '../traceMock';
+import type { MockTrace } from '../../traceMock';
 import InlineTraceRail from './InlineTraceRail';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';

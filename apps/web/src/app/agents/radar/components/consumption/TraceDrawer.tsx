@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { MockTrace, MockSpan } from '../traceMock';
+import type { MockTrace, MockSpan } from '../../traceMock';
 
 interface Props {
   open: boolean;

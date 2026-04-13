@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import type { ViewType } from '@/app/agents/radar/components/NavRail';
+import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { ItemWithState } from '@/lib/types';
 
 const fetcher = (url: string) => fetch(url).then((r) => {

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
-import type { GradeFilter } from '@/app/agents/radar/components/ItemsList';
-import type { ViewType } from '@/app/agents/radar/components/NavRail';
+import type { GradeFilter } from '@/app/agents/radar/components/consumption/ItemsList';
+import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { MockTrace } from '@/app/agents/radar/traceMock';
 import type { Message } from 'ai';
 
