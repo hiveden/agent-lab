@@ -85,3 +85,13 @@ SOURCE_TYPE_META: dict[str, dict[str, Any]] = {
 def get_source_types() -> dict[str, dict[str, Any]]:
     """返回所有已注册的 source type 元数据。"""
     return SOURCE_TYPE_META
+
+
+def proxy_kwargs() -> dict[str, Any]:
+    """返回 httpx.AsyncClient 可直接解包的代理参数。从 Settings 读取，本地走代理，生产为空。"""
+    from agent_lab_shared.config import settings
+
+    proxy = settings.https_proxy or settings.http_proxy
+    if proxy and proxy.startswith("http"):
+        return {"proxy": proxy}
+    return {}

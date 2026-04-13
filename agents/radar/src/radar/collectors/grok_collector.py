@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from .base import RawCollectorItem
+from .base import RawCollectorItem, proxy_kwargs
 
 DEFAULT_API_URL = "https://api.apiyi.com/v1/responses"
 DEFAULT_MODEL = "grok-4-fast-non-reasoning"
@@ -166,7 +166,7 @@ class GrokCollector:
         batches = [accounts[i:i + batch_size] for i in range(0, len(accounts), batch_size)]
 
         all_items: list[RawCollectorItem] = []
-        async with httpx.AsyncClient(trust_env=False) as client:
+        async with httpx.AsyncClient(trust_env=False, **proxy_kwargs()) as client:
             for batch in batches:
                 items = await _fetch_batch(client, batch, date, api_url, model, api_key)
                 all_items.extend(items)

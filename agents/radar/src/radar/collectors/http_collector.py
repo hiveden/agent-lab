@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 
 import httpx
 
-from .base import RawCollectorItem
+from .base import RawCollectorItem, proxy_kwargs
 
 
 def _resolve_path(obj: Any, dotpath: str) -> Any:
@@ -53,10 +52,7 @@ class HttpCollector:
         timeout = config.get("timeout", 20)
         limit = config.get("limit", 50)
 
-        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-        client_kwargs: dict[str, Any] = {"timeout": float(timeout), "trust_env": False}
-        if proxy and proxy.startswith("http"):
-            client_kwargs["proxy"] = proxy
+        client_kwargs: dict[str, Any] = {"timeout": float(timeout), "trust_env": False, **proxy_kwargs()}
 
         async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.request(method, url, headers=headers, json=body if method == "POST" else None)

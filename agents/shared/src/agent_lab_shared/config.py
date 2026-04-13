@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # Agent service
     radar_agent_port: int = Field(default=8001, alias="RADAR_AGENT_PORT")
 
+    # Proxy (local dev needs proxy, production does not)
+    https_proxy: str = Field(default="", alias="HTTPS_PROXY")
+    http_proxy: str = Field(default="", alias="HTTP_PROXY")
+
     @model_validator(mode="after")
     def validate_production(self) -> "Settings":
         """DEPLOY_ENV=production 时强制校验关键配置。"""

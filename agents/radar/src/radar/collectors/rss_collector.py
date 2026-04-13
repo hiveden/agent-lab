@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import feedparser
 import httpx
 
-from .base import RawCollectorItem
+from .base import RawCollectorItem, proxy_kwargs
 
 
 class RssCollector:
@@ -21,10 +20,7 @@ class RssCollector:
 
         limit = config.get("limit", 20)
 
-        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-        client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False}
-        if proxy and proxy.startswith("http"):
-            client_kwargs["proxy"] = proxy
+        client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False, **proxy_kwargs()}
 
         async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.get(feed_url)

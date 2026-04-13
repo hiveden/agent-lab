@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 import httpx
 
-from .base import RawCollectorItem
+from .base import RawCollectorItem, proxy_kwargs
 
 HN_BASE = "https://hacker-news.firebaseio.com/v0"
 DEFAULT_LIMIT = 30
@@ -27,10 +26,7 @@ async def _fetch_item(client: httpx.AsyncClient, item_id: int) -> dict[str, Any]
 
 
 async def _collect_async(limit: int = DEFAULT_LIMIT) -> list[RawCollectorItem]:
-    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-    client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False}
-    if proxy and proxy.startswith("http"):
-        client_kwargs["proxy"] = proxy
+    client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False, **proxy_kwargs()}
     async with httpx.AsyncClient(**client_kwargs) as client:
         top_resp = await client.get(f"{HN_BASE}/topstories.json")
         top_resp.raise_for_status()

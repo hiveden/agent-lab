@@ -91,3 +91,54 @@ def test_production_valid_config():
     assert s.deploy_env == "production"
     assert s.llm_mock is False
     assert s.glm_api_key == "real-key"
+
+
+def test_settings_reads_proxy():
+    """Settings should load HTTPS_PROXY / HTTP_PROXY from env."""
+    from agent_lab_shared.config import Settings
+
+    s = Settings(
+        _env_file=None,
+        HTTPS_PROXY="http://127.0.0.1:7890",
+        HTTP_PROXY="http://127.0.0.1:7890",
+    )
+    assert s.https_proxy == "http://127.0.0.1:7890"
+    assert s.http_proxy == "http://127.0.0.1:7890"
+
+
+def test_settings_proxy_defaults_empty():
+    """Production without proxy should default to empty (no proxy needed)."""
+    from agent_lab_shared.config import Settings
+
+    s = Settings(_env_file=None, HTTPS_PROXY="", HTTP_PROXY="")
+    assert s.https_proxy == ""
+    assert s.http_proxy == ""
+
+
+def test_proxy_kwargs_with_proxy(monkeypatch):
+    """proxy_kwargs() should return {proxy: ...} when Settings has proxy."""
+    from agent_lab_shared import config
+    from agent_lab_shared.config import Settings
+
+    mock_settings = Settings(
+        _env_file=None,
+        HTTPS_PROXY="http://127.0.0.1:7890",
+    )
+    monkeypatch.setattr(config, "settings", mock_settings)
+
+    from radar.collectors.base import proxy_kwargs
+    result = proxy_kwargs()
+    assert result == {"proxy": "http://127.0.0.1:7890"}
+
+
+def test_proxy_kwargs_without_proxy(monkeypatch):
+    """proxy_kwargs() should return {} when no proxy configured."""
+    from agent_lab_shared import config
+    from agent_lab_shared.config import Settings
+
+    mock_settings = Settings(_env_file=None, HTTPS_PROXY="", HTTP_PROXY="")
+    monkeypatch.setattr(config, "settings", mock_settings)
+
+    from radar.collectors.base import proxy_kwargs
+    result = proxy_kwargs()
+    assert result == {}
