@@ -142,7 +142,7 @@ uv tool run ruff format agents/
 ```bash
 pnpm test                                              # Vitest (16 tests)
 uv run --package agent-lab-radar pytest agents/radar/tests/ -v  # pytest (22 tests)
-bash scripts/run-e2e.sh                                # Playwright E2E (17 tests, desktop + mobile)
+bash scripts/run-e2e.sh                                # Playwright E2E (production + consumption + mobile)
 E2E_FILTER="Step 2b" bash scripts/run-e2e.sh           # 单个测试过滤
 ```
 

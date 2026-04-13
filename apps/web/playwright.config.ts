@@ -20,8 +20,16 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'desktop',
-      testMatch: 'desktop.spec.ts',
+      name: 'production',
+      testMatch: 'production.spec.ts',
+      use: {
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 2,
+      },
+    },
+    {
+      name: 'consumption',
+      testMatch: 'consumption.spec.ts',
       use: {
         viewport: { width: 1440, height: 900 },
         deviceScaleFactor: 2,
@@ -30,7 +38,7 @@ export default defineConfig({
     {
       name: 'mobile',
       testMatch: 'mobile.spec.ts',
-      dependencies: ['desktop'], // mobile 在 desktop 之后跑（复用数据）
+      dependencies: ['consumption'], // mobile needs seeded data from consumption
       use: {
         viewport: { width: 375, height: 812 },
         deviceScaleFactor: 2,
