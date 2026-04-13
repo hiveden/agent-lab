@@ -32,15 +32,15 @@ test('Full walkthrough: sources → trigger → runs result', async ({ page }) =
 
   const triggerBtn = page.locator('button.trigger-btn').first();
   await expect(triggerBtn).toBeVisible({ timeout: 5000 });
-  await expect(triggerBtn).toHaveText('Trigger');
+  await expect(triggerBtn).toHaveText('触发采集');
   await triggerBtn.click();
 
-  // Wait for SSE to finish — button goes "Running…" → "Trigger"
-  await expect(triggerBtn).toHaveText('Trigger', { timeout: 90_000 });
+  // Wait for SSE to finish — button goes "运行中…" → "触发采集"
+  await expect(triggerBtn).toHaveText('触发采集', { timeout: 90_000 });
   await PAUSE(1000);
 
   // ── 3. Refresh Runs, verify execution results ──
-  await page.click('button:has-text("Refresh")');
+  await page.click('button:has-text("刷新")');
   await PAUSE(1500);
 
   // Click the first run to see details

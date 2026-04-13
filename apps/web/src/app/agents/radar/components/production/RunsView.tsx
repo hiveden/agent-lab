@@ -10,7 +10,7 @@ export interface RunsViewProps {
 }
 
 function formatDuration(start: string, end: string | null): string {
-  if (!end) return 'running…';
+  if (!end) return '运行中…';
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -19,11 +19,11 @@ function formatDuration(start: string, end: string | null): string {
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return '刚刚';
+  if (mins < 60) return `${mins}分钟前`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours}小时前`;
+  return `${Math.floor(hours / 24)}天前`;
 }
 
 function formatTime(iso: string): string {
@@ -64,7 +64,7 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   }, [triggerBusy, mutate]);
 
   if (loading) {
-    return <div className="runs-master-detail"><p className="text-[var(--text-3)] text-[13px] py-8 text-center">Loading runs…</p></div>;
+    return <div className="runs-master-detail"><p className="text-[var(--text-3)] text-[13px] py-8 text-center">加载中…</p></div>;
   }
 
   return (
@@ -72,17 +72,17 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
       {/* Left: Timeline */}
       <aside className="runs-sidebar">
         <div className="p-3 border-b border-[var(--border)] flex justify-between items-center">
-          <span className="font-semibold text-[13px]">Runs</span>
+          <span className="font-semibold text-[13px]">执行记录</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="trigger-btn" disabled={triggerBusy} onClick={handleTrigger}>
-              {triggerBusy ? 'Running…' : 'Trigger'}
+              {triggerBusy ? '运行中…' : '触发采集'}
             </button>
-            <button className="sources-btn" onClick={() => mutate()}>Refresh</button>
+            <button className="sources-btn" onClick={() => mutate()}>刷新</button>
           </div>
         </div>
         <div>
           {runs.length === 0 ? (
-            <p className="text-[var(--text-3)] text-[13px] py-8 text-center">No runs yet.</p>
+            <p className="text-[var(--text-3)] text-[13px] py-8 text-center">暂无执行记录</p>
           ) : (
             runs.map((run) => {
               const stats = run.stats as Record<string, number>;
@@ -100,13 +100,13 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
                   }}
                 >
                   <div className="run-entry-phases">
-                    <span className={`run-phase ${run.phase}`}>{run.phase}</span>
+                    <span className={`run-phase ${run.phase}`}>{run.phase === 'ingest' ? '采集' : '评判'}</span>
                   </div>
                   <div className="run-entry-info">
                     <div className="run-entry-title">
                       {run.phase === 'ingest'
-                        ? `${stats.inserted ?? 0} new / ${stats.fetched ?? 0} fetched`
-                        : `${stats.promoted ?? 0} promoted / ${stats.evaluated ?? 0} eval`}
+                        ? `新增 ${stats.inserted ?? 0} / 抓取 ${stats.fetched ?? 0}`
+                        : `推荐 ${stats.promoted ?? 0} / 评判 ${stats.evaluated ?? 0}`}
                     </div>
                     <div className="run-entry-stats">
                       {formatDuration(run.started_at, run.finished_at)}
@@ -131,7 +131,7 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
           <RunDetail run={selected} />
         ) : (
           <div className="run-detail-empty">
-            <p>Select a run to view details</p>
+            <p>选择一条记录查看详情</p>
           </div>
         )}
       </div>
@@ -141,9 +141,9 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
 
 function FunnelChart({ fetched, promoted, rejected }: { fetched: number; promoted: number; rejected: number }) {
   const funnelData = [
-    { name: 'Fetched', value: fetched, fill: 'var(--text-2)' },
-    { name: 'Promoted', value: promoted, fill: 'var(--green, #16a34a)' },
-    { name: 'Rejected', value: rejected, fill: 'var(--fire, #dc2626)' },
+    { name: '抓取', value: fetched, fill: 'var(--text-2)' },
+    { name: '推荐', value: promoted, fill: 'var(--green, #16a34a)' },
+    { name: '淘汰', value: rejected, fill: 'var(--fire, #dc2626)' },
   ];
 
   return (
@@ -170,16 +170,16 @@ function RunDetail({ run }: { run: Run }) {
 
   const statCards = run.phase === 'ingest'
     ? [
-        { label: 'Fetched', value: stats.fetched ?? 0 },
-        { label: 'Inserted', value: stats.inserted ?? 0 },
-        { label: 'Skipped', value: stats.skipped ?? 0 },
-        { label: 'Duration', value: formatDuration(run.started_at, run.finished_at) },
+        { label: '抓取', value: stats.fetched ?? 0 },
+        { label: '新增', value: stats.inserted ?? 0 },
+        { label: '跳过', value: stats.skipped ?? 0 },
+        { label: '耗时', value: formatDuration(run.started_at, run.finished_at) },
       ]
     : [
-        { label: 'Evaluated', value: stats.evaluated ?? 0 },
-        { label: 'Promoted', value: stats.promoted ?? 0, color: 'var(--green, #16a34a)' },
-        { label: 'Rejected', value: stats.rejected ?? 0 },
-        { label: 'Duration', value: formatDuration(run.started_at, run.finished_at) },
+        { label: '评判', value: stats.evaluated ?? 0 },
+        { label: '推荐', value: stats.promoted ?? 0, color: 'var(--green, #16a34a)' },
+        { label: '淘汰', value: stats.rejected ?? 0 },
+        { label: '耗时', value: formatDuration(run.started_at, run.finished_at) },
       ];
 
   // Funnel data (only meaningful for evaluate phase, but show for both if data exists)
@@ -191,8 +191,8 @@ function RunDetail({ run }: { run: Run }) {
   return (
     <>
       <div className="run-detail-header">
-        <h2>{run.phase} run</h2>
-        <span className={`status-badge ${run.status}`}>{run.status}</span>
+        <h2>{run.phase === 'ingest' ? '采集' : '评判'}</h2>
+        <span className={`status-badge ${run.status}`}>{run.status === 'done' ? '完成' : run.status === 'running' ? '运行中' : '失败'}</span>
         <span className="run-detail-time">{formatTime(run.started_at)}</span>
       </div>
 
@@ -210,7 +210,7 @@ function RunDetail({ run }: { run: Run }) {
       {/* Per-source breakdown */}
       {run.source_ids.length > 0 ? (
         <div className="run-section">
-          <h3 className="section-title">Sources</h3>
+          <h3 className="section-title">数据源</h3>
           <div className="run-sources-card">
             {run.source_ids.map((sid) => {
               const ps = perSource?.[sid];
@@ -218,7 +218,7 @@ function RunDetail({ run }: { run: Run }) {
                 <div key={sid} className="source-row">
                   <div className="source-name">{sid}</div>
                   {ps?.fetched != null && (
-                    <div className="source-count">{ps.fetched} items</div>
+                    <div className="source-count">{ps.fetched} 条</div>
                   )}
                   {ps?.ms != null && (
                     <div className="source-time">{(ps.ms / 1000).toFixed(1)}s</div>
@@ -235,7 +235,7 @@ function RunDetail({ run }: { run: Run }) {
       {showFunnel ? (
         <div className="run-section">
           <h3 className="section-title">
-            {run.phase === 'evaluate' ? 'Evaluate \u2014 Funnel' : 'Ingest \u2014 Funnel'}
+            {run.phase === 'evaluate' ? '评判漏斗' : '采集漏斗'}
           </h3>
           <FunnelChart fetched={fetched} promoted={promoted} rejected={rejected} />
         </div>
@@ -243,14 +243,14 @@ function RunDetail({ run }: { run: Run }) {
 
       {run.error ? (
         <div className="run-section">
-          <h3 className="section-title">Error</h3>
+          <h3 className="section-title">错误</h3>
           <div className="run-error-block">{run.error}</div>
         </div>
       ) : null}
 
       {run.trace && run.trace.length > 0 ? (
         <div className="run-section">
-          <h3 className="section-title">Trace ({run.trace.length} spans)</h3>
+          <h3 className="section-title">执行链路 ({run.trace.length} 步)</h3>
           <pre className="run-trace-pre">{JSON.stringify(run.trace, null, 2)}</pre>
         </div>
       ) : null}
