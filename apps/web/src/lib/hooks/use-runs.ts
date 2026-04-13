@@ -18,9 +18,13 @@ const fetcher = (url: string) => fetch(url).then((r) => {
   return r.json() as Promise<{ runs?: Run[] }>;
 });
 
-export function useRuns() {
+export function useRuns(opts?: { phase?: string; limit?: number }) {
+  const params = new URLSearchParams({ agent_id: 'radar' });
+  if (opts?.phase) params.set('phase', opts.phase);
+  params.set('limit', String(opts?.limit ?? 50));
+
   const { data, error, isLoading, mutate } = useSWR(
-    '/api/runs?agent_id=radar&limit=50',
+    `/api/runs?${params.toString()}`,
     fetcher,
     {
       revalidateOnFocus: false,
