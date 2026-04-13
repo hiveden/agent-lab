@@ -165,7 +165,9 @@ async def evaluate(
     )
 
 
-# ── Chat (OpenAI-compatible) ──
+# ── Chat (OpenAI-compatible) — DEPRECATED ──
+# LLM 编排已上移到 Next.js AI SDK (streamText + tools + maxSteps)
+# 此端点保留供过渡期使用，后续将移除
 
 
 class ChatMessage(BaseModel):

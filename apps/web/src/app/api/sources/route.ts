@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
 import { listSources, createSource } from '@/lib/sources';
 import { sourceCreateSchema } from '@/lib/validations';
+import { withErrorHandler } from '@/lib/api-error';
 
 export const runtime = 'edge';
 
-export async function GET(req: Request) {
+export const GET = withErrorHandler(async (req) => {
   const env = getEnv();
   const url = new URL(req.url);
   const agentId = url.searchParams.get('agent_id') ?? undefined;
   const rows = await listSources(env.DB, agentId);
   return NextResponse.json({ sources: rows });
-}
+});
 
 export async function POST(req: Request) {
   const env = getEnv();

@@ -16,12 +16,12 @@ export async function GET(req: Request) {
     if (auth !== `Bearer ${env.RADAR_WRITE_TOKEN}`) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
-    const settings = await getInternalSettings(env.DB, env.SETTINGS_SECRET);
+    const settings = await getInternalSettings(env.DB, env.SETTINGS_SECRET, env);
     return NextResponse.json({ settings });
   }
 
-  // 前端调用：返回脱敏 api_key
-  const settings = await getPublicSettings(env.DB, env.SETTINGS_SECRET);
+  // 前端调用：返回脱敏 api_key（env vars 覆盖后的实际值）
+  const settings = await getPublicSettings(env.DB, env.SETTINGS_SECRET, env);
   return NextResponse.json({ settings });
 }
 

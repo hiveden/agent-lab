@@ -131,7 +131,7 @@ export default function MobileItemsList({
       {/* Item cards */}
       <div className="flex flex-col gap-2">
         {items.length === 0 && (
-          <div className="py-10 px-4 text-center text-[var(--ag-text-2)] text-sm">No items in this view.</div>
+          <div className="py-10 px-4 text-center text-[var(--ag-text-2)] text-sm">当前视图暂无内容</div>
         )}
         <AnimatePresence mode="popLayout">
           {items.map((item) => (

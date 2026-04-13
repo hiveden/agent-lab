@@ -6,6 +6,15 @@ export interface CloudflareEnv {
   RADAR_WRITE_TOKEN: string;
   RADAR_AGENT_BASE: string;
   SETTINGS_SECRET: string;
+  // LLM env overrides (optional, takes priority over D1 settings)
+  LLM_BASE_URL?: string;
+  LLM_API_KEY?: string;
+  LLM_MODEL_CHAT?: string;
+  LLM_MODEL_TOOL?: string;
+  LLM_MODEL_PUSH?: string;
+  LLM_PROVIDER?: string;
+  GROK_API_KEY?: string;
+  TAVILY_API_KEY?: string;
 }
 
 /**

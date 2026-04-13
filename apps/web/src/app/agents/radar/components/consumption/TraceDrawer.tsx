@@ -63,7 +63,7 @@ export default function TraceDrawer({
               : 'agent execution log'}
           </span>
           <button
-            className="icon-btn ml-auto"
+            className="ml-auto inline-flex items-center justify-center w-[22px] h-[22px] rounded border border-transparent bg-transparent text-[var(--text-3)] cursor-pointer transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--bg-sunk)] hover:border-[var(--border-hi)]"
             onClick={onClose}
             title="Close (esc)"
             aria-label="Close trace"

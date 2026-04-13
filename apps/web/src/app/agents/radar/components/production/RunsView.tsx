@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useRuns, type Run } from '@/lib/hooks/use-runs';
 import { cn } from '@/lib/utils';
+import { apiFetch, errorMessage } from '@/lib/fetch';
+import { Button } from '@/components/ui/button';
 
 export interface RunsViewProps {
   onSelectRun?: (run: Run) => void;
@@ -52,19 +55,23 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   const [sources, setSources] = useState<SourceItem[]>([]);
 
   useEffect(() => {
-    fetch('/api/sources?agent_id=radar')
+    apiFetch('/api/sources?agent_id=radar')
       .then((r) => r.json())
       .then((data) => setSources((data as { sources?: SourceItem[] }).sources ?? []))
-      .catch(() => {});
+      .catch((e) => toast.error(errorMessage(e)));
   }, []);
 
   const toggleSource = useCallback(async (s: SourceItem) => {
-    await fetch(`/api/sources/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ enabled: !s.enabled }),
-    });
-    setSources((prev) => prev.map((src) => src.id === s.id ? { ...src, enabled: !src.enabled } : src));
+    try {
+      await apiFetch(`/api/sources/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: !s.enabled }),
+      });
+      setSources((prev) => prev.map((src) => src.id === s.id ? { ...src, enabled: !src.enabled } : src));
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
   }, []);
 
   const ingestRuns = runs.filter((r) => r.phase === 'ingest');
@@ -75,20 +82,36 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
     if (triggerBusy || enabledCount === 0) return;
     setTriggerBusy(true);
 
-    const drainSSE = async (url: string) => {
+    const drainSSE = async (url: string): Promise<string | null> => {
       const res = await fetch(url, { method: 'POST' });
-      if (!res.ok || !res.body) return;
-      const reader = res.body.getReader();
-      while (true) {
-        const { done } = await reader.read();
-        if (done) break;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string };
+        return body.error ?? `HTTP ${res.status}`;
       }
+      if (!res.body) return null;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let lastError: string | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === 'error') lastError = evt.message;
+          } catch { /* skip */ }
+        }
+      }
+      return lastError;
     };
 
     try {
-      await drainSSE('/api/cron/radar/ingest');
-    } catch {
-      // ignore — runs list will reflect any failure
+      const sseError = await drainSSE('/api/cron/radar/ingest');
+      if (sseError) toast.error(`采集失败: ${sseError}`);
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setTriggerBusy(false);
       mutate();
@@ -110,7 +133,7 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
               <button className="trigger-btn" disabled={triggerBusy || enabledCount === 0} onClick={handleTrigger}>
                 {triggerBusy ? '同步中…' : '同步'}
               </button>
-              <button className="sources-btn" onClick={() => mutate()}>刷新</button>
+              <Button variant="outline" size="sm" onClick={() => mutate()}>刷新</Button>
             </div>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">

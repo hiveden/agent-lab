@@ -126,7 +126,7 @@ export default function ItemsList({
               fontSize: 12,
             }}
           >
-            No items.
+            暂无内容
           </div>
         ) : (
           items.map((it, idx) => {

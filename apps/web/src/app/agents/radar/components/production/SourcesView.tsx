@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { apiFetch, errorMessage } from '@/lib/fetch';
 import {
   Dialog,
   DialogContent,
@@ -152,11 +154,11 @@ export default function SourcesView() {
   const fetchSources = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/sources?agent_id=radar');
+      const res = await apiFetch('/api/sources?agent_id=radar');
       const data = (await res.json()) as { sources?: Source[] };
       setSources(data.sources ?? []);
-    } catch {
-      // ignore
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -233,13 +235,13 @@ export default function SourcesView() {
     try {
       config = JSON.parse(form.config);
     } catch {
+      toast.error('Invalid JSON config');
       return;
     }
     setSaving(true);
     try {
       if (editingId) {
-        // Update existing
-        await fetch(`/api/sources/${editingId}`, {
+        await apiFetch(`/api/sources/${editingId}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -250,8 +252,7 @@ export default function SourcesView() {
           }),
         });
       } else {
-        // Create new
-        await fetch('/api/sources', {
+        await apiFetch('/api/sources', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -264,25 +265,36 @@ export default function SourcesView() {
           }),
         });
       }
+      toast.success('Source saved');
       closeDialog();
       fetchSources();
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/sources/${id}`, { method: 'DELETE' });
-    fetchSources();
+    try {
+      await apiFetch(`/api/sources/${id}`, { method: 'DELETE' });
+      fetchSources();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
   };
 
   const handleToggle = async (s: Source) => {
-    await fetch(`/api/sources/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ enabled: !s.enabled }),
-    });
-    fetchSources();
+    try {
+      await apiFetch(`/api/sources/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: !s.enabled }),
+      });
+      fetchSources();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
   };
 
   const isAdding = !editingId;
@@ -362,8 +374,8 @@ export default function SourcesView() {
                 <div className="text-[10px] text-[#e55] mt-1">Total weight exceeds 100%</div>
               )}
               <div className="source-card-actions">
-                <button className="sources-btn" onClick={() => openEdit(s)}>Edit</button>
-                <button className="sources-btn danger" onClick={() => handleDelete(s.id)}>Delete</button>
+                <Button variant="outline" size="sm" onClick={() => openEdit(s)}>Edit</Button>
+                <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>Delete</Button>
               </div>
             </div>
           );

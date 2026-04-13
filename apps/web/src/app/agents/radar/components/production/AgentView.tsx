@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import type { Run } from '@/lib/hooks/use-runs';
 
 const DEFAULT_PROMPT = `你是 Radar,一个科技资讯策展 Agent,目标用户是正在转型 AI Agent 工程师的全栈开发者。
 你的任务:从给定的内容中,挑选 3-5 条最值得推荐给用户的条目。
@@ -48,7 +49,51 @@ export default function AgentView() {
   const [spans, setSpans] = useState<SpanEvent[]>([]);
   const [result, setResult] = useState<ResultEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Restore latest evaluate run from DB on mount
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/runs?agent_id=radar&phase=evaluate&limit=1')
+      .then((r) => (r.ok ? (r.json() as Promise<{ runs?: Run[] }>) : null))
+      .then((data) => {
+        if (cancelled || !data?.runs?.length) return;
+        const run = data.runs[0];
+        setLastRunId(run.id);
+
+        // Restore trace → spans
+        if (Array.isArray(run.trace) && run.trace.length > 0) {
+          setSpans(
+            (run.trace as Record<string, unknown>[]).map((t) => ({
+              id: String(t.id ?? ''),
+              kind: String(t.kind ?? 'system'),
+              title: String(t.title ?? ''),
+              status: String(t.status ?? 'done'),
+              ms: typeof t.ms === 'number' ? t.ms : undefined,
+              detail: t.detail as Record<string, unknown> | undefined,
+            })),
+          );
+        }
+
+        // Restore stats → result
+        const s = run.stats;
+        if (s && typeof s.evaluated === 'number') {
+          setResult({
+            evaluated: Number(s.evaluated),
+            promoted: Number(s.promoted ?? 0),
+            rejected: Number(s.rejected ?? 0),
+            total_ms: Number(s.total_ms ?? 0),
+            preview: s.preview as ResultEvent['preview'],
+          });
+        }
+
+        // Restore error
+        if (run.error) setError(run.error);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const savePrompt = useCallback((value: string) => {
     setPrompt(value);
@@ -61,6 +106,12 @@ export default function AgentView() {
     setSpans([]);
     setResult(null);
     setError(null);
+
+    // Mutable accumulators for persisting after SSE completes
+    let runId: string | null = null;
+    const collectedSpans: SpanEvent[] = [];
+    let collectedResult: ResultEvent | null = null;
+    let collectedError: string | null = null;
 
     try {
       const res = await fetch('/api/cron/radar/evaluate', {
@@ -98,7 +149,11 @@ export default function AgentView() {
             continue;
           }
 
-          if (ev.type === 'span') {
+          // Capture run_id from start event
+          if (ev.type === 'start' && ev.run_id) {
+            runId = String(ev.run_id);
+            setLastRunId(runId);
+          } else if (ev.type === 'span') {
             const span: SpanEvent = {
               id: String(ev.id ?? ''),
               kind: String(ev.kind ?? 'system'),
@@ -107,37 +162,65 @@ export default function AgentView() {
               ms: typeof ev.ms === 'number' ? ev.ms : undefined,
               detail: ev.detail as Record<string, unknown> | undefined,
             };
-            setSpans((prev) => {
-              const idx = prev.findIndex((s) => s.id === span.id);
-              if (idx >= 0) return prev.map((s, i) => (i === idx ? span : s));
-              return [...prev, span];
-            });
+            const existIdx = collectedSpans.findIndex((s) => s.id === span.id);
+            if (existIdx >= 0) collectedSpans[existIdx] = span;
+            else collectedSpans.push(span);
+            setSpans([...collectedSpans]);
           } else if (ev.type === 'result') {
-            setResult({
+            if (!runId && ev.run_id) {
+              runId = String(ev.run_id);
+              setLastRunId(runId);
+            }
+            collectedResult = {
               evaluated: Number(ev.evaluated ?? 0),
               promoted: Number(ev.promoted ?? 0),
               rejected: Number(ev.rejected ?? 0),
               total_ms: Number(ev.total_ms ?? 0),
               preview: ev.preview as ResultEvent['preview'],
-            });
+            };
+            setResult(collectedResult);
           } else if (ev.type === 'error') {
-            setError(String(ev.message ?? 'unknown error'));
+            collectedError = String(ev.message ?? 'unknown error');
+            setError(collectedError);
           }
         }
       }
     } catch (e) {
-      setError(String(e));
+      collectedError = String(e);
+      setError(collectedError);
     } finally {
       setRunning(false);
       setTimeout(() => scrollRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }), 100);
+
+      // Persist trace + enriched stats to run record
+      if (runId) {
+        const patch: Record<string, unknown> = {
+          trace: collectedSpans,
+        };
+        if (collectedResult) {
+          patch.stats = {
+            evaluated: collectedResult.evaluated,
+            promoted: collectedResult.promoted,
+            rejected: collectedResult.rejected,
+            total_ms: collectedResult.total_ms,
+            preview: collectedResult.preview,
+          };
+        }
+        if (collectedError) patch.error = collectedError;
+        fetch(`/api/runs/${runId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      }
     }
   }, [running, prompt]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Prompt editor */}
-      <div className="p-4 border-b border-[var(--border)] shrink-0">
-        <div className="flex items-center justify-between mb-2">
+      {/* Prompt editor — takes full height when no results */}
+      <div className="p-4 flex flex-col h-[35%] shrink-0 border-b border-[var(--border)]">
+        <div className="flex items-center justify-between mb-2 shrink-0">
           <span className="font-semibold text-[13px]">提示词</span>
           <div className="flex gap-2">
             <button
@@ -158,8 +241,7 @@ export default function AgentView() {
         <textarea
           value={prompt}
           onChange={(e) => savePrompt(e.target.value)}
-          rows={6}
-          className="w-full bg-[var(--bg-sunk)] border border-[var(--border)] rounded-[6px] p-3 text-[12.5px] leading-[1.6] text-[var(--text)] resize-y font-mono outline-none focus:border-[var(--accent-line)]"
+          className="w-full flex-1 bg-[var(--bg-sunk)] border border-[var(--border)] rounded-[6px] p-3 text-[12.5px] leading-[1.6] text-[var(--text)] resize-none font-mono outline-none focus:border-[var(--accent-line)]"
           placeholder="输入你的关注偏好、过滤标准、摘要要求…"
         />
       </div>
@@ -208,6 +290,11 @@ export default function AgentView() {
         {result && (
           <div className="mb-4">
             <h3 className="text-[12px] font-semibold text-[var(--text-2)] mb-2">执行结果</h3>
+            {result.evaluated === 0 && (
+              <div className="mb-3 p-3 rounded-[6px] bg-[var(--bolt-bg)] border border-[var(--bolt)] text-[12.5px] text-[var(--bolt)]">
+                当前没有待评判的内容。请先在「数据源」页面配置源并执行采集，再回来评判。
+              </div>
+            )}
             <div className="flex gap-3 mb-3">
               <div className="text-center px-3 py-2 bg-[var(--bg-sunk)] rounded-[6px]">
                 <div className="text-[18px] font-semibold text-[var(--text)]">{result.evaluated}</div>

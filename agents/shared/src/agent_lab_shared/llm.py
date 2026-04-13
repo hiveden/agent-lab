@@ -1,6 +1,6 @@
 """LLM factory: 按 task 返回 BaseChatModel，支持 mock + 多 provider。
 
-读取优先级: env var > DB settings > defaults
+读取优先级: platform API (DB settings) > env var > defaults
 """
 
 from __future__ import annotations
@@ -63,49 +63,45 @@ class MockChatModel(BaseChatModel):
 def _resolve_settings(task: TaskType) -> tuple[str, str, str, str]:
     """解析 LLM 配置，返回 (provider, base_url, api_key, model)。
 
-    优先级: env var > DB settings > defaults
+    优先级: platform API (DB settings) > env var > defaults
     """
-    model_map = {
+    env_model_map = {
         "push": settings.llm_model_push,
         "chat": settings.llm_model_chat,
         "tool": settings.llm_model_tool,
     }
 
-    # 如果 env 有 API key，直接用 env 配置（测试环境覆盖）
-    if settings.glm_api_key:
-        return (
-            settings.llm_provider,
-            settings.glm_base_url,
-            settings.glm_api_key,
-            model_map.get(task, settings.llm_model_chat),
-        )
-
-    # 否则尝试从 platform API 读取 DB 配置
+    # 优先从 platform API 读取 DB 配置
     try:
         from .db import PlatformClient
 
         client = PlatformClient()
         data = client.get_llm_settings()
         s = data.get("settings", {})
-        db_model_map = {
-            "push": s.get("model_push", ""),
-            "chat": s.get("model_chat", ""),
-            "tool": s.get("model_tool", ""),
-        }
-        return (
-            s.get("provider", settings.llm_provider),
-            s.get("base_url", settings.glm_base_url),
-            s.get("api_key", ""),
-            db_model_map.get(task, "") or model_map.get(task, ""),
-        )
+
+        api_key = s.get("api_key", "")
+        if api_key:
+            db_model_map = {
+                "push": s.get("model_push", ""),
+                "chat": s.get("model_chat", ""),
+                "tool": s.get("model_tool", ""),
+            }
+            return (
+                s.get("provider", settings.llm_provider),
+                s.get("base_url", settings.glm_base_url),
+                api_key,
+                db_model_map.get(task, "") or env_model_map.get(task, ""),
+            )
     except Exception:
-        # Fallback to env defaults
-        return (
-            settings.llm_provider,
-            settings.glm_base_url,
-            "",
-            model_map.get(task, settings.llm_model_chat),
-        )
+        pass
+
+    # Fallback: env var 配置
+    return (
+        settings.llm_provider,
+        settings.glm_base_url,
+        settings.glm_api_key,
+        env_model_map.get(task, settings.llm_model_chat),
+    )
 
 
 def _create_llm(provider: str, base_url: str, api_key: str, model: str) -> BaseChatModel:

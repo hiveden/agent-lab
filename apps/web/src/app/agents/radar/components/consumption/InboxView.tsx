@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
+import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import type { ViewType } from '../shared/NavRail';
 import ChatView from './ChatView';
@@ -84,6 +84,7 @@ export default function InboxView() {
     [items, selectedId],
   );
 
+  const sessionLoaded = selectedId ? selectedId in sessions : false;
   const currentSession = selectedId ? sessions[selectedId] ?? null : null;
 
   const tabCounts = useMemo(
@@ -131,15 +132,17 @@ export default function InboxView() {
   );
 
   const gridRef = useRef<HTMLDivElement>(null);
-  const tracePanelRef = usePanelRef();
 
-  // Sync traceOpen state with collapsible panel
-  useEffect(() => {
-    const panel = tracePanelRef.current;
-    if (!panel) return;
-    if (traceOpen && panel.isCollapsed()) panel.expand();
-    else if (!traceOpen && !panel.isCollapsed()) panel.collapse();
-  }, [traceOpen, tracePanelRef]);
+  // Persist panel layouts to localStorage
+  const saveLayout = useCallback((key: string) => (layout: Layout) => {
+    try { localStorage.setItem(key, JSON.stringify(layout)); } catch { /* ignore */ }
+  }, []);
+  const loadLayout = useCallback((key: string): Layout | undefined => {
+    try {
+      const v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : undefined;
+    } catch { return undefined; }
+  }, []);
 
   // Scroll selected card into view
   useEffect(() => {
@@ -149,7 +152,7 @@ export default function InboxView() {
   }, [selectedId]);
 
   // ── Render ─────────────────────────────────────────────────
-  const showBottom = !!(selectedItem && currentSession !== undefined);
+  const showBottom = !!(selectedItem && sessionLoaded);
 
   return (
     <div className="flex flex-col min-h-0 overflow-hidden">
@@ -189,12 +192,15 @@ export default function InboxView() {
       </div>
 
       {/* Vertical Group: cards (top) ↔ chat+trace (bottom) */}
-      <Group orientation="vertical" className="flex-1 min-h-0">
-        <Panel minSize={20}>
+      <Group key={showBottom ? 'split' : 'full'} orientation="vertical" className="flex-1 min-h-0"
+        defaultLayout={showBottom ? loadLayout('radar.layout.vertical') : undefined}
+        onLayoutChanged={showBottom ? saveLayout('radar.layout.vertical') : undefined}
+      >
+        <Panel defaultSize={showBottom ? '50%' : '100%'} minSize="20%">
           <div className="h-full overflow-hidden flex flex-col">
             <div className="flex-1 overflow-y-auto p-4" ref={gridRef}>
               {filteredItems.length === 0 ? (
-                <div className="p-6 text-center text-[var(--text-3)] text-xs">No items.</div>
+                <div className="p-6 text-center text-[var(--text-3)] text-xs">暂无内容</div>
               ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(380px,1fr))] gap-3">
                   {filteredItems.map((it) => {
@@ -240,14 +246,14 @@ export default function InboxView() {
                               className="text-[var(--text-2)] no-underline hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              View original
+                              查看原文
                             </a>
                           ) : null}
                           <div className="ml-auto flex gap-1">
                             <button
                               className={cn(
-                                'item-action',
-                                pending[it.id] === 'watching' && 'active',
+                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-[var(--border)] bg-transparent cursor-pointer text-[var(--text-2)] text-[11px] hover:bg-[var(--bg-sunk)]',
+                                pending[it.id] === 'watching' && 'bg-[var(--accent)] text-white border-transparent',
                               )}
                               title="Watch"
                               onClick={(e) => {
@@ -259,8 +265,8 @@ export default function InboxView() {
                             </button>
                             <button
                               className={cn(
-                                'item-action',
-                                pending[it.id] === 'dismissed' && 'active',
+                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-[var(--border)] bg-transparent cursor-pointer text-[var(--text-2)] text-[11px] hover:bg-[var(--bg-sunk)]',
+                                pending[it.id] === 'dismissed' && 'bg-[var(--accent)] text-white border-transparent',
                               )}
                               title="Dismiss"
                               onClick={(e) => {
@@ -286,9 +292,12 @@ export default function InboxView() {
             <Separator className="drag-handle">
               <div className="drag-bar" />
             </Separator>
-            <Panel id="bottom" defaultSize={30} minSize={15}>
-              <Group orientation="horizontal" id="chat-trace" className="border-t border-[var(--border)] min-h-0 h-full">
-                <Panel id="chat" minSize={30}>
+            <Panel id="bottom" defaultSize="50%" minSize="25%">
+              <Group key={traceOpen ? 'with-trace' : 'chat-only'} orientation="horizontal" id="chat-trace" className="border-t border-[var(--border)] min-h-0 h-full"
+                defaultLayout={traceOpen ? loadLayout('radar.layout.horizontal') : undefined}
+                onLayoutChanged={traceOpen ? saveLayout('radar.layout.horizontal') : undefined}
+              >
+                <Panel id="chat" minSize="30%">
                   <ChatView
                     key={selectedItem.id}
                     item={selectedItem}
@@ -300,33 +309,26 @@ export default function InboxView() {
                     onChatUpdate={handleChatUpdate}
                   />
                 </Panel>
-                <Separator
-                  className="trace-divider"
-                  style={traceOpen ? undefined : { width: 0, minWidth: 0, opacity: 0 }}
-                />
-                <Panel
-                  id="trace"
-                  panelRef={tracePanelRef}
-                  collapsible
-                  collapsedSize={0}
-                  defaultSize={traceOpen ? 40 : 0}
-                  minSize={20}
-                  maxSize={60}
-                  onResize={(size) => {
-                    if (size.asPercentage === 0 && traceOpen) setTraceOpen(false);
-                  }}
-                >
-                  {traceOpen && (
-                    <TraceDrawer
-                      open={traceOpen}
-                      trace={activeTrace}
-                      onClose={() => setTraceOpen(false)}
-                      highlightSpanId={highlightSpanId}
-                      expandAllSignal={expandAllSignal}
-                      collapseAllSignal={collapseAllSignal}
-                    />
-                  )}
-                </Panel>
+                {traceOpen && (
+                  <>
+                    <Separator className="trace-divider" />
+                    <Panel
+                      id="trace"
+                      defaultSize="40%"
+                      minSize="20%"
+                      maxSize="60%"
+                    >
+                      <TraceDrawer
+                        open={traceOpen}
+                        trace={activeTrace}
+                        onClose={() => setTraceOpen(false)}
+                        highlightSpanId={highlightSpanId}
+                        expandAllSignal={expandAllSignal}
+                        collapseAllSignal={collapseAllSignal}
+                      />
+                    </Panel>
+                  </>
+                )}
               </Group>
             </Panel>
           </>

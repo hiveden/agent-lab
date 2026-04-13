@@ -1,6 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { apiFetch, errorMessage } from '@/lib/fetch';
+import { Button } from '@/components/ui/button';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface SourceDetail {
@@ -37,9 +40,9 @@ function pct(n: number): string {
 
 function deviationLabel(d: number): { text: string; cls: string } {
   const absPct = Math.abs(d * 100).toFixed(0);
-  if (d > 0.05) return { text: `+${absPct}% over`, cls: 'dev-over' };
-  if (d < -0.05) return { text: `-${absPct}% under`, cls: 'dev-under' };
-  return { text: 'on track', cls: 'dev-ok' };
+  if (d > 0.05) return { text: `+${absPct}% 偏高`, cls: 'dev-over' };
+  if (d < -0.05) return { text: `-${absPct}% 偏低`, cls: 'dev-under' };
+  return { text: '正常', cls: 'dev-ok' };
 }
 
 export default function AttentionView() {
@@ -49,11 +52,11 @@ export default function AttentionView() {
   const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/attention/snapshot?agent_id=radar');
+      const res = await apiFetch('/api/attention/snapshot?agent_id=radar');
       const data = (await res.json()) as Snapshot;
       setSnapshot(data);
-    } catch {
-      // ignore
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -64,13 +67,13 @@ export default function AttentionView() {
   }, [fetch_]);
 
   if (loading) {
-    return <div className="max-w-[800px]"><p className="att-empty">Computing attention snapshot...</p></div>;
+    return <div className="max-w-[800px]"><p className="att-empty">计算注意力快照中…</p></div>;
   }
 
   if (!snapshot || snapshot.sources.length === 0) {
     return (
       <div className="max-w-[800px]">
-        <p className="att-empty">No attention data yet. Consume some items first.</p>
+        <p className="att-empty">暂无注意力数据。先浏览一些推荐内容。</p>
       </div>
     );
   }
@@ -80,16 +83,16 @@ export default function AttentionView() {
   return (
     <div className="max-w-[800px]">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-base font-semibold m-0">Attention Mirror</h2>
-        <button className="sources-btn" onClick={fetch_}>Refresh</button>
+        <h2 className="text-base font-semibold m-0">注意力镜像</h2>
+        <Button variant="outline" size="sm" onClick={fetch_}>刷新</Button>
       </div>
       <p className="text-[13px] text-[var(--ag-text-2)] mb-5">
-        Comparing your intended attention allocation vs actual behavior.
+        对比预设的注意力分配与实际消费行为。
       </p>
 
       {!hasActivity && (
         <div className="att-notice">
-          No consumption activity recorded yet. Read some items or start conversations to see your attention pattern.
+          暂无消费行为记录。阅读推荐内容或发起对话后即可查看注意力分布。
         </div>
       )}
 
@@ -131,7 +134,7 @@ export default function AttentionView() {
       {/* Detail table */}
       {hasActivity && (
         <div className="att-detail">
-          <h3>Signal Breakdown</h3>
+          <h3>信号分解</h3>
           <table className="att-table">
             <thead>
               <tr>

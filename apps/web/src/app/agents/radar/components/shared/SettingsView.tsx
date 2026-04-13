@@ -1,6 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { apiFetch, errorMessage } from '@/lib/fetch';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
 type Provider = 'glm' | 'ollama' | 'anthropic' | 'gemini' | 'custom';
 
@@ -60,6 +73,14 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   custom: 'Custom (OpenAI-compatible)',
 };
 
+const PROVIDER_MODELS: Record<Provider, string[]> = {
+  glm: ['glm-4-flash', 'glm-4.6', 'glm-4-plus', 'glm-4-long', 'glm-4-flashx'],
+  ollama: [],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-haiku-4-20250514'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
+  custom: [],
+};
+
 export default function SettingsView() {
   const [form, setForm] = useState<SettingsForm>({
     ...PROVIDER_DEFAULTS.glm,
@@ -69,17 +90,12 @@ export default function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [toast, setToast] = useState('');
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
-  };
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/settings');
+      const res = await apiFetch('/api/settings');
       const data = (await res.json()) as { settings: Record<string, string> };
       const s = data.settings;
       setForm({
@@ -91,8 +107,8 @@ export default function SettingsView() {
         api_key: '',
         api_key_masked: s.api_key_masked || '',
       });
-    } catch {
-      // ignore
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -101,6 +117,18 @@ export default function SettingsView() {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    if (form.provider !== 'ollama' || !form.base_url) return;
+    const base = form.base_url.replace(/\/v1\/?$/, '');
+    fetch(`${base}/api/tags`)
+      .then((r) => r.json())
+      .then((data) => {
+        const models = ((data as { models?: Array<{ name: string }> }).models ?? []).map((m) => m.name);
+        setOllamaModels(models);
+      })
+      .catch(() => setOllamaModels([]));
+  }, [form.provider, form.base_url]);
 
   const handleProviderChange = (provider: Provider) => {
     const defaults = PROVIDER_DEFAULTS[provider];
@@ -130,11 +158,11 @@ export default function SettingsView() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast('Settings saved');
+      toast.success('已保存');
       setForm((prev) => ({ ...prev, api_key: '' }));
       fetchSettings();
     } catch (e) {
-      showToast(`Save failed: ${e}`);
+      toast.error(`保存失败: ${errorMessage(e)}`);
     } finally {
       setSaving(false);
     }
@@ -155,103 +183,135 @@ export default function SettingsView() {
       });
       const data = (await res.json()) as { ok: boolean; error?: string; detail?: string };
       if (data.ok) {
-        showToast(`Connected: ${data.detail || 'OK'}`);
+        toast.success(`连接成功: ${data.detail || 'OK'}`);
       } else {
-        showToast(`Failed: ${data.error || 'unknown'}`);
+        toast.error(`连接失败: ${data.error || 'unknown'}`);
       }
     } catch (e) {
-      showToast(`Test failed: ${e}`);
+      toast.error(`测试失败: ${errorMessage(e)}`);
     } finally {
       setTesting(false);
     }
   };
 
+  const models = form.provider === 'ollama' ? ollamaModels : PROVIDER_MODELS[form.provider];
+
   if (loading) {
-    return <div className="max-w-[600px]"><p className="att-empty">Loading settings...</p></div>;
+    return (
+      <div className="max-w-[560px] py-8 text-center text-sm text-[var(--text-3)]">
+        加载设置中…
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-[600px]">
-      <div className="mb-1">
-        <h2 className="text-base font-semibold m-0">LLM Settings</h2>
-      </div>
-      <p className="text-[13px] text-[var(--ag-text-2)] mb-5">Configure the LLM provider for Radar agent.</p>
+    <div className="max-w-[560px]">
+      <h2 className="text-base font-semibold mb-1">LLM 设置</h2>
+      <p className="text-[13px] text-[var(--text-3)] mb-6">
+        配置 Radar Agent 使用的模型和 API。
+      </p>
 
-      <div className="settings-form">
+      <div className="space-y-5">
         {/* Provider */}
-        <div className="s-row">
-          <label>Provider</label>
-          <select
-            value={form.provider}
-            onChange={(e) => handleProviderChange(e.target.value as Provider)}
-          >
-            {(Object.keys(PROVIDER_LABELS) as Provider[]).map((p) => (
-              <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
-            ))}
-          </select>
+        <div className="space-y-1.5">
+          <Label>Provider</Label>
+          <Select value={form.provider} onValueChange={(v) => handleProviderChange(v as Provider)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PROVIDER_LABELS) as Provider[]).map((p) => (
+                <SelectItem key={p} value={p}>{PROVIDER_LABELS[p]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Base URL */}
-        <div className="s-row">
-          <label>Base URL</label>
-          <input
+        <div className="space-y-1.5">
+          <Label>Base URL</Label>
+          <Input
             value={form.base_url}
             onChange={(e) => setForm({ ...form, base_url: e.target.value })}
             placeholder="https://api.example.com/v1"
+            className="font-mono text-xs"
           />
         </div>
+
+        <Separator />
 
         {/* Models */}
-        <div className="s-row">
-          <label>Model (Push)</label>
-          <input
-            value={form.model_push}
-            onChange={(e) => setForm({ ...form, model_push: e.target.value })}
-          />
-        </div>
-        <div className="s-row">
-          <label>Model (Chat)</label>
-          <input
-            value={form.model_chat}
-            onChange={(e) => setForm({ ...form, model_chat: e.target.value })}
-          />
-        </div>
-        <div className="s-row">
-          <label>Model (Tool)</label>
-          <input
-            value={form.model_tool}
-            onChange={(e) => setForm({ ...form, model_tool: e.target.value })}
-          />
+        <div className="grid grid-cols-3 gap-3">
+          <ModelSelect label="Chat 模型" value={form.model_chat} models={models} onChange={(v) => setForm({ ...form, model_chat: v })} />
+          <ModelSelect label="Tool 模型" value={form.model_tool} models={models} onChange={(v) => setForm({ ...form, model_tool: v })} />
+          <ModelSelect label="Push 模型" value={form.model_push} models={models} onChange={(v) => setForm({ ...form, model_push: v })} />
         </div>
 
+        <Separator />
+
         {/* API Key */}
-        <div className="s-row">
-          <label>API Key</label>
-          <div className="s-key-group">
-            <input
-              type="password"
-              value={form.api_key}
-              onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-              placeholder={form.api_key_masked || (form.provider === 'ollama' ? 'Not required' : 'Enter API key')}
-            />
-            {form.api_key_masked && (
-              <span className="s-key-hint">Saved: {form.api_key_masked}</span>
-            )}
-          </div>
+        <div className="space-y-1.5">
+          <Label>API Key</Label>
+          <Input
+            type="password"
+            value={form.api_key}
+            onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+            placeholder={form.api_key_masked || (form.provider === 'ollama' ? '本地模型无需 key' : '输入 API key')}
+          />
+          {form.api_key_masked && (
+            <p className="text-[11px] text-[var(--text-3)]">
+              已保存: {form.api_key_masked}
+            </p>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="s-actions">
-          <button className="sources-btn" onClick={handleTest} disabled={testing}>
-            {testing ? 'Testing...' : 'Test Connection'}
-          </button>
-          <button className="sources-btn primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+        <div className="flex gap-2 justify-end pt-2">
+          <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}>
+            {testing ? '测试中…' : '测试连接'}
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? '保存中…' : '保存'}
+          </Button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {toast && <div className="s-toast">{toast}</div>}
+function ModelSelect({ label, value, models, onChange }: {
+  label: string;
+  value: string;
+  models: string[];
+  onChange: (v: string) => void;
+}) {
+  const hasOptions = models.length > 0;
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[11px]">{label}</Label>
+      {hasOptions ? (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="font-mono text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {models.map((m) => (
+              <SelectItem key={m} value={m} className="font-mono text-xs">{m}</SelectItem>
+            ))}
+            {value && !models.includes(value) && (
+              <SelectItem value={value} className="font-mono text-xs">{value}</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="font-mono text-xs"
+          placeholder="输入模型名"
+        />
+      )}
     </div>
   );
 }

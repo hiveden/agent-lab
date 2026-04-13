@@ -57,6 +57,7 @@ export interface SessionHistory {
     id: string;
     role: string;
     content: string;
+    tool_calls?: unknown[] | null;
     created_at: string;
   }>;
 }
@@ -81,6 +82,7 @@ export async function getLatestSessionForItem(
       id: chatMessages.id,
       role: chatMessages.role,
       content: chatMessages.content,
+      tool_calls: chatMessages.tool_calls,
       created_at: chatMessages.created_at,
     })
     .from(chatMessages)

@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import type { ItemWithState } from '@/lib/types';
 import type { MockTrace } from '../../traceMock';
 import InlineTraceRail from './InlineTraceRail';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { cn } from '@/lib/utils';
+import { buildTraceFromMessages } from '@/lib/trace';
+import ToolCard from './ToolCard';
+import MarkdownContent from './MarkdownContent';
 
 interface Props {
   item: ItemWithState;
@@ -33,7 +36,7 @@ export default function ChatView({
   traceOpen,
   onChatUpdate,
 }: Props) {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, stop, setInput } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, stop, setInput, error } = useChat({
     id: item.id,
     api: '/api/chat',
     initialMessages,
@@ -41,20 +44,22 @@ export default function ChatView({
       item_id: item.id,
       session_id: sessionId,
     },
-    onFinish: (message) => {
-      // Allow parent to sync state if needed
-    },
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Build real trace from tool invocations
+  const trace = useMemo(() => buildTraceFromMessages(messages), [messages]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 999999 });
-    if (onChatUpdate) {
-      onChatUpdate(messages);
+    if (onChatUpdate) onChatUpdate(messages);
+    // Auto-open trace panel when tool calls are present
+    if (trace.spans.length > 0) {
+      onOpenTraceFromSpan(trace as MockTrace, null);
     }
-  }, [messages, onChatUpdate]);
+  }, [messages, onChatUpdate, trace, onOpenTraceFromSpan]);
 
   function onPresetSend(msg: string) {
     setInput(msg);
@@ -87,7 +92,10 @@ export default function ChatView({
           </div>
           <div className="flex gap-1 items-center shrink-0">
             <button
-              className={cn('icon-btn w-[26px] h-[26px]', traceOpen && 'on')}
+              className={cn(
+                'inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-transparent bg-transparent text-[var(--text-3)] cursor-pointer transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--bg-sunk)] hover:border-[var(--border-hi)]',
+                traceOpen && 'text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent-line)]',
+              )}
               title="Toggle trace (T)"
               onClick={onToggleTrace}
               aria-label="Toggle trace"
@@ -113,6 +121,12 @@ export default function ChatView({
         ) : null}
       </div>
 
+      {error && (
+        <div className="px-4 py-2 bg-[var(--fire-soft)] text-[var(--fire)] text-xs border-b border-[var(--fire)]/20 shrink-0">
+          {error.message || 'Chat error'}
+        </div>
+      )}
+
       <div className="chat-scroll" ref={scrollRef}>
         {messages.length === 0 ? (
           <div
@@ -125,33 +139,48 @@ export default function ChatView({
             对这条推送有什么想追问的? 发一条消息试试。
           </div>
         ) : (
-          messages.map((m: Message) => (
-            <div
-              key={m.id}
-              className={`msg ${m.role}${isLoading && m.role === 'assistant' && !m.content ? ' streaming' : ''}`}
-            >
-              <div className="msg-meta">
-                {m.role === 'user' ? 'you' : 'radar'}
-                {m.role === 'assistant' && isLoading && m.id === messages[messages.length - 1].id && !m.content ? (
-                  <span style={{ marginLeft: 6, color: 'var(--text-faint)' }}>
-                    is thinking…
-                  </span>
-                ) : null}
+          <>
+            {messages.map((m: Message) => (
+              <div
+                key={m.id}
+                className={`msg ${m.role}${isLoading && m.role === 'assistant' && !m.content ? ' streaming' : ''}`}
+              >
+                <div className="msg-meta">
+                  {m.role === 'user' ? 'you' : 'radar'}
+                </div>
+                <div className="msg-bubble">
+                  {m.toolInvocations?.map((inv) => (
+                    <ToolCard key={inv.toolCallId} invocation={inv} />
+                  ))}
+                  {m.content ? (
+                    m.role === 'assistant' ? (
+                      <MarkdownContent content={m.content} />
+                    ) : (
+                      m.content
+                    )
+                  ) : isLoading && m.role === 'assistant' && !m.toolInvocations?.length ? (
+                    <span className="thinking-dots" aria-label="thinking">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <div className="msg-bubble">
-                {m.content ? (
-                  m.content
-                ) : isLoading && m.id === messages[messages.length - 1].id ? (
+            ))}
+            {isLoading && messages[messages.length - 1]?.role === 'user' && (
+              <div className="msg assistant streaming">
+                <div className="msg-meta">radar</div>
+                <div className="msg-bubble">
                   <span className="thinking-dots" aria-label="thinking">
                     <span />
                     <span />
                     <span />
                   </span>
-                ) : null}
+                </div>
               </div>
-              {/* Note: Trace injection requires custom handling in Vercel SDK if needed. We hide it for now unless we add tool_calls mapping. */}
-            </div>
-          ))
+            )}
+          </>
         )}
       </div>
 
@@ -184,7 +213,7 @@ export default function ChatView({
               el.style.height = Math.min(el.scrollHeight, 120) + 'px';
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 const fakeEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
                 handleSubmit(fakeEvent);

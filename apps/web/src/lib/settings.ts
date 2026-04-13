@@ -45,15 +45,20 @@ export async function getRawSettings(d1: D1Database): Promise<LlmSettingsRow | n
   return (rows[0] as LlmSettingsRow) ?? null;
 }
 
-export async function getPublicSettings(d1: D1Database, secretHex: string): Promise<LlmSettingsPublic> {
+export async function getPublicSettings(
+  d1: D1Database,
+  secretHex: string,
+  envOverrides?: {
+    LLM_BASE_URL?: string;
+    LLM_API_KEY?: string;
+    LLM_MODEL_CHAT?: string;
+    LLM_MODEL_TOOL?: string;
+    LLM_MODEL_PUSH?: string;
+    LLM_PROVIDER?: string;
+    GROK_API_KEY?: string;
+  },
+): Promise<LlmSettingsPublic> {
   const row = await getRawSettings(d1);
-  if (!row) {
-    return {
-      provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
-      model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
-      api_key_masked: '', grok_api_key_masked: '', updated_at: '',
-    };
-  }
 
   const decryptField = async (encrypted: string | null) => {
     if (!encrypted || !secretHex) return '';
@@ -61,42 +66,88 @@ export async function getPublicSettings(d1: D1Database, secretHex: string): Prom
     catch { return '(decrypt error)'; }
   };
 
+  const db: LlmSettingsPublic = row
+    ? {
+        provider: row.provider,
+        model_push: row.model_push,
+        model_chat: row.model_chat,
+        model_tool: row.model_tool,
+        base_url: row.base_url,
+        api_key_masked: await decryptField(row.api_key_encrypted),
+        grok_api_key_masked: await decryptField(row.grok_api_key_encrypted),
+        updated_at: row.updated_at,
+      }
+    : {
+        provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
+        model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
+        api_key_masked: '', grok_api_key_masked: '', updated_at: '',
+      };
+
+  // Priority: D1 > env vars > defaults
+  const env = envOverrides ?? {};
+  const hasDbConfig = !!row;
   return {
-    provider: row.provider,
-    model_push: row.model_push,
-    model_chat: row.model_chat,
-    model_tool: row.model_tool,
-    base_url: row.base_url,
-    api_key_masked: await decryptField(row.api_key_encrypted),
-    grok_api_key_masked: await decryptField(row.grok_api_key_encrypted),
-    updated_at: row.updated_at,
+    provider: hasDbConfig ? db.provider : (env.LLM_PROVIDER || db.provider),
+    model_push: hasDbConfig ? db.model_push : (env.LLM_MODEL_PUSH || db.model_push),
+    model_chat: hasDbConfig ? db.model_chat : (env.LLM_MODEL_CHAT || db.model_chat),
+    model_tool: hasDbConfig ? db.model_tool : (env.LLM_MODEL_TOOL || db.model_tool),
+    base_url: hasDbConfig ? db.base_url : (env.LLM_BASE_URL || db.base_url),
+    api_key_masked: hasDbConfig ? db.api_key_masked : (env.LLM_API_KEY ? maskKey(env.LLM_API_KEY) : db.api_key_masked),
+    grok_api_key_masked: hasDbConfig ? db.grok_api_key_masked : (env.GROK_API_KEY ? maskKey(env.GROK_API_KEY) : db.grok_api_key_masked),
+    updated_at: db.updated_at,
   };
 }
 
-export async function getInternalSettings(d1: D1Database, secretHex: string): Promise<LlmSettingsInternal> {
+export async function getInternalSettings(
+  d1: D1Database,
+  secretHex: string,
+  envOverrides?: {
+    LLM_BASE_URL?: string;
+    LLM_API_KEY?: string;
+    LLM_MODEL_CHAT?: string;
+    LLM_MODEL_TOOL?: string;
+    LLM_MODEL_PUSH?: string;
+    LLM_PROVIDER?: string;
+    GROK_API_KEY?: string;
+  },
+): Promise<LlmSettingsInternal> {
+  // ── D1 config (baseline) ──
   const row = await getRawSettings(d1);
-  if (!row) {
-    return {
-      provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
-      model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
-      api_key: '', grok_api_key: '',
-    };
-  }
-
   const decryptField = async (encrypted: string | null) => {
     if (!encrypted || !secretHex) return '';
     try { return await decrypt(encrypted, secretHex); }
     catch { return ''; }
   };
 
+  const db: LlmSettingsInternal = row
+    ? {
+        provider: row.provider,
+        model_push: row.model_push,
+        model_chat: row.model_chat,
+        model_tool: row.model_tool,
+        base_url: row.base_url,
+        api_key: await decryptField(row.api_key_encrypted),
+        grok_api_key: await decryptField(row.grok_api_key_encrypted),
+      }
+    : {
+        provider: 'glm', model_push: 'glm-4-flash', model_chat: 'glm-4.6',
+        model_tool: 'glm-4.6', base_url: 'https://open.bigmodel.cn/api/paas/v4',
+        api_key: '', grok_api_key: '',
+      };
+
+  // ── Priority: D1 > env vars > defaults ──
+  // D1 is user's explicit config (via Settings UI), highest priority.
+  // Env vars are fallback for local dev when D1 is not configured.
+  const env = envOverrides ?? {};
+  const hasDbConfig = !!row;
   return {
-    provider: row.provider,
-    model_push: row.model_push,
-    model_chat: row.model_chat,
-    model_tool: row.model_tool,
-    base_url: row.base_url,
-    api_key: await decryptField(row.api_key_encrypted),
-    grok_api_key: await decryptField(row.grok_api_key_encrypted),
+    provider: hasDbConfig ? db.provider : (env.LLM_PROVIDER || db.provider),
+    model_push: hasDbConfig ? db.model_push : (env.LLM_MODEL_PUSH || db.model_push),
+    model_chat: hasDbConfig ? db.model_chat : (env.LLM_MODEL_CHAT || db.model_chat),
+    model_tool: hasDbConfig ? db.model_tool : (env.LLM_MODEL_TOOL || db.model_tool),
+    base_url: hasDbConfig ? db.base_url : (env.LLM_BASE_URL || db.base_url),
+    api_key: hasDbConfig ? db.api_key : (env.LLM_API_KEY || db.api_key),
+    grok_api_key: hasDbConfig ? db.grok_api_key : (env.GROK_API_KEY || db.grok_api_key),
   };
 }
 

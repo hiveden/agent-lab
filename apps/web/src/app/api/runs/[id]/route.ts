@@ -22,11 +22,17 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const env = getEnv();
+
+  // Allow both: Bearer token (Python agent) and same-origin (frontend).
+  // Single-user app — frontend calls don't carry Bearer token.
   const auth = req.headers.get('authorization') ?? '';
   const expected = `Bearer ${env.RADAR_WRITE_TOKEN}`;
-  if (!env.RADAR_WRITE_TOKEN || auth !== expected) {
+  const isBearerAuth = env.RADAR_WRITE_TOKEN && auth === expected;
+  const isSameOrigin = req.headers.get('sec-fetch-site') === 'same-origin';
+  if (!isBearerAuth && !isSameOrigin) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
   let body: unknown;
   try {
     body = await req.json();

@@ -176,7 +176,7 @@ export default function MobileChatView({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] p-4 flex flex-col gap-3">
         {messages.length === 0 && (
-          <div className="text-[var(--ag-text-2)] text-sm text-center py-10">Ask anything about this article.</div>
+          <div className="text-[var(--ag-text-2)] text-sm text-center py-10">对这篇内容有什么想问的？</div>
         )}
         {messages.map((msg) => (
           <div key={msg.id} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>

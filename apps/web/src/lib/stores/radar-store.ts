@@ -275,25 +275,46 @@ export const useRadarStore = create<RadarStore>()(
         try {
           const res = await fetch(`/api/chat/sessions/${itemId}`);
           if (!res.ok) return;
+          interface StoredMetadata {
+            toolCalls?: Array<{ id: string; name: string; args: unknown }>;
+            annotations?: Array<Record<string, unknown>>;
+          }
           const j = (await res.json()) as {
             session_id: string | null;
-            messages: Array<{ id: string; role: string; content: string }>;
+            messages: Array<{ id: string; role: string; content: string; tool_calls?: unknown[] | null }>;
           };
           const msgs: Message[] = (j.messages ?? [])
             .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .map((m) => ({
-              id: m.id,
-              role: m.role as 'user' | 'assistant',
-              content: m.content,
-            }));
+            .map((m) => {
+              // Parse stored metadata: [{ toolCalls, annotations }]
+              const meta = (m.tool_calls?.[0] ?? null) as StoredMetadata | null;
+              const toolCalls = meta?.toolCalls ?? [];
+              const annotations = meta?.annotations ?? [];
+
+              return {
+                id: m.id,
+                role: m.role as 'user' | 'assistant',
+                content: m.content,
+                ...(toolCalls.length ? {
+                  toolInvocations: toolCalls.map((tc: { id: string; name: string; args: unknown; result?: unknown }) => ({
+                    state: 'result' as const,
+                    toolCallId: tc.id,
+                    toolName: tc.name,
+                    args: tc.args,
+                    result: tc.result ?? {},
+                  })),
+                } : {}),
+                ...(annotations.length ? { annotations: annotations as import('ai').JSONValue[] } : {}),
+              };
+            });
           set((state) => ({
             sessions: {
               ...state.sessions,
               [itemId]: { session_id: j.session_id, messages: msgs },
             },
           }));
-        } catch {
-          /* ignore */
+        } catch (e) {
+          console.error('[radar-store] loadSession failed:', e);
         }
       },
 

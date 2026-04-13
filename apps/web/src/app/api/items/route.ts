@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
 import { listItems } from '@/lib/items';
+import { withErrorHandler } from '@/lib/api-error';
 
 export const runtime = 'edge';
 
-export async function GET(req: Request) {
+export const GET = withErrorHandler(async (req) => {
   const env = getEnv();
   const url = new URL(req.url);
   const agentId = url.searchParams.get('agent_id') ?? 'radar';
@@ -16,4 +17,4 @@ export async function GET(req: Request) {
 
   const items = await listItems(env.DB, { agentId, grade, since, status, limit });
   return NextResponse.json({ items });
-}
+});

@@ -34,9 +34,7 @@ class PlatformClient:
 
     # ── Items ──
 
-    def post_items_batch(
-        self, round_at: datetime, items: list[ItemInput]
-    ) -> dict[str, Any]:
+    def post_items_batch(self, round_at: datetime, items: list[ItemInput]) -> dict[str, Any]:
         batch = ItemBatchInput(round_at=round_at, items=items)
         payload = batch.model_dump(mode="json")
         url = f"{self.base_url}/api/items/batch"
@@ -93,9 +91,7 @@ class PlatformClient:
             resp.raise_for_status()
             return resp.json()
 
-    def update_raw_items_status(
-        self, ids: list[str], status: str
-    ) -> dict[str, Any]:
+    def update_raw_items_status(self, ids: list[str], status: str) -> dict[str, Any]:
         url = f"{self.base_url}/api/raw-items/batch-status"
         with self._client() as client:
             resp = client.patch(
