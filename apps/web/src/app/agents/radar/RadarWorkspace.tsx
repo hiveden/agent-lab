@@ -271,12 +271,11 @@ export default function RadarWorkspace() {
       if (receivedResult !== null) {
         const r = receivedResult as { inserted: number; skipped: number };
         toast.success(
-          `Collected: ${r.inserted} new · ${r.skipped} duplicate`,
+          `Collected: ${r.inserted} new · ${r.skipped} duplicate. Switch to Inbox to view.`,
         );
-        await mutateItems();
       }
     },
-    [pushBusy, mutateItems, setActiveTrace, setTraceOpen, setHighlightSpanId],
+    [pushBusy, setActiveTrace, setTraceOpen, setHighlightSpanId],
   );
 
   // ── Keyboard layer ────────────────────────────────────────────────
