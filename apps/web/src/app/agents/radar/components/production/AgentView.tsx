@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useRuns, type Run } from '@/lib/hooks/use-runs';
 import { toast } from 'sonner';
 import { errorMessage } from '@/lib/fetch';
+import type { Message, ToolInvocation } from 'ai';
+import MessageList from '../shared/MessageList';
 
 const DEFAULT_PROMPT = `你是 Radar,一个科技资讯策展 Agent,目标用户是正在转型 AI Agent 工程师的全栈开发者。
 你的任务:从给定的内容中,挑选 3-5 条最值得推荐给用户的条目。
@@ -73,6 +75,8 @@ export default function AgentView() {
   const [liveSpans, setLiveSpans] = useState<SpanEvent[]>([]);
   const [liveResult, setLiveResult] = useState<ResultEvent | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string>('');
+  const [summarizing, setSummarizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── Derived: selected run data ──
@@ -206,6 +210,43 @@ export default function AgentView() {
         setSelectedRunId(runId);
       }
       mutate();
+
+      // AI summary of results
+      if (collectedResult && !collectedError) {
+        setSummarizing(true);
+        setSummary('');
+        try {
+          const summaryRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{
+                role: 'user',
+                content: `你刚刚完成了一次内容评判。结果如下：\n评判 ${collectedResult.evaluated} 条，推荐 ${collectedResult.promoted} 条，过滤 ${collectedResult.rejected} 条，耗时 ${(collectedResult.total_ms / 1000).toFixed(1)}s。\n\n推荐内容：\n${(collectedResult.preview ?? []).map(p => `- [${p.grade}] ${p.title}${p.why ? ': ' + p.why : ''}`).join('\n') || '无'}\n\n请用 2-3 句话总结这次评判的结果，评价推荐质量，给出改进建议。`,
+              }],
+            }),
+          });
+          if (summaryRes.ok && summaryRes.body) {
+            const reader = summaryRes.body.getReader();
+            const decoder = new TextDecoder();
+            let text = '';
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              // Parse AI SDK data stream: lines starting with 0:" are text chunks
+              for (const line of chunk.split('\n')) {
+                if (line.startsWith('0:')) {
+                  try { text += JSON.parse(line.slice(2)); } catch { /* skip */ }
+                }
+              }
+              setSummary(text);
+            }
+          }
+        } catch { /* ignore summary errors */ } finally {
+          setSummarizing(false);
+        }
+      }
     }
   }, [running, prompt, mutate]);
 
@@ -236,6 +277,66 @@ export default function AgentView() {
       : null;
 
   const displayError = isLive ? liveError : selectedRun?.error ?? null;
+
+  // ── Convert spans/result/summary into Message[] for MessageList ──
+  const displayMessages: Message[] = useMemo(() => {
+    const msgs: Message[] = [];
+    const hasContent = displaySpans.length > 0 || displayResult || displayError;
+    if (!hasContent && !summary && !summarizing) return msgs;
+
+    // User message
+    msgs.push({ id: 'exec-user', role: 'user', content: '执行评判' });
+
+    // Assistant message with tool invocations + summary
+    const toolInvocations: ToolInvocation[] = displaySpans.map((s) => {
+      const isDone = s.status === 'done' || s.status === 'failed';
+      const resultContent: Record<string, unknown> = {};
+      if (s.detail) Object.assign(resultContent, s.detail);
+      if (s.ms != null) resultContent._ms = s.ms;
+      if (s.status === 'failed') resultContent._failed = true;
+
+      return {
+        state: isDone ? 'result' as const : 'call' as const,
+        toolCallId: s.id,
+        toolName: s.title,
+        args: { kind: s.kind, ...(s.detail ?? {}) },
+        ...(isDone ? { result: resultContent } : {}),
+      } as ToolInvocation;
+    });
+
+    // Build assistant content
+    let content = '';
+    if (displayError) {
+      content += `**错误：** ${displayError}\n\n`;
+    }
+    if (displayResult) {
+      if (displayResult.evaluated === 0) {
+        content += '当前没有待评判的内容。请先在「数据源」页面配置源并执行采集。\n\n';
+      } else {
+        content += `评判 **${displayResult.evaluated}** 条 · 推荐 **${displayResult.promoted}** 条 · 过滤 **${displayResult.rejected}** 条 · ${(displayResult.total_ms / 1000).toFixed(1)}s\n\n`;
+        if (displayResult.preview?.length) {
+          for (const p of displayResult.preview) {
+            content += `- **[${p.grade}]** ${p.title}${p.why ? ' — ' + p.why : ''}${p.url ? ` [↗](${p.url})` : ''}\n`;
+          }
+          content += '\n';
+        }
+      }
+    }
+    if (summary) {
+      content += summary;
+    }
+
+    msgs.push({
+      id: 'exec-assistant',
+      role: 'assistant',
+      content,
+      toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
+    });
+
+    return msgs;
+  }, [displaySpans, displayResult, displayError, summary, summarizing]);
+
+  const isMessageLoading = running || summarizing;
 
   // ── Render ──
   return (
@@ -343,114 +444,13 @@ export default function AgentView() {
           )}
         </div>
 
-        {/* Trace + Result */}
-        <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
-          {displaySpans.length === 0 && !displayResult && !displayError && (
-            <p className="text-[var(--text-3)] text-[13px] text-center py-8">
-              {selectedRun ? '此次执行无详细记录' : '选择一条历史记录，或点击"执行"开始'}
-            </p>
-          )}
-
-          {/* Trace spans */}
-          {displaySpans.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-[12px] font-semibold text-[var(--text-2)] mb-2">执行过程</h3>
-              <div className="flex flex-col gap-1">
-                {displaySpans.map((s) => (
-                  <div key={s.id} className="flex items-start gap-2 text-[12px] py-1.5 px-2 rounded-[4px] bg-[var(--bg-sunk)]">
-                    <span className={cn(
-                      'w-1.5 h-1.5 rounded-full shrink-0 mt-1',
-                      s.status === 'done' && 'bg-[var(--green,#16a34a)]',
-                      s.status === 'running' && 'bg-[var(--bolt,#eab308)] animate-pulse',
-                      s.status === 'failed' && 'bg-[var(--fire,#dc2626)]',
-                    )} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[var(--text)]">{s.title}</span>
-                        {s.ms != null && (
-                          <span className="text-[var(--text-3)] text-[11px] shrink-0">
-                            {s.ms < 1000 ? `${s.ms}ms` : `${(s.ms / 1000).toFixed(1)}s`}
-                          </span>
-                        )}
-                      </div>
-                      {s.detail ? (
-                        <div className="text-[11px] text-[var(--text-3)] mt-0.5 leading-[1.5]">
-                          {s.detail.prompt_preview ? <div>Prompt: {String(s.detail.prompt_preview).slice(0, 100)}…</div> : null}
-                          {s.detail.response_preview ? <div>Response: {String(s.detail.response_preview).slice(0, 150)}…</div> : null}
-                          {s.detail.why ? <div>{String(s.detail.why)}</div> : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {displayError && (
-            <div className="mb-4 p-3 rounded-[6px] bg-[var(--fire-bg,#fef2f2)] border border-[var(--fire,#dc2626)] text-[12.5px] text-[var(--fire,#dc2626)]">
-              {displayError}
-            </div>
-          )}
-
-          {/* Result */}
-          {displayResult && (
-            <div className="mb-4">
-              <h3 className="text-[12px] font-semibold text-[var(--text-2)] mb-2">执行结果</h3>
-              {displayResult.evaluated === 0 && (
-                <div className="mb-3 p-3 rounded-[6px] bg-[var(--bolt-bg)] border border-[var(--bolt)] text-[12.5px] text-[var(--bolt)]">
-                  当前没有待评判的内容。请先在「数据源」页面配置源并执行采集，再回来评判。
-                </div>
-              )}
-              <div className="flex gap-3 mb-3">
-                <div className="text-center px-3 py-2 bg-[var(--bg-sunk)] rounded-[6px]">
-                  <div className="text-[18px] font-semibold text-[var(--text)]">{displayResult.evaluated}</div>
-                  <div className="text-[11px] text-[var(--text-3)]">评判</div>
-                </div>
-                <div className="text-center px-3 py-2 bg-[var(--bg-sunk)] rounded-[6px]">
-                  <div className="text-[18px] font-semibold text-[var(--green,#16a34a)]">{displayResult.promoted}</div>
-                  <div className="text-[11px] text-[var(--text-3)]">推荐</div>
-                </div>
-                <div className="text-center px-3 py-2 bg-[var(--bg-sunk)] rounded-[6px]">
-                  <div className="text-[18px] font-semibold text-[var(--text-2)]">{displayResult.rejected}</div>
-                  <div className="text-[11px] text-[var(--text-3)]">过滤</div>
-                </div>
-                <div className="text-center px-3 py-2 bg-[var(--bg-sunk)] rounded-[6px]">
-                  <div className="text-[18px] font-semibold text-[var(--text)]">{(displayResult.total_ms / 1000).toFixed(1)}s</div>
-                  <div className="text-[11px] text-[var(--text-3)]">耗时</div>
-                </div>
-              </div>
-
-              {displayResult.preview && displayResult.preview.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <h4 className="text-[11.5px] font-semibold text-[var(--text-2)]">推荐内容</h4>
-                  {displayResult.preview.map((item, i) => (
-                    <div key={i} className="border border-[var(--border)] rounded-[6px] p-3 bg-[var(--surface)]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={cn(
-                          'text-[10px] px-1.5 py-0 rounded font-medium',
-                          item.grade === 'fire' && 'bg-[var(--fire-bg)] text-[var(--fire)]',
-                          item.grade === 'bolt' && 'bg-[var(--bolt-bg)] text-[var(--bolt)]',
-                          item.grade === 'bulb' && 'bg-[var(--bulb-bg)] text-[var(--bulb)]',
-                        )}>
-                          {item.grade}
-                        </span>
-                        <span className="text-[13px] font-medium text-[var(--text)] flex-1">{item.title}</span>
-                        {item.url && (
-                          <a href={item.url} target="_blank" rel="noopener noreferrer"
-                            className="text-[var(--accent)] text-[11px] shrink-0 hover:underline">↗</a>
-                        )}
-                      </div>
-                      {item.why && (
-                        <div className="text-[12px] text-[var(--text-2)] leading-[1.5]">{item.why}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Chat-style message flow — reuses MessageList from inbox */}
+        <div className="chat-scroll flex-1" ref={scrollRef}>
+          <MessageList
+            messages={displayMessages}
+            isLoading={isMessageLoading}
+            emptyText={selectedRun ? '此次执行无详细记录' : '选择一条历史记录，或点击「执行」开始'}
+          />
         </div>
       </div>
     </div>

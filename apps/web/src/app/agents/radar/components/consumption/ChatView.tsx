@@ -8,8 +8,7 @@ import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { cn } from '@/lib/utils';
 import { buildTraceFromMessages } from '@/lib/trace';
-import ToolCard from './ToolCard';
-import MarkdownContent from './MarkdownContent';
+import MessageList from '../shared/MessageList';
 
 interface Props {
   item: ItemWithState;
@@ -128,60 +127,11 @@ export default function ChatView({
       )}
 
       <div className="chat-scroll" ref={scrollRef}>
-        {messages.length === 0 ? (
-          <div
-            style={{
-              color: 'var(--text-3)',
-              fontSize: 12.5,
-              padding: '20px 0',
-            }}
-          >
-            对这条推送有什么想追问的? 发一条消息试试。
-          </div>
-        ) : (
-          <>
-            {messages.map((m: Message) => (
-              <div
-                key={m.id}
-                className={`msg ${m.role}${isLoading && m.role === 'assistant' && !m.content ? ' streaming' : ''}`}
-              >
-                <div className="msg-meta">
-                  {m.role === 'user' ? 'you' : 'radar'}
-                </div>
-                <div className="msg-bubble">
-                  {m.toolInvocations?.map((inv) => (
-                    <ToolCard key={inv.toolCallId} invocation={inv} />
-                  ))}
-                  {m.content ? (
-                    m.role === 'assistant' ? (
-                      <MarkdownContent content={m.content} />
-                    ) : (
-                      m.content
-                    )
-                  ) : isLoading && m.role === 'assistant' && !m.toolInvocations?.length ? (
-                    <span className="thinking-dots" aria-label="thinking">
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-            {isLoading && messages[messages.length - 1]?.role === 'user' && (
-              <div className="msg assistant streaming">
-                <div className="msg-meta">radar</div>
-                <div className="msg-bubble">
-                  <span className="thinking-dots" aria-label="thinking">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          emptyText="对这条推送有什么想追问的? 发一条消息试试。"
+        />
       </div>
 
       <div className="border-t border-[var(--border)] bg-[var(--surface-hi)] px-4 pt-2.5 pb-3 shrink-0">
