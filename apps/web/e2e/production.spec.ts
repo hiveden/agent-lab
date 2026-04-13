@@ -125,35 +125,9 @@ test('Step 3: ingest creates raw_items', async ({ request }) => {
   console.log(`Ingest: ${rawItems.length} raw_items`);
 });
 
-// ─── Step 4: Evaluate ────────────────────────────────────────
+// ─── Step 4: Management views ────────────────────────────────
 
-test('Step 4: evaluate promotes items', async ({ request }) => {
-  const res = await request.post(`${PYTHON}/evaluate`, {
-    headers: { 'content-type': 'application/json', ...AUTH },
-    data: JSON.stringify({ agent_id: 'radar' }),
-    timeout: 60_000,
-  });
-  expect(res.status()).toBe(200);
-  await new Promise((r) => setTimeout(r, 1500));
-
-  // items exist
-  const items = (await (await request.get('/api/items?agent_id=radar')).json()).items;
-  expect(items.length).toBeGreaterThan(0);
-
-  // raw_items status transition
-  const promoted = (await (await request.get('/api/raw-items?agent_id=radar&status=promoted')).json()).raw_items;
-  const rejected = (await (await request.get('/api/raw-items?agent_id=radar&status=rejected')).json()).raw_items;
-  const pending = (await (await request.get('/api/raw-items?agent_id=radar&status=pending')).json()).raw_items;
-
-  expect(promoted.length + rejected.length).toBeGreaterThan(0);
-  expect(pending.length).toBe(0);
-
-  console.log(`Evaluate: ${promoted.length} promoted, ${rejected.length} rejected, ${items.length} items`);
-});
-
-// ─── Step 5: Management views ────────────────────────────────
-
-test('Step 5: management views render clean', async ({ page }) => {
+test('Step 4: management views render clean', async ({ page }) => {
   await page.goto('/agents/radar');
   await page.waitForLoadState('networkidle');
 
@@ -172,24 +146,18 @@ test('Step 5: management views render clean', async ({ page }) => {
   await runVisualAudit(page, 'production-runs');
 });
 
-// ─── Step 6: Data lineage ────────────────────────────────────
+// ─── Step 5: Data lineage ────────────────────────────────────
 
-test('Step 6: data lineage complete', async ({ request }) => {
+test('Step 5: data lineage complete', async ({ request }) => {
   const sources = (await (await request.get('/api/sources?agent_id=radar')).json()).sources;
   const rawItems = (await (await request.get('/api/raw-items?agent_id=radar')).json()).raw_items;
-  const items = (await (await request.get('/api/items?agent_id=radar')).json()).items;
-  const runs = (await (await request.get('/api/runs?agent_id=radar')).json()).runs;
-  const att = await (await request.get('/api/attention/snapshot?agent_id=radar')).json();
+  const runs = (await (await request.get('/api/runs?agent_id=radar&phase=ingest')).json()).runs;
 
   expect(sources.length).toBeGreaterThan(0);
   expect(rawItems.length).toBeGreaterThan(0);
-  expect(items.length).toBeGreaterThan(0);
-  expect(runs.length).toBeGreaterThanOrEqual(2);
+  expect(runs.length).toBeGreaterThanOrEqual(1);
 
-  console.log('\n== PRODUCTION DATA LINEAGE ==');
-  console.log(`Sources: ${sources.length} | Raw: ${rawItems.length} | Items: ${items.length} | Runs: ${runs.length}`);
-  for (const s of att.sources) {
-    console.log(`  ${s.source_name}: expected=${(s.expected_weight * 100).toFixed(0)}% actual=${(s.actual_weight * 100).toFixed(0)}% dev=${(s.deviation * 100).toFixed(0)}%`);
-  }
+  console.log('\n== COLLECTION DATA LINEAGE ==');
+  console.log(`Sources: ${sources.length} | Raw items: ${rawItems.length} | Ingest runs: ${runs.length}`);
   console.log('=============================\n');
 });
