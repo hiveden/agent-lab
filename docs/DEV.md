@@ -1,15 +1,12 @@
 # 本地开发指南
 
-## 架构与技术栈约定 (生产级)
+## 架构约定
 
-为了支撑长期迭代和未来的多 Agent 平台化扩展，本项目确立了以下生产级架构原则：
-
-1. **核心解耦 (控制面 vs 数据面)**:
-   - **Next.js (Control Plane)**: 掌握 D1 数据库、状态管理、调度发起、UI 渲染。
-   - **Python Agent (Data Plane)**: 降级为无状态引擎，专注于信息采集、RAG 和 LLM 编排，通过 API 获取必要上下文，执行完毕即焚。
-2. **强类型与工程化底座**:
-   - 数据库抛弃手写裸 SQL，全面拥抱 **Drizzle ORM** (强类型 + Migration 管理)。
-   - 对话流抛弃手搓 SSE 解析，全面拥抱 **Vercel AI SDK** (`ai` 包)，解决中文字符截断乱码、状态管理脆弱等问题。
+1. **BFF 与 Agent 解耦**:
+   - **Next.js (BFF)**: DB CRUD、Auth、SSE 透传、Cron 调度。不做 LLM 推理。
+   - **Python Agent**: LangGraph agent loop、tool calling、采集 pipeline。无状态。
+2. **通信协议**: AG-UI Protocol (SSE)，CopilotKit 前端渲染。
+3. **数据归属**: 所有持久化状态在 BFF 的 D1 数据库，Agent Server 无状态。
 
 ---
 
@@ -28,33 +25,32 @@ pnpm install                                 # 装 apps/web + packages/types
 uv sync                                      # 装 agents/shared + agents/radar
 ```
 
-## 启动顺序 (三个进程)
+## 启动顺序 (两个进程)
 
 ```bash
-# 终端 1 — Next.js + 本地 D1
+# 终端 1 — Next.js BFF + 本地 D1
 pnpm dev:web
-# 默认 http://127.0.0.1:8788
+# http://127.0.0.1:8788
 
-# 终端 2 — Radar Agent FastAPI 服务 (对话流)
+# 终端 2 — Radar Agent (FastAPI + LangGraph)
 cd agents/radar && uv run radar-serve
-# 默认 http://127.0.0.1:8001
-
-# 终端 3 — 手动触发推送流 (一次性)
-cd agents/radar && uv run radar-push
+# http://127.0.0.1:8001
 ```
 
 ## 端口约定
 
 | 服务 | 端口 | 说明 |
 |---|---|---|
-| Next.js (wrangler dev) | 8788 | API + UI + D1 |
-| Radar Agent (FastAPI) | 8001 | 对话流 SSE |
+| Next.js (wrangler dev) | 8788 | BFF + UI + D1 |
+| Radar Agent (FastAPI) | 8001 | Agent chat (AG-UI SSE) + 采集 pipeline |
 
 ## 数据流
 
 ```
-推送流: cron.py → collectors → recommend chain → POST /api/items/batch → D1
-对话流: 前端 → Next.js POST /api/chat → Radar /chat (SSE) → LLM → 流回
+Agent 对话: CopilotKit → BFF /api/agent/chat → Python /agent/chat (AG-UI SSE) → LangGraph → LLM
+采集流:     BFF /api/cron/radar/ingest → Python /ingest → Collectors → POST /api/raw-items/batch → D1
+评判流:     用户对话触发 → LangGraph evaluate tool → 读 raw_items → LLM 评判 → 写 items → D1
+           或 BFF /api/cron/radar/evaluate → Python /evaluate → 独立 SSE pipeline
 ```
 
 ## Mock vs Real LLM

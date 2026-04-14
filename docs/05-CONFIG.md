@@ -47,6 +47,7 @@
 | `GLM_BASE_URL` | — | `https://open.bigmodel.cn/api/paas/v4` | |
 | `LLM_MODEL_PUSH` | — | `glm-4-flash` | |
 | `LLM_MODEL_CHAT` | — | `glm-4.6` | |
+| `LLM_MODEL_AGENT` | — | `glm-4.6` | Agent chat 用的模型 |
 | `RADAR_WRITE_TOKEN` | ✅ | `dev-radar-token-change-me` | 必须和 CP 侧一致 |
 | `PLATFORM_API_BASE` | ✅ | `http://127.0.0.1:8788` | 生产设为 Cloudflare Pages URL |
 | `RADAR_AGENT_PORT` | — | `8001` | |

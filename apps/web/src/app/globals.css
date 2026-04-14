@@ -412,19 +412,40 @@ kbd.k {
    ═══════════════════════════════════════════════════════════ */
 
 .drag-handle {
-  height: 6px; background: var(--border);
+  height: 12px; background: transparent; position: relative;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: background .15s;
+  cursor: row-resize; transition: background .15s;
 }
-.drag-handle:hover, .drag-handle:active { background: var(--text-3); }
-.drag-bar { width: 40px; height: 3px; border-radius: 2px; background: var(--text-3); }
+.drag-handle:hover, .drag-handle[data-separator="active"] { background: var(--bg-sunk); }
+.drag-bar { width: 40px; height: 3px; border-radius: 2px; background: var(--text-3); opacity: .4; transition: opacity .15s; }
+.drag-handle:hover .drag-bar, .drag-handle[data-separator="active"] .drag-bar { opacity: 1; }
 
 .trace-divider {
-  width: 6px; background: var(--border); position: relative;
-  transition: background .15s, width .15s, opacity .15s; cursor: col-resize;
+  width: 12px; background: transparent; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: col-resize; transition: background .15s;
 }
-.trace-divider:hover, .trace-divider:active { background: var(--accent); }
-.trace-divider::before { content: ''; position: absolute; inset: 0 -3px; cursor: col-resize; }
+.trace-divider:hover, .trace-divider[data-separator="active"] { background: var(--bg-sunk); }
+/* Help icon tooltip */
+.help-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid var(--border); color: var(--text-3);
+  font-size: 10px; cursor: help; transition: color .15s, border-color .15s;
+}
+.help-icon:hover { color: var(--text-2); border-color: var(--text-3); }
+.help-bubble {
+  width: max-content; max-width: 220px; padding: 6px 10px;
+  background: var(--text); color: var(--bg); font-size: 11px; line-height: 1.5;
+  border-radius: 6px; z-index: 9999; pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+.trace-divider::after {
+  content: ''; width: 3px; height: 24px; border-radius: 2px;
+  background: var(--text-3); opacity: .4; transition: opacity .15s;
+}
+.trace-divider:hover::after, .trace-divider[data-separator="active"]::after { opacity: 1; }
 
 /* ═══════════════════════════════════════════════════════════
    Toast
