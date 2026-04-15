@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './copilotkit-theme.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -115,6 +116,7 @@
   --text-faint:   #b5b7bf;
 
   --accent:       #4f46e5;
+  --accent-brand: #4f46e5;  /* alias: 不受 CopilotKit theme bridge 重写 */
   --accent-2:     #6366f1;
   --accent-soft:  #eef0ff;
   --accent-line:  #c7caff;
@@ -184,6 +186,7 @@
   --text-faint:   #4a4640;
 
   --accent:       #818cf8;
+  --accent-brand: #818cf8;
   --accent-2:     #a5b4fc;
   --accent-soft:  rgba(129,140,248,0.12);
   --accent-line:  rgba(129,140,248,0.25);
@@ -373,7 +376,13 @@ kbd.k {
 }
 .msg.user .msg-bubble { white-space: pre-wrap; }
 .msg.user .msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 2px; }
-.msg.assistant .msg-bubble { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 2px; }
+.msg.assistant .msg-bubble,
+.assistant-bubble { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 2px; }
+.msg.user .msg-bubble,
+.user-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 2px; white-space: pre-wrap; }
+/* CopilotKit 作用域内 --accent 被 theme bridge 重写为 shadcn accent（浅色），
+   .user-bubble 需要用不受重写影响的 --accent-brand */
+[data-copilotkit] .user-bubble { background: var(--accent-brand); }
 .msg.assistant.streaming .msg-bubble::after {
   content: '▍'; display: inline-block; margin-left: 1px;
   color: var(--accent); animation: caret 1s steps(2) infinite;

@@ -196,7 +196,7 @@ function ResetButton({ onReset }: { onReset: () => void }) {
 
 // ── Single card component ────────────────────────────────
 
-function ConfigCard({ def }: { def: CardDef }) {
+function ConfigCard({ def, onChange }: { def: CardDef; onChange?: () => void }) {
   const [items, setItems] = useState(() => loadCard(def));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -205,8 +205,9 @@ function ConfigCard({ def }: { def: CardDef }) {
     (next: string[]) => {
       setItems(next);
       saveCard(def, next);
+      onChange?.();
     },
-    [def],
+    [def, onChange],
   );
 
   const removeItem = useCallback(
@@ -349,11 +350,11 @@ function TextCard({
 
 // ── Main export ──────────────────────────────────────────
 
-export default function ConfigCards() {
+export default function ConfigCards({ onChange }: { onChange?: () => void } = {}) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5 p-3">
       {CARDS.map((def) => (
-        <ConfigCard key={def.key} def={def} />
+        <ConfigCard key={def.key} def={def} onChange={onChange} />
       ))}
     </div>
   );

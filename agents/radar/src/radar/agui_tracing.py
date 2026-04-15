@@ -66,7 +66,14 @@ def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
 
 
 class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
-    """去重 AG-UI START/END 配对事件 + run 结束后 best-effort 持久化对话。"""
+    """去重 AG-UI 事件 + run 结束后 best-effort 持久化对话。
+
+    去重两层:
+    1. START/END 配对 — 重复 START 和孤立 END 直接吞掉
+    2. CONTENT 连续去重 — DeferredLLM 包装器导致每个 token 从 ChatOpenAI 和
+       DeferredLLM 各发一次，表现为连续两个相同 (message_id, delta) 事件。
+       检测到连续重复时丢弃第二个。
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -74,6 +81,8 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
         self._active: dict[EventType, set[str]] = {
             start_type: set() for start_type in _PAIRED_EVENTS
         }
+        # 上一个 CONTENT 事件的 (message_id, delta)，用于连续去重
+        self._last_content: tuple[str | None, str | None] = (None, None)
 
     def _dispatch_event(self, event: Any) -> Any:
         event_type = getattr(event, "type", None)
@@ -105,6 +114,16 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
                 return None
             if event_id:
                 self._active[start_type].discard(event_id)
+
+        # ── CONTENT 连续去重 ──
+        # DeferredLLM 包装器导致 ChatOpenAI 和 DeferredLLM 各发一次相同 delta，
+        # 表现为连续两个 (message_id, delta) 完全相同的事件。丢弃第二个。
+        elif event_type == EventType.TEXT_MESSAGE_CONTENT:
+            key = (getattr(event, "message_id", None), getattr(event, "delta", None))
+            if key == self._last_content:
+                self._last_content = (None, None)
+                return None
+            self._last_content = key
 
         return super()._dispatch_event(event)
 

@@ -1,0 +1,121 @@
+/*
+ * CopilotKit Theme Bridge
+ *
+ * CopilotKit v2 在 [data-copilotkit] 作用域内定义了一套 shadcn-like CSS 变量（冷灰色调），
+ * 覆盖了项目 :root 的暖色 design tokens。此文件将项目 tokens 重新注入 CopilotKit 作用域，
+ * 使 Chat 组件与整体 UI 视觉统一。
+ *
+ * 设计文档: docs/15-COPILOTKIT-THEME-BRIDGE.md
+ */
+
+/* ── Light mode ─────────────────────────────────────────── */
+
+[data-copilotkit] {
+  /* shadcn bridge → 项目 design tokens */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-sunk);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-sunk);
+  --muted-foreground: var(--text-3);
+  --accent: var(--accent-ui);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border);
+  --input: var(--border);
+  --ring: var(--accent);
+
+  /* 字体对齐 */
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Dark mode ──────────────────────────────────────────── */
+
+.dark [data-copilotkit] {
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #1a1916;
+  --secondary: var(--bg-sunk);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-sunk);
+  --muted-foreground: var(--text-3);
+  --accent: var(--accent-ui);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border);
+  --input: var(--border);
+  --ring: var(--accent);
+}
+
+/* ── 消息列表间距对齐 Inbox ─────────────────────────────── */
+
+/* 消息间距：CopilotKit 默认 pt-8/pt-10，统一为 14px 匹配 Inbox gap */
+[data-copilotkit] .copilotKitMessage {
+  padding-top: 14px !important;
+}
+[data-copilotkit] .copilotKitMessage:first-child {
+  padding-top: 0 !important;
+}
+
+/* meta 标签（"you"/"radar"）复用 Inbox .msg-meta */
+[data-copilotkit] .msg-meta {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 3px;
+}
+
+/* ── Chat 输入框紧凑化 ──────────────────────────────────── */
+
+/* textarea 容器：去掉 50px 最小高度 */
+[data-copilotkit] [data-layout="compact"] .cpk\:min-h-\[50px\] {
+  min-height: auto;
+}
+
+/* textarea：减小纵向 padding */
+[data-copilotkit] [data-testid="copilot-chat-textarea"] {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 13px;
+}
+
+/* 发送/附件按钮：缩小 */
+[data-copilotkit] [data-layout="compact"] .cpk\:h-9 {
+  height: 32px;
+  width: 32px;
+}
+
+/* 整个输入栏：收紧 gap 和 padding */
+[data-copilotkit] [data-layout="compact"] {
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+/* ── 滚动条对齐 ─────────────────────────────────────────── */
+
+[data-copilotkit] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-copilotkit] ::-webkit-scrollbar-track { background: transparent; }
+[data-copilotkit] ::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid var(--bg);
+  border-radius: 6px;
+}
+[data-copilotkit] ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+[data-copilotkit] * { scrollbar-width: auto; scrollbar-color: var(--border-strong) transparent; }

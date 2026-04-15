@@ -1,39 +1,22 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, useReducer } from 'react';
 import { Group, Panel, Separator, type Layout, type PanelImperativeHandle } from 'react-resizable-panels';
 import {
   CopilotKit,
-  useCoAgent,
-  useCopilotChatInternal,
-  useCopilotAction,
-  useCopilotReadable,
-} from '@copilotkit/react-core';
-import { CopilotChat } from '@copilotkit/react-ui';
-import '@copilotkit/react-ui/styles.css';
-// AG-UI message types — inline to avoid pnpm strict-mode issues with transitive @ag-ui/core
-interface AGUIToolCall {
-  id: string;
-  type: 'function';
-  function: { name: string; arguments: string };
-}
-interface AGUIAssistantMessage {
-  id: string;
-  role: 'assistant';
-  content?: string;
-  toolCalls?: AGUIToolCall[];
-}
-interface AGUIToolMessage {
-  id: string;
-  role: 'tool';
-  content: string;
-  toolCallId: string;
-}
-type AGUIMessage = AGUIAssistantMessage | AGUIToolMessage | { id: string; role: string; [key: string]: unknown };
+  CopilotChat,
+  useAgent,
+  useAgentContext,
+  type Message,
+  type AssistantMessage,
+  type ToolMessage,
+} from '@copilotkit/react-core/v2';
+import '@copilotkit/react-core/v2/styles.css';
 import { cn } from '@/lib/utils';
 import type { Trace, Span, SpanSection } from '@/lib/trace';
 import TraceDrawer from '../consumption/TraceDrawer';
-import ConfigCards from './ConfigCards';
+import MarkdownContent from '../consumption/MarkdownContent';
+import ConfigCards, { buildPromptFromCards } from './ConfigCards';
 import ResultsPane, { type ResultBatch } from './ResultsPane';
 
 // ── Helpers ───────────────────────────────────────────────
@@ -106,20 +89,20 @@ const PRESETS = [
 
 // ── Extract evaluate results from AG-UI messages ──────────
 
-function extractResultBatches(messages: AGUIMessage[]): ResultBatch[] {
+function extractResultBatches(messages: Message[]): ResultBatch[] {
   const batches: ResultBatch[] = [];
 
   const toolResultMap = new Map<string, string>();
   for (const m of messages) {
     if (m.role === 'tool') {
-      const tr = m as AGUIToolMessage;
+      const tr = m as ToolMessage;
       toolResultMap.set(tr.toolCallId, tr.content);
     }
   }
 
   for (const m of messages) {
     if (m.role !== 'assistant') continue;
-    const am = m as AGUIAssistantMessage;
+    const am = m as AssistantMessage;
     if (!am.toolCalls?.length) continue;
 
     for (const tc of am.toolCalls) {
@@ -155,19 +138,19 @@ function extractResultBatches(messages: AGUIMessage[]): ResultBatch[] {
 
 // ── Build Trace from AG-UI messages ───────────────────────
 
-function buildTraceFromMessages(messages: AGUIMessage[]): Trace {
+function buildTraceFromMessages(messages: Message[]): Trace {
   const spans: Span[] = [];
 
-  const toolResultMap = new Map<string, AGUIToolMessage>();
+  const toolResultMap = new Map<string, ToolMessage>();
   for (const m of messages) {
     if (m.role === 'tool') {
-      toolResultMap.set((m as AGUIToolMessage).toolCallId, m as AGUIToolMessage);
+      toolResultMap.set((m as ToolMessage).toolCallId, m as ToolMessage);
     }
   }
 
   for (const m of messages) {
     if (m.role === 'assistant') {
-      const am = m as AGUIAssistantMessage;
+      const am = m as AssistantMessage;
 
       if (am.toolCalls?.length) {
         for (const tc of am.toolCalls) {
@@ -225,41 +208,41 @@ interface RadarAgentState {
 }
 
 function AgentViewInner() {
-  // ── CoAgent: shared state with Python LangGraph agent ──
-  const { state: agentState } = useCoAgent<RadarAgentState>({
-    name: 'radar',
-    initialState: {},
-  });
+  // ── Stable threadId shared between CopilotChat and useAgent ──
+  const threadId = useMemo(() => crypto.randomUUID(), []);
 
-  // ── Chat: AG-UI messages + control ──
-  // useCopilotChatInternal provides AG-UI format messages (with toolCalls, toolCallId)
-  // needed for trace building and result extraction
-  const {
-    messages: ckMessages,
-    isLoading,
-    stopGeneration,
-    sendMessage,
-  } = useCopilotChatInternal();
+  // ── Agent: shared state + messages + control via AbstractAgent ──
+  const { agent } = useAgent({ agentId: 'radar', threadId });
 
-  const messages = ckMessages as unknown as AGUIMessage[];
+  // ── Bridge: subscribe Inspector to thread clone ──
+  // CopilotKit bug: Inspector only subscribes to agents in core.agents (registry),
+  // but CopilotChat runs on a thread clone that's not registered there.
+  // Workaround: find the Inspector web component and directly subscribe it to the clone.
+  // Inspector is lazy-loaded (dynamic import), so poll briefly until it appears.
+  useEffect(() => {
+    if (!agent?.agentId) return;
+    let attempts = 0;
+    const trySubscribe = () => {
+      const el = document.querySelector('cpk-web-inspector') as any;
+      if (el?.subscribeToAgent) {
+        el.subscribeToAgent(agent);
+        return;
+      }
+      if (++attempts < 20) setTimeout(trySubscribe, 200);
+    };
+    trySubscribe();
+  }, [agent]);
 
-  // ── Context: inject agent config as readable context for the agent ──
-  useCopilotReadable({
-    description: '用户的推荐偏好和过滤规则配置',
-    value: '用户关注: AI/Agent/LLM infra, 独立开发者故事, CLI工具. 过滤: AI论文评测, 大公司产品更新. 质量门槛: 每轮≤5条, 不确定时宁可不推.',
-  });
+  const agentState = (agent.state ?? {}) as RadarAgentState;
+  const messages = agent.messages;
+  const isRunning = agent.isRunning;
 
-  // ── Frontend tools: actions the agent can invoke on the frontend ──
-  useCopilotAction({
-    name: 'show_notification',
-    description: '在前端显示一条通知消息，用于告知用户操作结果',
-    parameters: [
-      { name: 'message', type: 'string', description: '通知内容' },
-      { name: 'type', type: 'string', description: '通知类型: success | error | info', required: false },
-    ],
-    handler: ({ message, type }) => {
-      console.log(`[Agent Notification] ${type ?? 'info'}: ${message}`);
-    },
+  // ── Inject user preferences as agent context ──
+  const [configVersion, bumpConfigVersion] = useReducer((x: number) => x + 1, 0);
+  const userPreferences = useMemo(() => buildPromptFromCards(), [configVersion]);
+  useAgentContext({
+    description: '用户偏好配置（使命、推荐偏好、过滤规则、质量门槛、背景、兴趣、反感内容）',
+    value: userPreferences,
   });
 
   // ── Panel collapse state ──
@@ -284,13 +267,10 @@ function AgentViewInner() {
 
   // ── Preset send ──
   const sendPreset = useCallback((msg: string) => {
-    if (isLoading) return;
-    sendMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: msg,
-    });
-  }, [isLoading, sendMessage]);
+    if (isRunning) return;
+    agent.addMessage({ id: crypto.randomUUID(), role: 'user', content: msg });
+    agent.runAgent();
+  }, [isRunning, agent]);
 
   // ── Collapse toggles ──
   const toggleConfig = useCallback(() => {
@@ -324,7 +304,7 @@ function AgentViewInner() {
             )}
           >
             <div className="flex items-center gap-1.5 mb-0.5">
-              {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-bolt animate-pulse" />}
+              {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-bolt animate-pulse" />}
               <span className="font-medium text-text">
                 {messages.length > 0 ? `${messages.length} 条消息` : '新会话'}
               </span>
@@ -370,7 +350,7 @@ function AgentViewInner() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <ConfigCards />
+                <ConfigCards onChange={bumpConfigVersion} />
               </div>
             </div>
           </Panel>
@@ -407,7 +387,7 @@ function AgentViewInner() {
                   batches={resultBatches}
                   currentIndex={resultPageIndex}
                   onNavigate={setResultPageIndex}
-                  running={isLoading}
+                  running={isRunning}
                 />
               </div>
             </div>
@@ -456,7 +436,7 @@ function AgentViewInner() {
                           <button
                             key={p.label}
                             className="text-[11px] py-[2px] px-2 bg-surface border border-border-hi rounded-full text-text-2 cursor-pointer transition-all duration-[.12s] hover:border-accent-line hover:bg-accent-soft hover:text-accent-brand"
-                            disabled={isLoading}
+                            disabled={isRunning}
                             onClick={() => sendPreset(p.msg)}
                           >
                             {p.label}
@@ -465,15 +445,64 @@ function AgentViewInner() {
                       </div>
                     </div>
                     {/* CopilotChat — replaces MessageList + input */}
-                    <div className="flex-1 overflow-hidden">
+                    <div className="flex-1 min-h-0 overflow-hidden">
                       <CopilotChat
-                        className="h-full"
+                        agentId="radar"
+                        threadId={threadId}
+                        className="h-full flex flex-col"
                         labels={{
-                          placeholder: '和 Radar 对话...',
-                          initial: '与 Radar Agent 对话，或点击预设开始',
-                          stopGenerating: '停止',
+                          chatInputPlaceholder: '和 Radar 对话...',
+                          welcomeMessageText: '与 Radar Agent 对话，或点击预设开始',
                         }}
-                        onStopGeneration={() => stopGeneration()}
+                        onStop={() => agent.abortRun()}
+                        messageView={{
+                          className: 'px-5 pt-[18px] pb-2',
+                          assistantMessage: {
+                            children: ({ message, messages: msgs, isRunning: running, markdownRenderer, toolCallsView, toolbar }) => {
+                              const isLatest = msgs?.[msgs.length - 1]?.id === message.id;
+                              const isStreaming = running && isLatest;
+                              const isEmpty = !message.content;
+                              return (
+                                <>
+                                  <div className="msg-meta">radar</div>
+                                  <div className={cn('msg-bubble assistant-bubble', isStreaming && isEmpty && 'streaming')}>
+                                    {isEmpty && isStreaming ? (
+                                      <span className="thinking-dots" aria-label="thinking">
+                                        <span /><span /><span />
+                                      </span>
+                                    ) : isStreaming ? (
+                                      // 流式：用 streamdown 处理增量事件，避免 content 重叠累加导致重复
+                                      <div className="chat-markdown">{markdownRenderer}</div>
+                                    ) : message.content ? (
+                                      // 完成：用 react-markdown 全量渲染，排版更干净
+                                      <MarkdownContent content={message.content} />
+                                    ) : null}
+                                    {toolCallsView}
+                                    {toolbar}
+                                  </div>
+                                </>
+                              );
+                            },
+                          },
+                          userMessage: {
+                            children: ({ message }) => {
+                              const text = typeof message.content === 'string'
+                                ? message.content
+                                : Array.isArray(message.content)
+                                  ? message.content.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text).join('')
+                                  : '';
+                              return (
+                                <>
+                                  <div className="msg-meta">you</div>
+                                  <div className="msg-bubble user-bubble">{text}</div>
+                                </>
+                              );
+                            },
+                          },
+                        }}
+                        input={{
+                          textArea: { style: { fontSize: '13px' } },
+                        }}
                       />
                     </div>
                   </div>
@@ -508,7 +537,7 @@ function AgentViewInner() {
 
 export default function AgentView() {
   return (
-    <CopilotKit runtimeUrl="/api/agent/chat" agent="radar">
+    <CopilotKit runtimeUrl="/api/agent/chat" showDevConsole>
       <AgentViewInner />
     </CopilotKit>
   );
