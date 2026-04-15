@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 
+from ..exceptions import CollectorError, ConfigurationError
 from .base import RawCollectorItem, proxy_kwargs
 
 DEFAULT_API_URL = "https://api.apiyi.com/v1/responses"
@@ -81,17 +82,29 @@ async def _fetch_batch(
         ],
     }
 
-    resp = await client.post(
-        api_url,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        json=payload,
-        timeout=120.0,
-    )
-    resp.raise_for_status()
-    result = resp.json()
+    try:
+        resp = await client.post(
+            api_url,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            json=payload,
+            timeout=120.0,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise CollectorError(
+            f"Grok API request failed: {e}",
+            context={"url": api_url, "source_type": "grok", "accounts": accounts},
+        ) from e
+    try:
+        result = resp.json()
+    except ValueError as e:
+        raise CollectorError(
+            "Failed to parse Grok API response as JSON",
+            context={"url": api_url, "source_type": "grok"},
+        ) from e
 
     # 反幻觉：验证 x_search 确实被调用
     usage = result.get("usage", {})
@@ -150,7 +163,10 @@ class GrokCollector:
     async def collect(self, config: dict[str, Any]) -> list[RawCollectorItem]:
         accounts = config.get("accounts", [])
         if not accounts:
-            raise ValueError("GrokCollector config missing 'accounts'")
+            raise ConfigurationError(
+                "GrokCollector config missing 'accounts'",
+                context={"source_type": "grok", "config_keys": list(config.keys())},
+            )
 
         batch_size = config.get("batch_size", DEFAULT_BATCH_SIZE)
         api_url = config.get("api_url", DEFAULT_API_URL)
@@ -160,7 +176,10 @@ class GrokCollector:
         # API key: env var > config
         api_key = os.environ.get("GROK_API_KEY", "") or config.get("api_key", "")
         if not api_key:
-            raise ValueError("GROK_API_KEY env var or config.api_key required")
+            raise ConfigurationError(
+                "GROK_API_KEY env var or config.api_key required",
+                context={"source_type": "grok"},
+            )
 
         # 分批（每批 ≤ batch_size）
         batches = [accounts[i : i + batch_size] for i in range(0, len(accounts), batch_size)]

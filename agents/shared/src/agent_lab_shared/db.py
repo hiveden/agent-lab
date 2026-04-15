@@ -8,7 +8,27 @@ from typing import Any
 import httpx
 
 from .config import settings
+from .exceptions import PlatformAPIError
 from .schema import ItemBatchInput, ItemInput
+
+
+def _wrap_request(method: str, url: str, fn: Any) -> Any:
+    """Execute *fn* and translate httpx errors into PlatformAPIError."""
+    try:
+        return fn()
+    except httpx.HTTPStatusError as e:
+        raise PlatformAPIError(
+            f"Platform API {method} {url} returned {e.response.status_code}",
+            url=url,
+            method=method,
+            status_code=e.response.status_code,
+        ) from e
+    except httpx.RequestError as e:
+        raise PlatformAPIError(
+            f"Platform API {method} {url} request failed: {e}",
+            url=url,
+            method=method,
+        ) from e
 
 
 class PlatformClient:
@@ -38,10 +58,14 @@ class PlatformClient:
         batch = ItemBatchInput(round_at=round_at, items=items)
         payload = batch.model_dump(mode="json")
         url = f"{self.base_url}/api/items/batch"
-        with self._client() as client:
-            resp = client.post(url, json=payload, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.post(url, json=payload, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("POST", url, _call)
 
     # ── Sources ──
 
@@ -50,10 +74,14 @@ class PlatformClient:
         params = {}
         if agent_id:
             params["agent_id"] = agent_id
-        with self._client() as client:
-            resp = client.get(url, params=params, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.get(url, params=params, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("GET", url, _call)
 
     # ── Raw Items ──
 
@@ -64,10 +92,14 @@ class PlatformClient:
         payload: dict[str, Any] = {"items": items}
         if run_id:
             payload["run_id"] = run_id
-        with self._client() as client:
-            resp = client.post(url, json=payload, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.post(url, json=payload, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("POST", url, _call)
 
     def get_raw_items(
         self,
@@ -86,21 +118,29 @@ class PlatformClient:
             params["run_id"] = run_id
         if limit:
             params["limit"] = str(limit)
-        with self._client() as client:
-            resp = client.get(url, params=params, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.get(url, params=params, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("GET", url, _call)
 
     def update_raw_items_status(self, ids: list[str], status: str) -> dict[str, Any]:
         url = f"{self.base_url}/api/raw-items/batch-status"
-        with self._client() as client:
-            resp = client.patch(
-                url,
-                json={"ids": ids, "status": status},
-                headers=self._headers(),
-            )
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.patch(
+                    url,
+                    json={"ids": ids, "status": status},
+                    headers=self._headers(),
+                )
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("PATCH", url, _call)
 
     # ── Runs ──
 
@@ -114,10 +154,14 @@ class PlatformClient:
         payload: dict[str, Any] = {"agent_id": agent_id, "phase": phase}
         if source_ids:
             payload["source_ids"] = source_ids
-        with self._client() as client:
-            resp = client.post(url, json=payload, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.post(url, json=payload, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("POST", url, _call)
 
     # ── Items (read) ──
 
@@ -135,23 +179,60 @@ class PlatformClient:
             params["grade"] = grade
         if limit:
             params["limit"] = str(limit)
-        with self._client() as client:
-            resp = client.get(url, params=params, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.get(url, params=params, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("GET", url, _call)
+
+    # ── Chat Persistence ──
+
+    def persist_chat(
+        self, thread_id: str, agent_id: str, messages: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Persist chat messages to D1 via BFF endpoint.
+
+        Best-effort: callers should catch exceptions and log rather than
+        propagating failures to the user.
+        """
+        url = f"{self.base_url}/api/chat/persist"
+        payload = {
+            "agent_id": agent_id,
+            "thread_id": thread_id,
+            "messages": messages,
+        }
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.post(url, json=payload, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("POST", url, _call)
 
     # ── LLM Settings ──
 
     def get_llm_settings(self) -> dict[str, Any]:
         url = f"{self.base_url}/api/settings?internal=true"
-        with self._client() as client:
-            resp = client.get(url, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.get(url, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("GET", url, _call)
 
     def update_run(self, run_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/api/runs/{run_id}"
-        with self._client() as client:
-            resp = client.patch(url, json=patch, headers=self._headers())
-            resp.raise_for_status()
-            return resp.json()
+
+        def _call() -> dict[str, Any]:
+            with self._client() as client:
+                resp = client.patch(url, json=patch, headers=self._headers())
+                resp.raise_for_status()
+                return resp.json()
+
+        return _wrap_request("PATCH", url, _call)

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import httpx
 
+from ..exceptions import CollectorError
 from .base import RawCollectorItem, proxy_kwargs
+
+logger = logging.getLogger(__name__)
 
 HN_BASE = "https://hacker-news.firebaseio.com/v0"
 DEFAULT_LIMIT = 30
@@ -21,16 +25,30 @@ async def _fetch_item(client: httpx.AsyncClient, item_id: int) -> dict[str, Any]
         if not data:
             return None
         return data
-    except Exception:
+    except (httpx.HTTPError, ValueError) as e:
+        logger.debug("Failed to fetch HN item %d: %s", item_id, e)
         return None
 
 
 async def _collect_async(limit: int = DEFAULT_LIMIT) -> list[RawCollectorItem]:
     client_kwargs: dict[str, Any] = {"timeout": 20.0, "trust_env": False, **proxy_kwargs()}
+    top_url = f"{HN_BASE}/topstories.json"
     async with httpx.AsyncClient(**client_kwargs) as client:
-        top_resp = await client.get(f"{HN_BASE}/topstories.json")
-        top_resp.raise_for_status()
-        ids: list[int] = top_resp.json()[:limit]
+        try:
+            top_resp = await client.get(top_url)
+            top_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise CollectorError(
+                f"Failed to fetch HN top stories: {e}",
+                context={"url": top_url, "source_type": "hacker-news"},
+            ) from e
+        try:
+            ids: list[int] = top_resp.json()[:limit]
+        except ValueError as e:
+            raise CollectorError(
+                "Failed to parse HN top stories response as JSON",
+                context={"url": top_url, "source_type": "hacker-news"},
+            ) from e
 
         raw = await asyncio.gather(*(_fetch_item(client, i) for i in ids))
 

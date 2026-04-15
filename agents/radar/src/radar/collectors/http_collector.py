@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from ..exceptions import CollectorError, ConfigurationError
 from .base import RawCollectorItem, proxy_kwargs
 
 
@@ -38,15 +39,24 @@ class HttpCollector:
     async def collect(self, config: dict[str, Any]) -> list[RawCollectorItem]:
         url = config.get("url")
         if not url:
-            raise ValueError("HttpCollector config missing 'url'")
+            raise ConfigurationError(
+                "HttpCollector config missing 'url'",
+                context={"source_type": "http", "config_keys": list(config.keys())},
+            )
 
         items_path = config.get("items_path")
         if not items_path:
-            raise ValueError("HttpCollector config missing 'items_path'")
+            raise ConfigurationError(
+                "HttpCollector config missing 'items_path'",
+                context={"source_type": "http", "url": url},
+            )
 
         mapping = config.get("mapping", {})
         if not mapping.get("external_id"):
-            raise ValueError("HttpCollector config missing 'mapping.external_id'")
+            raise ConfigurationError(
+                "HttpCollector config missing 'mapping.external_id'",
+                context={"source_type": "http", "url": url, "mapping_keys": list(mapping.keys())},
+            )
 
         method = config.get("method", "GET").upper()
         headers = config.get("headers", {})
@@ -61,16 +71,31 @@ class HttpCollector:
         }
 
         async with httpx.AsyncClient(**client_kwargs) as client:
-            resp = await client.request(
-                method, url, headers=headers, json=body if method == "POST" else None
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = await client.request(
+                    method, url, headers=headers, json=body if method == "POST" else None
+                )
+                resp.raise_for_status()
+            except httpx.HTTPError as e:
+                raise CollectorError(
+                    f"HTTP request failed: {e}",
+                    context={"url": url, "source_type": "http", "method": method},
+                ) from e
+            try:
+                data = resp.json()
+            except ValueError as e:
+                raise CollectorError(
+                    "Failed to parse HTTP response as JSON",
+                    context={"url": url, "source_type": "http"},
+                ) from e
 
         # 按 items_path 提取数组
         items_raw = _resolve_path(data, items_path)
         if not isinstance(items_raw, list):
-            raise ValueError(f"items_path '{items_path}' did not resolve to a list")
+            raise CollectorError(
+                f"items_path '{items_path}' did not resolve to a list",
+                context={"url": url, "source_type": "http", "items_path": items_path},
+            )
 
         results: list[RawCollectorItem] = []
         for item in items_raw[:limit]:
