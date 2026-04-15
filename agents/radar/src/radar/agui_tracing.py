@@ -1,17 +1,21 @@
-"""AG-UI 事件去重 — 拦截 Ollama/本地模型产生的重复 START 事件。
+"""AG-UI 事件去重 + 对话持久化。
 
+去重：拦截 Ollama/本地模型产生的重复 START 事件。
 ag-ui-langgraph adapter 在处理本地模型的 streaming chunks 时，
 可能对同一个 ID 发射多次 START 事件（TOOL_CALL_START、TEXT_MESSAGE_START 等），
 下游 AG-UI 状态机不允许未 END 就再 START，导致前端报错。
-
 策略：统一追踪所有 START/END 配对，重复 START 和孤立 END 直接吞掉。
+
+持久化：在 run() 结束后，将 agent state 中的 messages 通过
+PlatformClient.persist_chat() 写入 D1，best-effort 不阻塞对话。
 """
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from ag_ui.core import EventType
+from ag_ui.core import EventType, RunAgentInput
 from agent_lab_shared.logging import get_logger
 from copilotkit import LangGraphAGUIAgent
 
@@ -25,13 +29,44 @@ _PAIRED_EVENTS: dict[EventType, tuple[EventType, str]] = {
 
 # 反向映射: END → (START, id_field)
 _END_TO_START: dict[EventType, tuple[EventType, str]] = {
-    end_type: (start_type, id_field)
-    for start_type, (end_type, id_field) in _PAIRED_EVENTS.items()
+    end_type: (start_type, id_field) for start_type, (end_type, id_field) in _PAIRED_EVENTS.items()
 }
 
 
+def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
+    """Convert LangChain BaseMessage list to serialisable dicts for persistence.
+
+    Only keeps user/assistant/tool/system messages with non-empty content.
+    """
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        role = getattr(msg, "type", None)
+        if role == "human":
+            role = "user"
+        elif role == "ai":
+            role = "assistant"
+        if role not in ("user", "assistant", "tool", "system"):
+            continue
+        content = getattr(msg, "content", "")
+        if not content:
+            continue
+        entry: dict[str, Any] = {"role": role, "content": content}
+        tool_calls = getattr(msg, "tool_calls", None)
+        if tool_calls:
+            entry["tool_calls"] = [
+                {
+                    "id": tc.get("id", ""),
+                    "name": tc.get("name", ""),
+                    "args": tc.get("args", {}),
+                }
+                for tc in tool_calls
+            ]
+        result.append(entry)
+    return result
+
+
 class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
-    """去重 AG-UI START/END 配对事件，防止状态机报错。"""
+    """去重 AG-UI START/END 配对事件 + run 结束后 best-effort 持久化对话。"""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -72,3 +107,48 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
                 self._active[start_type].discard(event_id)
 
         return super()._dispatch_event(event)
+
+    # ── 对话持久化 ──
+
+    async def run(self, input: RunAgentInput):  # type: ignore[override]
+        """Override run to: 1) filter None events, 2) persist chat after completion."""
+        thread_id = input.thread_id
+        async for event in super().run(input):
+            if event is not None:
+                yield event
+
+        # Best-effort persistence — fire-and-forget, never block the response
+        if thread_id:
+            asyncio.create_task(self._persist_chat(thread_id))
+
+    async def _persist_chat(self, thread_id: str) -> None:
+        """Extract messages from graph state and persist via PlatformClient."""
+        try:
+            from agent_lab_shared.db import PlatformClient
+
+            config = {"configurable": {"thread_id": thread_id}}
+            state = await self.graph.aget_state(config)
+            messages = state.values.get("messages", [])
+            if not messages:
+                log.info("persist_chat_skip", thread_id=thread_id, reason="no messages")
+                return
+
+            dicts = _langchain_messages_to_dicts(messages)
+            if not dicts:
+                log.info("persist_chat_skip", thread_id=thread_id, reason="no persistable messages")
+                return
+
+            client = PlatformClient()
+            await asyncio.to_thread(
+                client.persist_chat,
+                thread_id=thread_id,
+                agent_id=self.name,
+                messages=dicts,
+            )
+            log.info(
+                "persist_chat_ok",
+                thread_id=thread_id,
+                message_count=len(dicts),
+            )
+        except Exception:
+            log.exception("persist_chat_failed", thread_id=thread_id)

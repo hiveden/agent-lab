@@ -23,7 +23,7 @@ export async function ensureSession(
       .limit(1);
     if (results.length > 0) return results[0].id;
   }
-  const id = genId();
+  const id = opts.sessionId ?? genId();
   await db.insert(chatSessions).values({
     id,
     item_id: opts.itemId ?? null,
@@ -72,6 +72,86 @@ export async function getLatestSessionForItem(
     .from(chatSessions)
     .where(eq(chatSessions.item_id, itemId))
     .orderBy(desc(chatSessions.created_at))
+    .limit(1);
+
+  if (sessions.length === 0) return null;
+  const session = sessions[0];
+
+  const messages = await db
+    .select({
+      id: chatMessages.id,
+      role: chatMessages.role,
+      content: chatMessages.content,
+      tool_calls: chatMessages.tool_calls,
+      created_at: chatMessages.created_at,
+    })
+    .from(chatMessages)
+    .where(eq(chatMessages.session_id, session.id))
+    .orderBy(asc(chatMessages.created_at));
+
+  return { session_id: session.id, messages };
+}
+
+export interface SessionSummary {
+  id: string;
+  agent_id: string;
+  created_at: string;
+  message_count: number;
+  preview: string;
+}
+
+export async function listAgentSessions(
+  d1: D1Database,
+  agentId: string,
+  limit = 20,
+): Promise<SessionSummary[]> {
+  const db = getDb(d1);
+
+  const sessions = await db
+    .select({
+      id: chatSessions.id,
+      agent_id: chatSessions.agent_id,
+      created_at: chatSessions.created_at,
+    })
+    .from(chatSessions)
+    .where(eq(chatSessions.agent_id, agentId))
+    .orderBy(desc(chatSessions.created_at))
+    .limit(limit);
+
+  const result: SessionSummary[] = [];
+  for (const s of sessions) {
+    const msgs = await db
+      .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
+      .from(chatMessages)
+      .where(eq(chatMessages.session_id, s.id))
+      .orderBy(asc(chatMessages.created_at));
+
+    const firstUser = msgs.find(m => m.role === 'user');
+    result.push({
+      id: s.id,
+      agent_id: s.agent_id ?? 'radar',
+      created_at: s.created_at ?? '',
+      message_count: msgs.length,
+      preview: firstUser?.content?.slice(0, 50) ?? '',
+    });
+  }
+
+  // 过滤掉空 session（0 条消息）
+  return result.filter(s => s.message_count > 0);
+}
+
+/**
+ * Get session by thread_id (session.id === thread_id as created by persist endpoint).
+ */
+export async function getSessionByThreadId(
+  d1: D1Database,
+  threadId: string,
+): Promise<SessionHistory | null> {
+  const db = getDb(d1);
+  const sessions = await db
+    .select({ id: chatSessions.id })
+    .from(chatSessions)
+    .where(eq(chatSessions.id, threadId))
     .limit(1);
 
   if (sessions.length === 0) return null;

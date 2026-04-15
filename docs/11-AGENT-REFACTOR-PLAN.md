@@ -158,30 +158,48 @@
 - [ ] **修复 evaluate external_id**: 用 raw_item.external_id → item.external_id 的完整映射替代 `split("-")[1]`
 - [ ] **清理已废弃代码**: 删除 `chains/chat.py` + `/v1/chat/completions` 端点
 
-### Phase 2: CopilotKit 深度集成
+### Phase 2: CopilotKit 深度集成（v1 API — 已完成）
 
 目标: Agent 对话链路功能完整，Dev Console 四个 tab 全部有内容。
 
-**前端 (AgentView.tsx 重构):**
+**已完成（v1 API）：**
+- [x] useCoAgent("radar") — agent state 双向同步
+- [x] useCopilotReadable — 注入 agent 配置偏好
+- [x] useCopilotAction — show_notification / navigate_to_item / mark_item_status
+- [x] useCoAgentStateRender — evaluate 进度渲染
+- [x] copilotkit_emit_state — Python evaluate tool 进度推送
+- [x] 对话持久化 — POST /api/chat/persist + PlatformClient + agui_tracing hook
+- [x] 会话历史加载 — GET /api/chat/sessions?thread_id= + threadId localStorage
+- [x] 会话列表 — GET /api/chat/sessions?agent_id= + 侧栏切换
+- [x] AG-UI 事件去重 — agui_tracing.py 拦截重复 TOOL_CALL_START/TEXT_MESSAGE_START
 
-```
-1. 加 useCoAgent("radar") — agent state 双向同步
-2. 加 useCopilotReadable — 注入 Zustand 的 selectedItem 作为上下文
-3. 加 useCopilotAction — 注册 "navigate_to_item", "mark_item_status" 前端 tool
-4. 加 useCoAgentStateRender — tool 执行进度渲染 (替代手动 trace 构建)
-5. 用 CopilotChat 的 slots 自定义 tool call 渲染
-6. 移除 useCopilotChatInternal — 改用 useCoAgent 获取 state
-7. 移除手动定义的 AGUIMessage 类型 — 改用 @ag-ui/core 导出的类型
-```
+**技术债（v1 遗留）：**
+- useCopilotChatInternal（内部 API）— 公开 useCopilotChat 缺 messages/sendMessage
+- as unknown as AGUIMessage[] 双重强转
+- copilotkit_customize_config 跳过（prebuilt agent 不适用）
 
-**Python 端 (agent.py 增强):**
+### Phase 2.5: Tailwind v4 升级 + CopilotKit v2 API 迁移
 
-```
-1. copilotkit_emit_state — evaluate tool 执行时推送进度
-   (evaluated: 3/10, promoted: 2, current: "正在评判...")
-2. copilotkit_customize_config — 控制 tool call 的 UI 可见性
-3. 对话持久化 — agent 完成一轮对话后，通过 PlatformClient 写入 D1
-```
+前置条件：Tailwind v3 → v4（v2 CSS 用 Tailwind v4 `@layer` 语法）
+
+**Tailwind 升级：**
+- tailwind.config.ts → CSS-in-config 模式
+- postcss.config.mjs 调整
+- globals.css @tailwind 指令改为 @import
+- 验证所有现有页面不 break
+
+**v2 API 迁移（基于 docs/COPILOTKIT-V2-MIGRATION.md）：**
+- useAgent 替代 useCopilotChatInternal + useCoAgent（消除内部 API 技术债）
+- useAgentContext 替代 useCopilotReadable
+- useFrontendTool (Zod schema) 替代 useCopilotAction
+- useRenderTool 通配符替代 RenderMessage prop
+- v2 CSS (streamdown + --cpk-* 色板) + design tokens 覆盖
+- streamdown 替代 react-markdown（解决 streaming markdown 闪烁）
+
+**Python 端（不需要改）：**
+- copilotkit_emit_state — 已完成
+- 对话持久化 — 已完成
+- copilotkit_customize_config — 跳过（prebuilt agent 不适用）
 
 ### Phase 3: 统一对话路径
 
