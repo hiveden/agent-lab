@@ -119,14 +119,14 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
   }, [triggerBusy, enabledCount, mutate]);
 
   if (loading) {
-    return <div className="runs-master-detail"><p className="text-[var(--text-3)] text-[13px] py-8 text-center">加载中…</p></div>;
+    return <div className="runs-master-detail"><p className="text-text-3 text-[13px] py-8 text-center">加载中…</p></div>;
   }
 
   return (
     <div className="runs-master-detail">
       <aside className="runs-sidebar">
         {/* Sources checkboxes */}
-        <div className="p-3 border-b border-[var(--border)]">
+        <div className="p-3 border-b border-border">
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-[13px]">数据源</span>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -143,26 +143,26 @@ export default function RunsView({ onSelectRun }: RunsViewProps) {
                   type="checkbox"
                   checked={s.enabled}
                   onChange={() => toggleSource(s)}
-                  className="accent-[var(--accent)] w-3.5 h-3.5"
+                  className="accent-accent-brand w-3.5 h-3.5"
                 />
-                <span className={cn('text-[var(--text)]', !s.enabled && 'text-[var(--text-3)] line-through')}>
+                <span className={cn('text-text', !s.enabled && 'text-text-3 line-through')}>
                   {s.name}
                 </span>
               </label>
             ))}
             {sources.length === 0 && (
-              <span className="text-[var(--text-3)] text-[12px]">暂无数据源</span>
+              <span className="text-text-3 text-[12px]">暂无数据源</span>
             )}
           </div>
         </div>
 
         {/* Runs list */}
-        <div className="p-3 pb-1 border-b border-[var(--border)]">
-          <span className="font-semibold text-[12px] text-[var(--text-2)]">同步记录</span>
+        <div className="p-3 pb-1 border-b border-border">
+          <span className="font-semibold text-[12px] text-text-2">同步记录</span>
         </div>
         <div>
           {ingestRuns.length === 0 ? (
-            <p className="text-[var(--text-3)] text-[13px] py-8 text-center">暂无同步记录</p>
+            <p className="text-text-3 text-[13px] py-8 text-center">暂无同步记录</p>
           ) : (
             ingestRuns.map((run) => {
               const stats = run.stats as Record<string, number>;
@@ -289,36 +289,36 @@ function RunDetail({ run }: { run: Run }) {
               const name = sourceNameMap[sid] ?? sid;
               const hasItems = sourceItems.length > 0;
               return (
-                <div key={sid} className="border border-[var(--border)] rounded-[6px] overflow-hidden">
+                <div key={sid} className="border border-border rounded-[6px] overflow-hidden">
                   <div
                     className={cn(
                       'flex items-center gap-2 px-3 py-2 text-[12.5px]',
-                      hasItems && 'cursor-pointer hover:bg-[var(--bg-sunk)]',
+                      hasItems && 'cursor-pointer hover:bg-bg-sunk',
                     )}
                     onClick={() => {
                       if (hasItems) setExpandedSource(isExpanded ? null : sid);
                     }}
                   >
-                    <span className="text-[10px] text-[var(--text-3)] w-3">
+                    <span className="text-[10px] text-text-3 w-3">
                       {hasItems ? (isExpanded ? '▼' : '▶') : ''}
                     </span>
-                    <span className="font-medium text-[var(--text)] flex-1">{name}</span>
-                    <span className="text-[var(--text-2)] text-[11.5px]">{count} 条</span>
+                    <span className="font-medium text-text flex-1">{name}</span>
+                    <span className="text-text-2 text-[11.5px]">{count} 条</span>
                     {ps?.ms != null && (
-                      <span className="text-[var(--text-3)] text-[11px]">{(ps.ms / 1000).toFixed(1)}s</span>
+                      <span className="text-text-3 text-[11px]">{(ps.ms / 1000).toFixed(1)}s</span>
                     )}
                   </div>
                   {isExpanded && hasItems && (
-                    <div className="border-t border-[var(--border)] bg-[var(--bg-sunk)] px-3 py-1.5 flex flex-col">
+                    <div className="border-t border-border bg-bg-sunk px-3 py-1.5 flex flex-col">
                       {sourceItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 py-1.5 text-[12px] border-b border-[var(--border)] last:border-0">
-                          <span className="text-[var(--text)] flex-1 min-w-0 truncate">{item.title}</span>
+                        <div key={item.id} className="flex items-center gap-2 py-1.5 text-[12px] border-b border-border last:border-0">
+                          <span className="text-text flex-1 min-w-0 truncate">{item.title}</span>
                           {item.url && (
                             <a
                               href={item.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[var(--accent)] shrink-0 text-[11px] hover:underline"
+                              className="text-accent-brand shrink-0 text-[11px] hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
                               ↗

@@ -396,10 +396,10 @@ export default function RadarWorkspace() {
   // ─── Desktop Layout ────────────────────────────────────────
   return (
     <div className="grid grid-rows-[40px_1fr] h-screen">
-      <div className="flex items-center gap-3 px-[14px] pl-[18px] border-b border-[var(--border)] bg-[var(--surface-hi)]">
-        <div className="font-semibold text-[13px] tracking-[-0.005em] text-[var(--text)]">agent-lab</div>
-        <div className="flex items-center gap-1.5 text-[var(--text-3)] text-xs">
-          <span className="text-[var(--text-faint)]">/</span>
+      <div className="flex items-center gap-3 px-[14px] pl-[18px] border-b border-border bg-surface-hi">
+        <div className="font-semibold text-[13px] tracking-[-0.005em] text-text">agent-lab</div>
+        <div className="flex items-center gap-1.5 text-text-3 text-xs">
+          <span className="text-text-faint">/</span>
           <span>radar</span>
         </div>
         <div className="flex-1" />
@@ -425,14 +425,14 @@ export default function RadarWorkspace() {
             <kbd className="k">K</kbd>
           </span>
         </button>
-        <span className="py-0.5 px-2 border border-[var(--border-hi)] rounded-full font-[var(--mono)] text-[10.5px] text-[var(--text-2)] bg-[var(--bg)]">
+        <span className="py-0.5 px-2 border border-border-hi rounded-full font-[var(--mono)] text-[10.5px] text-text-2 bg-bg">
           {loading
             ? 'loading…'
             : loadErr
               ? 'load error'
               : `${items.length} items`}
         </span>
-        <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)] text-white inline-flex items-center justify-center text-[10px] font-semibold">A</div>
+        <div className="w-[22px] h-[22px] rounded-full bg-accent-brand text-white inline-flex items-center justify-center text-[10px] font-semibold">A</div>
       </div>
 
       <PendingChangesBanner

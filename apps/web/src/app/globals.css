@@ -7,34 +7,52 @@
   --font-sans: 'IBM Plex Sans', -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
 
-  /* ── shadcn/ui color bridge ── */
+  /* ── Project design tokens → Tailwind v4 theme ── */
+  /* Usage: bg-surface, text-text-2, border-border-hi, etc. */
+  --color-bg: var(--bg);
+  --color-bg-sunk: var(--bg-sunk);
+  --color-surface: var(--surface);
+  --color-surface-hi: var(--surface-hi);
   --color-border: var(--border);
+  --color-border-hi: var(--border-hi);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-text-faint: var(--text-faint);
+  --color-accent-brand: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-fire: var(--fire);
+  --color-fire-soft: var(--fire-soft);
+  --color-bolt: var(--bolt);
+  --color-bolt-soft: var(--bolt-soft);
+  --color-bulb: var(--bulb);
+  --color-bulb-soft: var(--bulb-soft);
+  --color-ok: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  /* ── shadcn/ui color bridge ── */
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-
   --color-accent: var(--accent-ui);
   --color-accent-foreground: var(--accent-foreground);
-
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -58,14 +76,20 @@
   }
 }
 
-/* Override Tailwind v4 default border color (gray-200 → project warm gray) */
+/* ── Tailwind v4 preflight overrides (restore v3 behavior) ── */
 @layer base {
+  /* v4 changed default border-color to currentColor → restore project warm gray */
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
     border-color: var(--border, currentcolor);
+  }
+  /* v4 removed cursor:pointer from buttons → restore */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
@@ -181,11 +205,16 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Base Resets
+   Base Resets — MUST be in @layer base so Tailwind v4
+   utilities (p-4, m-2, etc.) can override them.
+   Unlayered styles have highest priority in v4 and would
+   block all spacing utilities.
    ═══════════════════════════════════════════════════════════ */
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+}
 
 body {
   background: var(--bg);

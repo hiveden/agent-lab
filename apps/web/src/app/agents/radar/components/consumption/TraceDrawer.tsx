@@ -55,15 +55,15 @@ export default function TraceDrawer({
 
   return (
       <aside className="trace-col">
-        <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
+        <div className="flex items-center gap-2.5 py-2.5 px-4 border-b border-border bg-surface-hi shrink-0">
           <h3 className="text-xs font-semibold">{trace?.source === 'push' ? 'Collection Trace' : 'Trace'}</h3>
-          <span className="text-[11px] text-[var(--text-3)]">
+          <span className="text-[11px] text-text-3">
             {trace?.source === 'push'
               ? 'radar-push pipeline'
               : 'agent execution log'}
           </span>
           <button
-            className="ml-auto inline-flex items-center justify-center w-[22px] h-[22px] rounded border border-transparent bg-transparent text-[var(--text-3)] cursor-pointer transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--bg-sunk)] hover:border-[var(--border-hi)]"
+            className="ml-auto inline-flex items-center justify-center w-[22px] h-[22px] rounded border border-transparent bg-transparent text-text-3 cursor-pointer transition-all duration-100 hover:text-text hover:bg-bg-sunk hover:border-border-hi"
             onClick={onClose}
             title="Close (esc)"
             aria-label="Close trace"

@@ -157,7 +157,7 @@ export default function InboxView() {
   return (
     <div className="flex flex-col min-h-0 overflow-hidden">
       {/* Category tabs + grade filter */}
-      <div className="flex items-center px-4 border-b border-[var(--border)] shrink-0">
+      <div className="flex items-center px-4 border-b border-border shrink-0">
         <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as CategoryTab)}>
           <TabsList>
             {tabs.map((t) => (
@@ -176,8 +176,8 @@ export default function InboxView() {
               className={cn(
                 'cursor-pointer text-[11px] py-[3px] px-2.5 rounded-[14px] gap-[3px]',
                 filter === c.f
-                  ? 'bg-[var(--accent)] text-white border-transparent'
-                  : 'bg-transparent text-[var(--text-2)] border-[var(--border)]',
+                  ? 'bg-accent-brand text-white border-transparent'
+                  : 'bg-transparent text-text-2 border-border',
               )}
               onClick={() => {
                 setFilter(c.f);
@@ -200,7 +200,7 @@ export default function InboxView() {
           <div className="h-full overflow-hidden flex flex-col">
             <div className="flex-1 overflow-y-auto p-4" ref={gridRef}>
               {filteredItems.length === 0 ? (
-                <div className="p-6 text-center text-[var(--text-3)] text-xs">暂无内容</div>
+                <div className="p-6 text-center text-text-3 text-xs">暂无内容</div>
               ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(380px,1fr))] gap-3">
                   {filteredItems.map((it) => {
@@ -211,9 +211,9 @@ export default function InboxView() {
                         key={it.id}
                         data-id={it.id}
                         className={cn(
-                          'border border-[var(--border)] rounded-[var(--radius,10px)] p-4 bg-[var(--surface)] cursor-pointer transition-shadow duration-150',
+                          'border border-border rounded-[var(--radius,10px)] p-4 bg-surface cursor-pointer transition-shadow duration-150',
                           'hover:shadow-[0_2px_8px_rgba(0,0,0,.06)]',
-                          isSelected && 'border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]',
+                          isSelected && 'border-accent-brand shadow-[0_0_0_1px_var(--accent)]',
                           isPending && 'opacity-70',
                         )}
                         onClick={() => handleSelectById(it.id)}
@@ -221,29 +221,29 @@ export default function InboxView() {
                         <div className="flex items-center gap-2 mb-2">
                           <Badge variant="outline" className={cn(
                             'text-[10px] px-1.5 py-0 h-5',
-                            it.grade === 'fire' && 'border-[var(--fire)] text-[var(--fire)] bg-[var(--fire-bg,var(--fire-soft))]',
-                            it.grade === 'bolt' && 'border-[var(--bolt)] text-[var(--bolt)] bg-[var(--bolt-bg,var(--bolt-soft))]',
-                            it.grade === 'bulb' && 'border-[var(--bulb)] text-[var(--bulb)] bg-[var(--bulb-bg,var(--bulb-soft))]',
+                            it.grade === 'fire' && 'border-fire text-fire bg-fire-soft',
+                            it.grade === 'bolt' && 'border-bolt text-bolt bg-bolt-soft',
+                            it.grade === 'bulb' && 'border-bulb text-bulb bg-bulb-soft',
                           )}>
                             {it.grade}
                           </Badge>
-                          <span className="text-[11px] text-[var(--text-2)]">{it.source ?? ''}</span>
-                          <span className="text-[11px] text-[var(--text-3)] ml-auto">{relTime(it.round_at)}</span>
+                          <span className="text-[11px] text-text-2">{it.source ?? ''}</span>
+                          <span className="text-[11px] text-text-3 ml-auto">{relTime(it.round_at)}</span>
                         </div>
                         <div className="font-semibold text-[15px] leading-[1.5] mb-1.5">{it.title}</div>
-                        <div className="text-[13px] text-[var(--text-2)] leading-[1.6] mb-2">{it.summary}</div>
+                        <div className="text-[13px] text-text-2 leading-[1.6] mb-2">{it.summary}</div>
                         {it.why ? (
-                          <div className="text-xs text-[var(--bolt)] leading-[1.5] p-2 px-2.5 bg-[var(--bolt-bg)] rounded-[var(--radius-sm,6px)] mb-2.5">
+                          <div className="text-xs text-bolt leading-[1.5] p-2 px-2.5 bg-bolt-soft rounded-[var(--radius-sm,6px)] mb-2.5">
                             {it.why}
                           </div>
                         ) : null}
-                        <div className="flex items-center gap-2.5 text-[11px] text-[var(--text-3)]">
+                        <div className="flex items-center gap-2.5 text-[11px] text-text-3">
                           {it.url ? (
                             <a
                               href={it.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[var(--text-2)] no-underline hover:underline"
+                              className="text-text-2 no-underline hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
                               查看原文
@@ -252,8 +252,8 @@ export default function InboxView() {
                           <div className="ml-auto flex gap-1">
                             <button
                               className={cn(
-                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-[var(--border)] bg-transparent cursor-pointer text-[var(--text-2)] text-[11px] hover:bg-[var(--bg-sunk)]',
-                                pending[it.id] === 'watching' && 'bg-[var(--accent)] text-white border-transparent',
+                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-border bg-transparent cursor-pointer text-text-2 text-[11px] hover:bg-bg-sunk',
+                                pending[it.id] === 'watching' && 'bg-accent-brand text-white border-transparent',
                               )}
                               title="Watch"
                               onClick={(e) => {
@@ -265,8 +265,8 @@ export default function InboxView() {
                             </button>
                             <button
                               className={cn(
-                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-[var(--border)] bg-transparent cursor-pointer text-[var(--text-2)] text-[11px] hover:bg-[var(--bg-sunk)]',
-                                pending[it.id] === 'dismissed' && 'bg-[var(--accent)] text-white border-transparent',
+                                'flex items-center justify-center w-[26px] h-[26px] rounded-[var(--radius-sm,6px)] border border-border bg-transparent cursor-pointer text-text-2 text-[11px] hover:bg-bg-sunk',
+                                pending[it.id] === 'dismissed' && 'bg-accent-brand text-white border-transparent',
                               )}
                               title="Dismiss"
                               onClick={(e) => {
@@ -293,7 +293,7 @@ export default function InboxView() {
               <div className="drag-bar" />
             </Separator>
             <Panel id="bottom" defaultSize="50%" minSize="25%">
-              <Group key={traceOpen ? 'with-trace' : 'chat-only'} orientation="horizontal" id="chat-trace" className="border-t border-[var(--border)] min-h-0 h-full"
+              <Group key={traceOpen ? 'with-trace' : 'chat-only'} orientation="horizontal" id="chat-trace" className="border-t border-border min-h-0 h-full"
                 defaultLayout={traceOpen ? loadLayout('radar.layout.horizontal') : undefined}
                 onLayoutChanged={traceOpen ? saveLayout('radar.layout.horizontal') : undefined}
               >

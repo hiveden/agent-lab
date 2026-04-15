@@ -69,8 +69,8 @@ export default function ChatView({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden bg-[var(--bg)] min-w-0 h-full">
-      <div className="px-5 pt-3 pb-2.5 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
+    <div className="flex flex-col overflow-hidden bg-bg min-w-0 h-full">
+      <div className="px-5 pt-3 pb-2.5 border-b border-border bg-surface-hi shrink-0">
         <div className="flex items-start gap-2.5">
           <span className={cn(
             'chat-grade',
@@ -79,11 +79,11 @@ export default function ChatView({
             {item.grade}
           </span>
           <div className="flex-1 min-w-0">
-            <h2 className="text-[15px] font-semibold text-[var(--text)] leading-[1.35] mb-[3px]">{item.title}</h2>
-            <div className="flex gap-2.5 text-[11.5px] text-[var(--text-3)] items-center flex-wrap">
+            <h2 className="text-[15px] font-semibold text-text leading-[1.35] mb-[3px]">{item.title}</h2>
+            <div className="flex gap-2.5 text-[11.5px] text-text-3 items-center flex-wrap">
               {item.source ? <span>{item.source}</span> : null}
               {item.url ? (
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] no-underline font-[var(--mono)] text-[11px] hover:underline">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-accent-brand no-underline font-[var(--mono)] text-[11px] hover:underline">
                   ↗ open
                 </a>
               ) : null}
@@ -92,8 +92,8 @@ export default function ChatView({
           <div className="flex gap-1 items-center shrink-0">
             <button
               className={cn(
-                'inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-transparent bg-transparent text-[var(--text-3)] cursor-pointer transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--bg-sunk)] hover:border-[var(--border-hi)]',
-                traceOpen && 'text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent-line)]',
+                'inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-transparent bg-transparent text-text-3 cursor-pointer transition-all duration-100 hover:text-text hover:bg-bg-sunk hover:border-border-hi',
+                traceOpen && 'text-accent-brand bg-accent-soft border-accent-line',
               )}
               title="Toggle trace (T)"
               onClick={onToggleTrace}
@@ -113,15 +113,15 @@ export default function ChatView({
           </div>
         </div>
         {item.why ? (
-          <div className="mt-2.5 py-[9px] px-3 bg-[var(--surface)] border border-[var(--border)] rounded-[5px] text-xs text-[var(--text-2)] leading-[1.55] border-l-2 border-l-[var(--accent-line)]">
-            <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-3)] mr-1.5 font-semibold">why</span>
+          <div className="mt-2.5 py-[9px] px-3 bg-surface border border-border rounded-[5px] text-xs text-text-2 leading-[1.55] border-l-2 border-l-accent-line">
+            <span className="text-[10px] uppercase tracking-[0.08em] text-text-3 mr-1.5 font-semibold">why</span>
             {item.why}
           </div>
         ) : null}
       </div>
 
       {error && (
-        <div className="px-4 py-2 bg-[var(--fire-soft)] text-[var(--fire)] text-xs border-b border-[var(--fire)]/20 shrink-0">
+        <div className="px-4 py-2 bg-fire-soft text-fire text-xs border-b border-fire/20 shrink-0">
           {error.message || 'Chat error'}
         </div>
       )}
@@ -134,12 +134,12 @@ export default function ChatView({
         />
       </div>
 
-      <div className="border-t border-[var(--border)] bg-[var(--surface-hi)] px-4 pt-2.5 pb-3 shrink-0">
+      <div className="border-t border-border bg-surface-hi px-4 pt-2.5 pb-3 shrink-0">
         <div className="flex gap-1.5 mb-2 flex-wrap">
           {PRESETS.map((p) => (
             <button
               key={p.label}
-              className="text-[11.5px] py-[3px] px-2.5 bg-[var(--surface)] border border-[var(--border-hi)] rounded-full text-[var(--text-2)] cursor-pointer transition-all duration-[.12s] hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+              className="text-[11.5px] py-[3px] px-2.5 bg-surface border border-border-hi rounded-full text-text-2 cursor-pointer transition-all duration-[.12s] hover:border-accent-line hover:bg-accent-soft hover:text-accent-brand"
               disabled={isLoading}
               onClick={() => {
                 if (isLoading) return;

@@ -24,13 +24,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen gap-4 bg-[var(--bg)] text-[var(--text)]">
+        <div className="flex flex-col items-center justify-center h-screen gap-4 bg-bg text-text">
           <h2 className="text-lg font-semibold">出错了</h2>
-          <pre className="text-xs text-[var(--text-3)] max-w-md whitespace-pre-wrap text-center">
+          <pre className="text-xs text-text-3 max-w-md whitespace-pre-wrap text-center">
             {this.state.error.message}
           </pre>
           <button
-            className="px-4 py-1.5 text-sm bg-[var(--accent)] text-white rounded-md"
+            className="px-4 py-1.5 text-sm bg-accent-brand text-white rounded-md"
             onClick={() => this.setState({ error: null })}
           >
             重试

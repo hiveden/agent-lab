@@ -169,13 +169,13 @@ function ResetButton({ onReset }: { onReset: () => void }) {
     return (
       <span className="inline-flex items-center gap-1 text-[10px]">
         <button
-          className="text-[var(--fire)] hover:underline cursor-pointer"
+          className="text-fire hover:underline cursor-pointer"
           onClick={doReset}
         >
           确认重置
         </button>
         <button
-          className="text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
+          className="text-text-3 hover:text-text cursor-pointer"
           onClick={() => setConfirming(false)}
         >
           取消
@@ -186,7 +186,7 @@ function ResetButton({ onReset }: { onReset: () => void }) {
 
   return (
     <button
-      className="text-[10px] text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
+      className="text-[10px] text-text-3 hover:text-text cursor-pointer"
       onClick={startConfirm}
     >
       重置
@@ -231,9 +231,9 @@ function ConfigCard({ def }: { def: CardDef }) {
 
   if (def.type === 'list') {
     return (
-      <div className="border border-[var(--border)] rounded-[8px] bg-[var(--surface)] p-3 min-w-0">
+      <div className="border border-border rounded-[8px] bg-surface p-3 min-w-0">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-semibold text-[var(--text-2)] uppercase tracking-wide">
+          <span className="text-[11px] font-semibold text-text-2 uppercase tracking-wide">
             {def.label}
           </span>
           <ResetButton onReset={resetToDefault} />
@@ -242,11 +242,11 @@ function ConfigCard({ def }: { def: CardDef }) {
           {items.map((item, i) => (
             <span
               key={`${item}-${i}`}
-              className="inline-flex items-center gap-1 text-[11px] py-[2px] px-2 bg-[var(--bg-sunk)] border border-[var(--border)] rounded-full text-[var(--text-2)]"
+              className="inline-flex items-center gap-1 text-[11px] py-[2px] px-2 bg-bg-sunk border border-border rounded-full text-text-2"
             >
               {item}
               <button
-                className="text-[var(--text-3)] hover:text-[var(--fire)] cursor-pointer text-[10px] leading-none"
+                className="text-text-3 hover:text-fire cursor-pointer text-[10px] leading-none"
                 onClick={() => removeItem(i)}
               >
                 ×
@@ -263,12 +263,12 @@ function ConfigCard({ def }: { def: CardDef }) {
                 if (e.key === 'Escape') { setEditing(false); setDraft(''); }
               }}
               onBlur={() => { if (draft.trim()) addItem(); else setEditing(false); }}
-              className="text-[11px] py-[2px] px-2 bg-transparent border border-[var(--accent-line)] rounded-full text-[var(--text)] outline-none w-[140px]"
+              className="text-[11px] py-[2px] px-2 bg-transparent border border-accent-line rounded-full text-text outline-none w-[140px]"
               placeholder="输入后回车"
             />
           ) : (
             <button
-              className="text-[11px] py-[2px] px-2 border border-dashed border-[var(--border)] rounded-full text-[var(--text-3)] hover:border-[var(--accent-line)] hover:text-[var(--accent)] cursor-pointer"
+              className="text-[11px] py-[2px] px-2 border border-dashed border-border rounded-full text-text-3 hover:border-accent-line hover:text-accent-brand cursor-pointer"
               onClick={() => setEditing(true)}
             >
               + 添加
@@ -300,15 +300,15 @@ function TextCard({
   const [draft, setDraft] = useState('');
 
   return (
-    <div className="border border-[var(--border)] rounded-[8px] bg-[var(--surface)] p-3 min-w-0">
+    <div className="border border-border rounded-[8px] bg-surface p-3 min-w-0">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-semibold text-[var(--text-2)] uppercase tracking-wide">
+        <span className="text-[11px] font-semibold text-text-2 uppercase tracking-wide">
           {def.label}
         </span>
         <div className="flex items-center gap-2">
           <ResetButton onReset={onReset} />
           <button
-            className="text-[10px] text-[var(--text-3)] hover:text-[var(--accent)] cursor-pointer"
+            className="text-[10px] text-text-3 hover:text-accent-brand cursor-pointer"
             onClick={() => {
               if (editing) {
                 onUpdate(draft.split('\n').filter((l) => l.trim()));
@@ -333,11 +333,11 @@ function TextCard({
               setEditing(false);
             }
           }}
-          className="w-full min-h-[60px] bg-[var(--bg-sunk)] border border-[var(--border)] rounded-[4px] p-2 text-[11.5px] leading-[1.6] text-[var(--text)] resize-none outline-none focus:border-[var(--accent-line)]"
+          className="w-full min-h-[60px] bg-bg-sunk border border-border rounded-[4px] p-2 text-[11.5px] leading-[1.6] text-text resize-none outline-none focus:border-accent-line"
           rows={items.length + 1}
         />
       ) : (
-        <div className="text-[11.5px] leading-[1.6] text-[var(--text-2)]">
+        <div className="text-[11.5px] leading-[1.6] text-text-2">
           {items.map((line, i) => (
             <div key={i}>{line}</div>
           ))}

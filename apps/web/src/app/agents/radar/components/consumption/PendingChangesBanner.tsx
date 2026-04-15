@@ -27,7 +27,7 @@ export default function PendingChangesBanner({
     .map(([k, v]) => `${v} ${k}`)
     .join(', ');
   return (
-    <div className="flex items-center gap-3 py-[7px] px-[14px] bg-[#fff8ea] border-b border-[#f3dca8] text-[var(--warn)] text-xs shrink-0">
+    <div className="flex items-center gap-3 py-[7px] px-[14px] bg-[#fff8ea] border-b border-[#f3dca8] text-warn text-xs shrink-0">
       <span className="font-semibold">{keys.length} pending change{keys.length > 1 ? 's' : ''}</span>
       <span>: {parts}</span>
       <span className="flex-1" />

@@ -17,7 +17,7 @@ export default function NavRail({
   const { theme, toggle } = useTheme();
 
   return (
-    <aside className="border-r border-[var(--border)] bg-[var(--surface-hi)] flex flex-col items-center py-2.5 gap-1">
+    <aside className="border-r border-border bg-surface-hi flex flex-col items-center py-2.5 gap-1">
       <NavButton
         active={activeView === 'inbox' || activeView === 'watching' || activeView === 'archive'}
         tip="Radar"
@@ -31,7 +31,7 @@ export default function NavRail({
       <NavButton disabled tip="Scout · soon">
         S
       </NavButton>
-      <div className="w-5 h-px bg-[var(--border)] my-1.5" />
+      <div className="w-5 h-px bg-border my-1.5" />
 
       {/* Sync (Sources + Runs merged) */}
       <NavButton
@@ -124,9 +124,9 @@ function NavButton({
     <button
       className={cn(
         'nav-item',
-        'w-[34px] h-[34px] inline-flex items-center justify-center rounded-[7px] cursor-pointer text-[var(--text-3)] bg-transparent border border-transparent text-[13px] font-semibold transition-all duration-[.12s] relative',
-        'hover:not-disabled:text-[var(--text)] hover:not-disabled:bg-[var(--bg-sunk)]',
-        active && 'text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent-line)]',
+        'w-[34px] h-[34px] inline-flex items-center justify-center rounded-[7px] cursor-pointer text-text-3 bg-transparent border border-transparent text-[13px] font-semibold transition-all duration-[.12s] relative',
+        'hover:not-disabled:text-text hover:not-disabled:bg-bg-sunk',
+        active && 'text-accent-brand bg-accent-soft border-accent-line',
         disabled && 'opacity-30 cursor-not-allowed',
       )}
       data-tip={tip}

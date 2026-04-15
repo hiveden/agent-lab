@@ -198,7 +198,7 @@ export default function SettingsView() {
 
   if (loading) {
     return (
-      <div className="max-w-[560px] py-8 text-center text-sm text-[var(--text-3)]">
+      <div className="max-w-[560px] py-8 text-center text-sm text-text-3">
         加载设置中…
       </div>
     );
@@ -207,7 +207,7 @@ export default function SettingsView() {
   return (
     <div className="max-w-[560px]">
       <h2 className="text-base font-semibold mb-1">LLM 设置</h2>
-      <p className="text-[13px] text-[var(--text-3)] mb-6">
+      <p className="text-[13px] text-text-3 mb-6">
         配置 Radar Agent 使用的模型和 API。
       </p>
 
@@ -259,7 +259,7 @@ export default function SettingsView() {
             placeholder={form.api_key_masked || (form.provider === 'ollama' ? '本地模型无需 key' : '输入 API key')}
           />
           {form.api_key_masked && (
-            <p className="text-[11px] text-[var(--text-3)]">
+            <p className="text-[11px] text-text-3">
               已保存: {form.api_key_masked}
             </p>
           )}

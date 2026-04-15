@@ -311,25 +311,25 @@ function AgentViewInner() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left: Session list (placeholder — single session for now) */}
-      <aside className="w-[200px] shrink-0 border-r border-[var(--border)] flex flex-col">
-        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
+      <aside className="w-[200px] shrink-0 border-r border-border flex flex-col">
+        <div className="p-3 border-b border-border flex items-center justify-between">
           <span className="font-semibold text-[12px]">会话</span>
           <HelpIcon tooltip="每次对话为一个独立 session，避免上下文过长" />
         </div>
         <div className="flex-1 overflow-y-auto">
           <div
             className={cn(
-              'px-3 py-2.5 cursor-pointer border-b border-[var(--border)] text-[12px]',
-              'bg-[var(--accent-soft)] border-l-2 border-l-[var(--accent)]',
+              'px-3 py-2.5 cursor-pointer border-b border-border text-[12px]',
+              'bg-accent-soft border-l-2 border-l-accent-brand',
             )}
           >
             <div className="flex items-center gap-1.5 mb-0.5">
-              {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-[var(--bolt)] animate-pulse" />}
-              <span className="font-medium text-[var(--text)]">
+              {isLoading && <span className="w-1.5 h-1.5 rounded-full bg-bolt animate-pulse" />}
+              <span className="font-medium text-text">
                 {messages.length > 0 ? `${messages.length} 条消息` : '新会话'}
               </span>
             </div>
-            <div className="text-[11px] text-[var(--text-3)] pl-3">
+            <div className="text-[11px] text-text-3 pl-3">
               {agentState.progress
                 ? `${agentState.progress.step} (${agentState.progress.promoted ?? 0}/${agentState.progress.total ?? '?'})`
                 : messages.length > 0 ? relTime(new Date().toISOString()) : '当前'}
@@ -357,13 +357,13 @@ function AgentViewInner() {
             onResize={(size) => setConfigCollapsed(size.inPixels <= 40)}
           >
             <div className="h-full flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-1.5 border-b border-[var(--border)] shrink-0">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-border shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] font-semibold text-[var(--text)]">Agent 配置</span>
+                  <span className="text-[12px] font-semibold text-text">Agent 配置</span>
                   <HelpIcon tooltip="Agent 的推荐规则、过滤条件和用户画像配置" />
                 </div>
                 <button
-                  className="text-[11px] text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
+                  className="text-[11px] text-text-3 hover:text-text cursor-pointer"
                   onClick={toggleConfig}
                 >
                   {configCollapsed ? '▼ 展开' : '▲ 收起'}
@@ -390,13 +390,13 @@ function AgentViewInner() {
             onResize={(size) => setResultsCollapsed(size.inPixels <= 40)}
           >
             <div className="h-full flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-1.5 border-b border-[var(--border)] shrink-0">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-border shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] font-semibold text-[var(--text)]">推送结果</span>
+                  <span className="text-[12px] font-semibold text-text">推送结果</span>
                   <HelpIcon tooltip="每次评判的推荐结果，支持翻页查看历史批次" />
                 </div>
                 <button
-                  className="text-[11px] text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer"
+                  className="text-[11px] text-text-3 hover:text-text cursor-pointer"
                   onClick={toggleResults}
                 >
                   {resultsCollapsed ? '▼ 展开' : '▲ 收起'}
@@ -419,7 +419,7 @@ function AgentViewInner() {
 
           {/* Panel 3: Chat + Trace (bottom) */}
           <Panel id="chat-trace" defaultSize={40} minSize={20}>
-            <div className="flex flex-col h-full overflow-hidden border-t border-[var(--border)]">
+            <div className="flex flex-col h-full overflow-hidden border-t border-border">
               <Group
                 orientation="horizontal"
                 className="flex-1 min-h-0"
@@ -431,15 +431,15 @@ function AgentViewInner() {
                 <Panel id="agent-chat" defaultSize={60} minSize={30}>
                   <div className="flex flex-col h-full overflow-hidden">
                     {/* Chat header */}
-                    <div className="flex items-center justify-between px-4 py-1.5 border-b border-[var(--border)] bg-[var(--surface-hi)] shrink-0">
+                    <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-hi shrink-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12px] font-semibold text-[var(--text)]">对话</span>
+                        <span className="text-[12px] font-semibold text-text">对话</span>
                         <HelpIcon tooltip="与 Agent 对话，通过自然语言触发评判或调整偏好" />
                       </div>
                       <button
                         className={cn(
-                          'inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-transparent bg-transparent text-[var(--text-3)] cursor-pointer transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--bg-sunk)] hover:border-[var(--border-hi)]',
-                          traceOpen && 'text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent-line)]',
+                          'inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-transparent bg-transparent text-text-3 cursor-pointer transition-all duration-100 hover:text-text hover:bg-bg-sunk hover:border-border-hi',
+                          traceOpen && 'text-accent-brand bg-accent-soft border-accent-line',
                         )}
                         title="Toggle trace"
                         onClick={() => setTraceOpen(!traceOpen)}
@@ -450,12 +450,12 @@ function AgentViewInner() {
                       </button>
                     </div>
                     {/* Preset buttons */}
-                    <div className="border-b border-[var(--border)] bg-[var(--surface-hi)] px-4 py-1.5 shrink-0">
+                    <div className="border-b border-border bg-surface-hi px-4 py-1.5 shrink-0">
                       <div className="flex gap-1.5 flex-wrap">
                         {PRESETS.map((p) => (
                           <button
                             key={p.label}
-                            className="text-[11px] py-[2px] px-2 bg-[var(--surface)] border border-[var(--border-hi)] rounded-full text-[var(--text-2)] cursor-pointer transition-all duration-[.12s] hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+                            className="text-[11px] py-[2px] px-2 bg-surface border border-border-hi rounded-full text-text-2 cursor-pointer transition-all duration-[.12s] hover:border-accent-line hover:bg-accent-soft hover:text-accent-brand"
                             disabled={isLoading}
                             onClick={() => sendPreset(p.msg)}
                           >
