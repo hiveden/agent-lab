@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC
 from typing import Any
 
-from agent_lab_shared.config import settings
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.schema import SourceConfig
-from agent_lab_shared.sse import progress_sse
 
 from ..collectors.base import get_collector
 
@@ -22,9 +21,9 @@ ProgressEvent = dict[str, Any]
 
 def _ev(payload: ProgressEvent) -> ProgressEvent:
     """Helper: 加 ts 字段。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    payload.setdefault("ts", datetime.now(timezone.utc).isoformat())
+    payload.setdefault("ts", datetime.now(UTC).isoformat())
     return payload
 
 
@@ -48,15 +47,24 @@ async def run_ingest_stream(
         )
         run_id = run_result.get("run", {}).get("id") or run_result.get("id")
     except Exception as e:
-        yield _ev({"type": "span", "id": "run-create", "kind": "system",
-                    "title": f"Failed to create run: {e}", "status": "failed"})
+        yield _ev(
+            {
+                "type": "span",
+                "id": "run-create",
+                "kind": "system",
+                "title": f"Failed to create run: {e}",
+                "status": "failed",
+            }
+        )
 
-    yield _ev({
-        "type": "start",
-        "phase": "ingest",
-        "sources": [{"id": s.id, "type": s.source_type} for s in sources],
-        "run_id": run_id,
-    })
+    yield _ev(
+        {
+            "type": "start",
+            "phase": "ingest",
+            "sources": [{"id": s.id, "type": s.source_type} for s in sources],
+            "run_id": run_id,
+        }
+    )
 
     total_fetched = 0
     total_skipped = 0
@@ -64,11 +72,15 @@ async def run_ingest_stream(
 
     for src in sources:
         span_id = f"collect-{src.id}"
-        yield _ev({
-            "type": "span", "id": span_id, "kind": "tool",
-            "title": f"Collecting from {src.source_type} ({src.id})",
-            "status": "running",
-        })
+        yield _ev(
+            {
+                "type": "span",
+                "id": span_id,
+                "kind": "tool",
+                "title": f"Collecting from {src.source_type} ({src.id})",
+                "status": "running",
+            }
+        )
         t = time.monotonic()
 
         try:
@@ -76,34 +88,49 @@ async def run_ingest_stream(
             raw_items = await collector.collect(src.config)
         except Exception as e:
             ms = int((time.monotonic() - t) * 1000)
-            yield _ev({
-                "type": "span", "id": span_id, "kind": "tool",
-                "title": f"Collect failed: {e}", "status": "failed", "ms": ms,
-            })
+            yield _ev(
+                {
+                    "type": "span",
+                    "id": span_id,
+                    "kind": "tool",
+                    "title": f"Collect failed: {e}",
+                    "status": "failed",
+                    "ms": ms,
+                }
+            )
             continue
 
         ms = int((time.monotonic() - t) * 1000)
         total_fetched += len(raw_items)
-        yield _ev({
-            "type": "span", "id": span_id, "kind": "tool",
-            "title": f"Fetched {len(raw_items)} items",
-            "status": "done", "ms": ms,
-            "detail": {
-                "count": len(raw_items),
-                "sample_titles": [it["title"][:80] for it in raw_items[:3]],
-            },
-        })
+        yield _ev(
+            {
+                "type": "span",
+                "id": span_id,
+                "kind": "tool",
+                "title": f"Fetched {len(raw_items)} items",
+                "status": "done",
+                "ms": ms,
+                "detail": {
+                    "count": len(raw_items),
+                    "sample_titles": [it["title"][:80] for it in raw_items[:3]],
+                },
+            }
+        )
 
         if not raw_items:
             continue
 
         # POST to /api/raw-items/batch
         persist_id = f"persist-{src.id}"
-        yield _ev({
-            "type": "span", "id": persist_id, "kind": "system",
-            "title": f"Saving {len(raw_items)} raw items",
-            "status": "running",
-        })
+        yield _ev(
+            {
+                "type": "span",
+                "id": persist_id,
+                "kind": "system",
+                "title": f"Saving {len(raw_items)} raw items",
+                "status": "running",
+            }
+        )
         t = time.monotonic()
         try:
             batch_payload = [
@@ -124,41 +151,57 @@ async def run_ingest_stream(
             total_skipped += skipped
         except Exception as e:
             ms = int((time.monotonic() - t) * 1000)
-            yield _ev({
-                "type": "span", "id": persist_id, "kind": "system",
-                "title": f"Persist failed: {e}", "status": "failed", "ms": ms,
-            })
+            yield _ev(
+                {
+                    "type": "span",
+                    "id": persist_id,
+                    "kind": "system",
+                    "title": f"Persist failed: {e}",
+                    "status": "failed",
+                    "ms": ms,
+                }
+            )
             continue
 
         ms = int((time.monotonic() - t) * 1000)
-        yield _ev({
-            "type": "span", "id": persist_id, "kind": "system",
-            "title": f"Saved {inserted} new · {skipped} duplicate",
-            "status": "done", "ms": ms,
-        })
+        yield _ev(
+            {
+                "type": "span",
+                "id": persist_id,
+                "kind": "system",
+                "title": f"Saved {inserted} new · {skipped} duplicate",
+                "status": "done",
+                "ms": ms,
+            }
+        )
 
     total_ms = int((time.monotonic() - t0) * 1000)
 
     # 更新 run 状态
     if run_id:
         try:
-            client.update_run(run_id, {
-                "status": "done",
-                "stats": {
-                    "fetched": total_fetched,
-                    "inserted": total_inserted,
-                    "skipped": total_skipped,
+            client.update_run(
+                run_id,
+                {
+                    "status": "done",
+                    "stats": {
+                        "fetched": total_fetched,
+                        "inserted": total_inserted,
+                        "skipped": total_skipped,
+                    },
                 },
-            })
+            )
         except Exception:
             pass
 
-    yield _ev({
-        "type": "result",
-        "phase": "ingest",
-        "fetched": total_fetched,
-        "inserted": total_inserted,
-        "skipped": total_skipped,
-        "total_ms": total_ms,
-        "run_id": run_id,
-    })
+    yield _ev(
+        {
+            "type": "result",
+            "phase": "ingest",
+            "fetched": total_fetched,
+            "inserted": total_inserted,
+            "skipped": total_skipped,
+            "total_ms": total_ms,
+            "run_id": run_id,
+        }
+    )

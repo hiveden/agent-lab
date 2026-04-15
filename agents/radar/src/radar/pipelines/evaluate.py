@@ -8,12 +8,12 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC
 from typing import Any
 
 from agent_lab_shared.config import settings
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.schema import ItemInput
-from agent_lab_shared.sse import progress_sse
 
 from ..chains.recommend import generate_recommendations
 
@@ -21,9 +21,9 @@ ProgressEvent = dict[str, Any]
 
 
 def _ev(payload: ProgressEvent) -> ProgressEvent:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    payload.setdefault("ts", datetime.now(timezone.utc).isoformat())
+    payload.setdefault("ts", datetime.now(UTC).isoformat())
     return payload
 
 
@@ -55,7 +55,7 @@ async def run_evaluate_stream(
         {
             "type": "start",
             "phase": "evaluate",
-            "mock": settings.llm_mock,
+            "mock": False,
             "run_id": run_id,
         }
     )
@@ -137,7 +137,7 @@ async def run_evaluate_stream(
         )
 
     # 3. LLM 评判
-    model_name = "mock" if settings.llm_mock else settings.llm_model_push
+    model_name = settings.llm_model_push
 
     # Build prompt preview (mirrors recommend.py logic)
     story_text = "\n".join(
@@ -239,9 +239,9 @@ async def run_evaluate_stream(
         )
         t = time.monotonic()
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
-            result = client.post_items_batch(datetime.now(timezone.utc), items)
+            result = client.post_items_batch(datetime.now(UTC), items)
             inserted = result.get("inserted", 0)
             skipped = result.get("skipped", 0)
         except Exception as e:

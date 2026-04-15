@@ -1,63 +1,32 @@
-"""LLM factory: 按 task 返回 BaseChatModel，支持 mock + 多 provider。
+"""LLM factory: 按 task 返回 BaseChatModel。
 
 读取优先级: platform API (DB settings) > env var > defaults
+
+DeferredLLM: 延迟解析 LLM 配置的包装器，每次调用时才创建真实 LLM，
+使得用户通过 Settings UI 修改配置后无需重启服务即可生效。
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+import logging
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any, Literal
 
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForLLMRun,
+    CallbackManagerForLLMRun,
+)
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatGenerationChunk, ChatResult
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 
 from .config import settings
 
+logger = logging.getLogger(__name__)
+
 TaskType = Literal["push", "chat", "tool"]
-
-
-class MockChatModel(BaseChatModel):
-    """无依赖的假 LLM。固定输出 mock 回复。"""
-
-    mock_text: str = "[mock] 这是一条假回复,Phase 2 接真 LLM。"
-
-    @property
-    def _llm_type(self) -> str:
-        return "mock-chat"
-
-    def _generate(
-        self,
-        messages: list[BaseMessage],
-        stop: list[str] | None = None,
-        run_manager: Any = None,
-        **kwargs: Any,
-    ) -> ChatResult:
-        msg = AIMessage(content=self.mock_text)
-        return ChatResult(generations=[ChatGeneration(message=msg)])
-
-    def _stream(
-        self,
-        messages: list[BaseMessage],
-        stop: list[str] | None = None,
-        run_manager: Any = None,
-        **kwargs: Any,
-    ) -> Iterator[ChatGenerationChunk]:
-        text = self.mock_text
-        size = max(1, len(text) // 6)
-        for i in range(0, len(text), size):
-            piece = text[i : i + size]
-            yield ChatGenerationChunk(message=AIMessageChunk(content=piece))
-
-    async def _astream(
-        self,
-        messages: list[BaseMessage],
-        stop: list[str] | None = None,
-        run_manager: Any = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[ChatGenerationChunk]:
-        for chunk in self._stream(messages, stop, run_manager, **kwargs):
-            yield chunk
 
 
 def _resolve_settings(task: TaskType) -> tuple[str, str, str, str]:
@@ -80,7 +49,9 @@ def _resolve_settings(task: TaskType) -> tuple[str, str, str, str]:
         s = data.get("settings", {})
 
         api_key = s.get("api_key", "")
-        if api_key:
+        db_provider = s.get("provider", "")
+        # Ollama 不需要 API key，有 provider 就算有效配置
+        if api_key or db_provider == "ollama":
             db_model_map = {
                 "push": s.get("model_push", ""),
                 "chat": s.get("model_chat", ""),
@@ -126,9 +97,107 @@ def _create_llm(provider: str, base_url: str, api_key: str, model: str) -> BaseC
 
 
 def get_llm(task: TaskType = "chat") -> BaseChatModel:
-    """按任务类型返回 LLM。LLM_MOCK=1 时返回 MockChatModel。"""
-    if settings.llm_mock:
-        return MockChatModel()
-
+    """按任务类型返回 LLM。"""
     provider, base_url, api_key, model = _resolve_settings(task)
     return _create_llm(provider, base_url, api_key, model)
+
+
+class DeferredLLM(BaseChatModel):
+    """延迟解析的 LLM 包装器。
+
+    不在构造时创建真实 LLM，而是在每次 _generate/_stream/_astream 调用时
+    通过 get_llm(task) 创建新实例，从而始终读取最新的 LLM 配置。
+
+    如果 bind_tools 被调用（如 create_react_agent 内部），返回一个新的
+    DeferredLLM 实例，记住 tools 参数，在实际调用时应用。
+    """
+
+    task: TaskType = "chat"
+    _bound_tools: list[Any] | None = None
+    _bound_tool_choice: str | None = None
+    _bound_tool_kwargs: dict[str, Any] = {}
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @property
+    def _llm_type(self) -> str:
+        return "deferred"
+
+    def _get_runnable(self) -> BaseChatModel | Runnable:
+        """创建新鲜的 LLM 实例，如果有 bound tools 则绑定。"""
+        llm = get_llm(self.task)
+        if self._bound_tools is not None:
+            return llm.bind_tools(
+                self._bound_tools,
+                tool_choice=self._bound_tool_choice,
+                **self._bound_tool_kwargs,
+            )
+        return llm
+
+    def bind_tools(
+        self,
+        tools: Sequence[dict[str, Any] | type | Callable | BaseTool],
+        *,
+        tool_choice: str | None = None,
+        **kwargs: Any,
+    ) -> DeferredLLM:
+        """记住 tools 参数，返回新的 DeferredLLM，实际绑定延迟到调用时。"""
+        clone = DeferredLLM(task=self.task)
+        clone._bound_tools = list(tools)
+        clone._bound_tool_choice = tool_choice
+        clone._bound_tool_kwargs = kwargs
+        return clone
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        runnable = self._get_runnable()
+        # 委托到真实 LLM 的 _generate（BaseChatModel 内部方法）
+        if isinstance(runnable, BaseChatModel):
+            return runnable._generate(messages, stop, run_manager, **kwargs)
+        # bind_tools 返回的是 RunnableBinding，走 invoke
+        result = runnable.invoke(messages, **kwargs)
+        from langchain_core.outputs import ChatGeneration
+
+        return ChatResult(generations=[ChatGeneration(message=result)])
+
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        runnable = self._get_runnable()
+        if isinstance(runnable, BaseChatModel):
+            yield from runnable._stream(messages, stop, run_manager, **kwargs)
+            return
+        # RunnableBinding — 走 stream
+        for chunk in runnable.stream(messages, **kwargs):
+            if isinstance(chunk, ChatGenerationChunk):
+                yield chunk
+            else:
+                yield ChatGenerationChunk(message=chunk)
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        runnable = self._get_runnable()
+        if isinstance(runnable, BaseChatModel):
+            async for chunk in runnable._astream(messages, stop, run_manager, **kwargs):
+                yield chunk
+            return
+        # RunnableBinding — 走 astream
+        async for chunk in runnable.astream(messages, **kwargs):
+            if isinstance(chunk, ChatGenerationChunk):
+                yield chunk
+            else:
+                yield ChatGenerationChunk(message=chunk)

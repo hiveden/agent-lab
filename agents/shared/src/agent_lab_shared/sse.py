@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
 def progress_sse(event: dict[str, Any]) -> bytes:
     """把一个 progress event 序列化成一条 SSE data line。"""
-    event.setdefault("ts", datetime.now(timezone.utc).isoformat())
-    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8")
+    event.setdefault("ts", datetime.now(UTC).isoformat())
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode()
 
 
 def openai_sse_chunk(
@@ -31,7 +31,7 @@ def openai_sse_chunk(
         "model": model,
         "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
     }
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
 
 
 SSE_DONE = b"data: [DONE]\n\n"

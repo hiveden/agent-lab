@@ -24,9 +24,11 @@ def _resolve_path(obj: Any, dotpath: str) -> Any:
 
 def _render_template(template: str, item: dict[str, Any]) -> str:
     """替换 {dotpath} 占位符。'https://x/{content.id}' → 'https://x/123'"""
+
     def replacer(m: re.Match[str]) -> str:
         val = _resolve_path(item, m.group(1))
         return str(val) if val is not None else ""
+
     return re.sub(r"\{([^}]+)\}", replacer, template)
 
 
@@ -52,10 +54,16 @@ class HttpCollector:
         timeout = config.get("timeout", 20)
         limit = config.get("limit", 50)
 
-        client_kwargs: dict[str, Any] = {"timeout": float(timeout), "trust_env": False, **proxy_kwargs()}
+        client_kwargs: dict[str, Any] = {
+            "timeout": float(timeout),
+            "trust_env": False,
+            **proxy_kwargs(),
+        }
 
         async with httpx.AsyncClient(**client_kwargs) as client:
-            resp = await client.request(method, url, headers=headers, json=body if method == "POST" else None)
+            resp = await client.request(
+                method, url, headers=headers, json=body if method == "POST" else None
+            )
             resp.raise_for_status()
             data = resp.json()
 

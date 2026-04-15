@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -24,7 +24,7 @@ DEFAULT_BATCH_SIZE = 10
 def _build_prompt(accounts: list[str], date: str) -> str:
     return f"""使用 x_search 工具搜索以下每个账号在 {date} 的推文。你必须实际调用 x_search 获取真实数据，不要凭记忆回答。
 
-账号列表: {', '.join(accounts)}
+账号列表: {", ".join(accounts)}
 
 搜索完成后，对结果执行：
 
@@ -155,7 +155,7 @@ class GrokCollector:
         batch_size = config.get("batch_size", DEFAULT_BATCH_SIZE)
         api_url = config.get("api_url", DEFAULT_API_URL)
         model = config.get("model", DEFAULT_MODEL)
-        date = config.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        date = config.get("date", datetime.now(UTC).strftime("%Y-%m-%d"))
 
         # API key: env var > config
         api_key = os.environ.get("GROK_API_KEY", "") or config.get("api_key", "")
@@ -163,7 +163,7 @@ class GrokCollector:
             raise ValueError("GROK_API_KEY env var or config.api_key required")
 
         # 分批（每批 ≤ batch_size）
-        batches = [accounts[i:i + batch_size] for i in range(0, len(accounts), batch_size)]
+        batches = [accounts[i : i + batch_size] for i in range(0, len(accounts), batch_size)]
 
         all_items: list[RawCollectorItem] = []
         async with httpx.AsyncClient(trust_env=False, **proxy_kwargs()) as client:

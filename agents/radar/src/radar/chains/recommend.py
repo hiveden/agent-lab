@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from agent_lab_shared.config import settings
 from agent_lab_shared.llm import get_llm
 from agent_lab_shared.schema import ItemInput
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -93,45 +92,16 @@ def _parse_recommendations(raw: str) -> list[_Recommendation]:
     return out
 
 
-def _mock_recommendations(stories: list[dict[str, Any]]) -> list[ItemInput]:
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
-    round_at = datetime.now(timezone.utc)
-    picks = stories[:3]
-    out: list[ItemInput] = []
-    for s in picks:
-        sid = s.get("id")
-        out.append(
-            ItemInput(
-                external_id=f"hn-{sid}-{today}",
-                agent_id="radar",
-                item_type="recommendation",
-                grade="bolt",
-                title=s.get("title", "(untitled)"),
-                summary=f"来自 HN,score={s.get('score', 0)},by {s.get('by', '?')}",
-                why="[mock] mocked recommendation",
-                url=s.get("url"),
-                source="hacker-news",
-                tags=["mock", "hn"],
-                payload={"hn_id": sid, "score": s.get("score", 0)},
-                round_at=round_at,
-            )
-        )
-    return out
-
-
 def generate_recommendations(
     stories: list[dict[str, Any]],
     user_prompt: str | None = None,
 ) -> list[ItemInput]:
-    """从 stories 生成 ItemInput 列表。mock 模式直接取前 3 条。
+    """从 stories 生成 ItemInput 列表。
 
     user_prompt: 用户自定义提示词，非空时覆盖默认 system prompt。
     """
     if not stories:
         return []
-
-    if settings.llm_mock:
-        return _mock_recommendations(stories)
 
     llm = get_llm("push")
 
@@ -150,8 +120,8 @@ def generate_recommendations(
 
     recs = _parse_recommendations(raw)
 
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
-    round_at = datetime.now(timezone.utc)
+    today = datetime.now(UTC).strftime("%Y%m%d")
+    round_at = datetime.now(UTC)
     out: list[ItemInput] = []
     for rec in recs:
         out.append(

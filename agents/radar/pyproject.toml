@@ -16,6 +16,10 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "feedparser>=6.0",
     "click>=8.1",
+    "langgraph>=0.4",
+    "ag-ui-protocol>=0.1",
+    "ag-ui-langgraph>=0.0.30",
+    "copilotkit>=0.1.74",
 ]
 
 [project.scripts]

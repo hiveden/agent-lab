@@ -1,6 +1,5 @@
 """Tests for config validation."""
 
-import os
 
 import pytest
 from pydantic import ValidationError
@@ -13,26 +12,10 @@ def test_dev_mode_loads_ok():
     s = Settings(
         _env_file=None,
         DEPLOY_ENV="development",
-        LLM_MOCK="1",
         RADAR_WRITE_TOKEN="dev-radar-token-change-me",
         PLATFORM_API_BASE="http://127.0.0.1:8788",
     )
     assert s.deploy_env == "development"
-    assert s.llm_mock is True
-
-
-def test_production_rejects_mock():
-    from agent_lab_shared.config import Settings
-
-    with pytest.raises(ValidationError, match="LLM_MOCK must be 0"):
-        Settings(
-            _env_file=None,
-            DEPLOY_ENV="production",
-            LLM_MOCK="1",
-            GLM_API_KEY="real-key",
-            RADAR_WRITE_TOKEN="prod-token",
-            PLATFORM_API_BASE="https://app.example.com",
-        )
 
 
 def test_production_rejects_empty_api_key():
@@ -42,7 +25,6 @@ def test_production_rejects_empty_api_key():
         Settings(
             _env_file=None,
             DEPLOY_ENV="production",
-            LLM_MOCK="0",
             GLM_API_KEY="",
             RADAR_WRITE_TOKEN="prod-token",
             PLATFORM_API_BASE="https://app.example.com",
@@ -56,7 +38,6 @@ def test_production_rejects_default_token():
         Settings(
             _env_file=None,
             DEPLOY_ENV="production",
-            LLM_MOCK="0",
             GLM_API_KEY="real-key",
             RADAR_WRITE_TOKEN="dev-radar-token-change-me",
             PLATFORM_API_BASE="https://app.example.com",
@@ -70,7 +51,6 @@ def test_production_rejects_localhost():
         Settings(
             _env_file=None,
             DEPLOY_ENV="production",
-            LLM_MOCK="0",
             GLM_API_KEY="real-key",
             RADAR_WRITE_TOKEN="prod-token",
             PLATFORM_API_BASE="http://127.0.0.1:8788",
@@ -83,13 +63,11 @@ def test_production_valid_config():
     s = Settings(
         _env_file=None,
         DEPLOY_ENV="production",
-        LLM_MOCK="0",
         GLM_API_KEY="real-key",
         RADAR_WRITE_TOKEN="prod-token-xyz",
         PLATFORM_API_BASE="https://app.example.com",
     )
     assert s.deploy_env == "production"
-    assert s.llm_mock is False
     assert s.glm_api_key == "real-key"
 
 
@@ -127,6 +105,7 @@ def test_proxy_kwargs_with_proxy(monkeypatch):
     monkeypatch.setattr(config, "settings", mock_settings)
 
     from radar.collectors.base import proxy_kwargs
+
     result = proxy_kwargs()
     assert result == {"proxy": "http://127.0.0.1:7890"}
 
@@ -140,5 +119,6 @@ def test_proxy_kwargs_without_proxy(monkeypatch):
     monkeypatch.setattr(config, "settings", mock_settings)
 
     from radar.collectors.base import proxy_kwargs
+
     result = proxy_kwargs()
     assert result == {}

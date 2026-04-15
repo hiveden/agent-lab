@@ -1,6 +1,10 @@
 """Tests for recommendation chain."""
 
-from radar.chains.recommend import generate_recommendations, _parse_recommendations, _strip_code_fence
+from radar.chains.recommend import (
+    _parse_recommendations,
+    _strip_code_fence,
+    generate_recommendations,
+)
 
 
 def test_strip_code_fence_json():
@@ -36,20 +40,6 @@ def test_parse_recommendations_skips_invalid():
     raw = '[{"external_id_suffix": "1", "grade": "fire", "title": "OK", "summary": "S", "why": "W", "tags": [], "url": "https://a.com"}, {"bad": true}]'
     recs = _parse_recommendations(raw)
     assert len(recs) == 1
-
-
-def test_mock_recommendations():
-    stories = [
-        {"id": 100, "title": "Story A", "url": "https://a.com", "score": 50, "by": "u1", "time": 0},
-        {"id": 101, "title": "Story B", "url": "https://b.com", "score": 30, "by": "u2", "time": 0},
-        {"id": 102, "title": "Story C", "url": "https://c.com", "score": 10, "by": "u3", "time": 0},
-        {"id": 103, "title": "Story D", "url": "https://d.com", "score": 5, "by": "u4", "time": 0},
-    ]
-    items = generate_recommendations(stories)
-    assert len(items) == 3  # mock takes first 3
-    assert items[0].agent_id == "radar"
-    assert items[0].grade == "bolt"
-    assert "hn-100-" in items[0].external_id
 
 
 def test_empty_stories():

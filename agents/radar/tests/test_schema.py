@@ -1,14 +1,12 @@
 """Tests for shared Pydantic schemas."""
 
 import pytest
-from pydantic import ValidationError
-
 from agent_lab_shared.schema import (
     ItemInput,
     RawItemInput,
-    Source,
     SourceConfig,
 )
+from pydantic import ValidationError
 
 
 def test_item_input_valid():

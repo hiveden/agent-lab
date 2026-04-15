@@ -1,8 +1,7 @@
 """Tests for HN collector."""
 
 import pytest
-
-from radar.collectors.base import RawCollectorItem, get_collector
+from radar.collectors.base import get_collector
 from radar.collectors.hn import HNCollector
 
 
@@ -26,16 +25,36 @@ async def test_hn_collector_returns_raw_items(httpx_mock):
     )
     httpx_mock.add_response(
         url="https://hacker-news.firebaseio.com/v0/item/1001.json",
-        json={"id": 1001, "title": "Test Story 1", "url": "https://example.com/1", "score": 100, "by": "user1", "time": 1700000000},
+        json={
+            "id": 1001,
+            "title": "Test Story 1",
+            "url": "https://example.com/1",
+            "score": 100,
+            "by": "user1",
+            "time": 1700000000,
+        },
     )
     httpx_mock.add_response(
         url="https://hacker-news.firebaseio.com/v0/item/1002.json",
-        json={"id": 1002, "title": "Test Story 2", "url": "https://example.com/2", "score": 50, "by": "user2", "time": 1700000001},
+        json={
+            "id": 1002,
+            "title": "Test Story 2",
+            "url": "https://example.com/2",
+            "score": 50,
+            "by": "user2",
+            "time": 1700000001,
+        },
     )
     # Item without URL (should be filtered)
     httpx_mock.add_response(
         url="https://hacker-news.firebaseio.com/v0/item/1003.json",
-        json={"id": 1003, "title": "Ask HN: no url", "score": 30, "by": "user3", "time": 1700000002},
+        json={
+            "id": 1003,
+            "title": "Ask HN: no url",
+            "score": 30,
+            "by": "user3",
+            "time": 1700000002,
+        },
     )
 
     collector = HNCollector()
@@ -57,7 +76,14 @@ async def test_hn_collector_handles_failed_items(httpx_mock):
     )
     httpx_mock.add_response(
         url="https://hacker-news.firebaseio.com/v0/item/2001.json",
-        json={"id": 2001, "title": "Good", "url": "https://good.com", "score": 10, "by": "u", "time": 0},
+        json={
+            "id": 2001,
+            "title": "Good",
+            "url": "https://good.com",
+            "score": 10,
+            "by": "u",
+            "time": 0,
+        },
     )
     httpx_mock.add_response(
         url="https://hacker-news.firebaseio.com/v0/item/2002.json",

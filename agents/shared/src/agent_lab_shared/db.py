@@ -119,6 +119,27 @@ class PlatformClient:
             resp.raise_for_status()
             return resp.json()
 
+    # ── Items (read) ──
+
+    def get_items(
+        self,
+        agent_id: str | None = None,
+        grade: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}/api/items"
+        params: dict[str, str] = {}
+        if agent_id:
+            params["agent_id"] = agent_id
+        if grade:
+            params["grade"] = grade
+        if limit:
+            params["limit"] = str(limit)
+        with self._client() as client:
+            resp = client.get(url, params=params, headers=self._headers())
+            resp.raise_for_status()
+            return resp.json()
+
     # ── LLM Settings ──
 
     def get_llm_settings(self) -> dict[str, Any]:

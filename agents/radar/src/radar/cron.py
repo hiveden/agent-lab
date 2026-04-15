@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 
 import click
-
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.schema import SourceConfig
 

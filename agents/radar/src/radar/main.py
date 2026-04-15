@@ -1,22 +1,27 @@
-"""Radar FastAPI 服务: ingest + evaluate + chat 端点。"""
+"""Radar FastAPI 服务: ingest + evaluate + AG-UI chat 端点。"""
 
 from __future__ import annotations
 
-import time
-import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from agent_lab_shared.config import settings
+from agent_lab_shared.logging import setup_logging
+
+# ── 初始化结构化日志（在 import 阶段即完成，确保后续所有模块都能使用） ──
+setup_logging(deploy_env=settings.deploy_env, agent_id="radar")
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.schema import SourceConfig
-from agent_lab_shared.sse import SSE_DONE, openai_sse_chunk, progress_sse
+from agent_lab_shared.sse import SSE_DONE, progress_sse
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .chains.chat import chat_stream
+from .agent import create_radar_agent
+from .exceptions import RadarError
+from .middleware import RequestLoggingMiddleware, generic_error_handler, radar_error_handler
 from .pipelines.evaluate import run_evaluate_stream
 from .pipelines.ingest import run_ingest_stream
 
@@ -28,6 +33,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
+
+# ── 全局异常处理器 ──
+app.add_exception_handler(RadarError, radar_error_handler)  # type: ignore[arg-type]
+app.add_exception_handler(Exception, generic_error_handler)
+
+# ── AG-UI Agent (instantiated once at startup) ──
+
+_radar_graph = create_radar_agent()
+from .agui_tracing import TracingLangGraphAGUIAgent
+
+_ag_ui_agent = TracingLangGraphAGUIAgent(
+    name="radar",
+    description="Radar Agent — intelligent content discovery assistant",
+    graph=_radar_graph,
+)
+add_langgraph_fastapi_endpoint(app, _ag_ui_agent, path="/agent/chat")
 
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -56,6 +78,7 @@ async def health() -> dict[str, str]:
 @app.get("/source-types")
 async def source_types() -> dict:
     from .collectors.base import get_source_types
+
     return {"source_types": get_source_types()}
 
 
@@ -160,52 +183,6 @@ async def evaluate(
     _check_auth(authorization)
     return StreamingResponse(
         _evaluate_sse(req.agent_id, user_prompt=req.prompt),
-        media_type="text/event-stream",
-        headers=_SSE_HEADERS,
-    )
-
-
-# ── Chat (OpenAI-compatible) — DEPRECATED ──
-# LLM 编排已上移到 Next.js AI SDK (streamText + tools + maxSteps)
-# 此端点保留供过渡期使用，后续将移除
-
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-
-class ChatCompletionRequest(BaseModel):
-    model: str = "radar"
-    messages: list[ChatMessage]
-    stream: bool = False
-    temperature: float | None = None
-
-
-async def _openai_sse_iter(messages: list[dict[str, Any]]) -> AsyncIterator[bytes]:
-    chat_id = f"chatcmpl-{uuid.uuid4().hex}"
-    created = int(time.time())
-
-    system_msg = next((m["content"] for m in messages if m["role"] == "system"), None)
-    item_ctx = {"summary": system_msg} if system_msg else None
-    user_messages = [m for m in messages if m["role"] != "system"]
-
-    try:
-        async for chunk in chat_stream(user_messages, item_ctx):
-            yield openai_sse_chunk(chat_id, created, "radar", content=chunk)
-        yield openai_sse_chunk(chat_id, created, "radar", finish_reason="stop")
-    except Exception as e:
-        yield openai_sse_chunk(chat_id, created, "radar", content=f"\n\n[Error: {e}]", finish_reason="stop")
-    yield SSE_DONE
-
-
-@app.post("/v1/chat/completions")
-async def chat_completions(req: ChatCompletionRequest) -> StreamingResponse:
-    messages = [m.model_dump() for m in req.messages]
-    if not req.stream:
-        raise HTTPException(status_code=400, detail="Only stream=True is supported")
-    return StreamingResponse(
-        _openai_sse_iter(messages),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
