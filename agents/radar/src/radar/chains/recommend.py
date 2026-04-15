@@ -16,6 +16,8 @@ from agent_lab_shared.schema import ItemInput
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from ..exceptions import EvaluationError
+
 
 class _Recommendation(BaseModel):
     external_id_suffix: str = Field(description="HN story id")
@@ -73,13 +75,19 @@ def _parse_recommendations(raw: str) -> list[_Recommendation]:
     try:
         data = json.loads(s)
     except json.JSONDecodeError as e:
-        raise ValueError(f"LLM returned non-JSON: {e}\nraw: {raw[:200]}") from e
+        raise EvaluationError(
+            f"LLM returned non-JSON: {e}",
+            context={"raw_preview": raw[:200]},
+        ) from e
 
     # Normalize to list
     if isinstance(data, dict) and "items" in data:
         data = data["items"]
     if not isinstance(data, list):
-        raise ValueError(f"Expected JSON array, got {type(data).__name__}")
+        raise EvaluationError(
+            f"Expected JSON array, got {type(data).__name__}",
+            context={"raw_preview": raw[:200]},
+        )
 
     out: list[_Recommendation] = []
     for i, entry in enumerate(data):
@@ -115,7 +123,13 @@ def generate_recommendations(
         SystemMessage(content=system),
         HumanMessage(content=_USER_PROMPT.format(stories=story_text)),
     ]
-    response = llm.invoke(messages)
+    try:
+        response = llm.invoke(messages)
+    except Exception as e:
+        raise EvaluationError(
+            f"LLM invocation failed: {e}",
+            context={"model": getattr(llm, "model_name", "unknown")},
+        ) from e
     raw = response.content if isinstance(response.content, str) else str(response.content)
 
     recs = _parse_recommendations(raw)

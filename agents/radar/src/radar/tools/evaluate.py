@@ -14,11 +14,13 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from agent_lab_shared.db import PlatformClient
+from agent_lab_shared.exceptions import PlatformAPIError
 from agent_lab_shared.schema import ItemInput
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import InjectedToolArg, tool
 
 from ..chains.recommend import generate_recommendations
+from ..exceptions import EvaluationError
 
 
 def _raw_items_to_stories(raw_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -30,7 +32,7 @@ def _raw_items_to_stories(raw_items: list[dict[str, Any]]) -> list[dict[str, Any
         if isinstance(payload, str):
             try:
                 payload = json.loads(payload)
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 payload = {}
         stories.append(
             {
@@ -64,7 +66,7 @@ def _run_evaluate_sync(
     try:
         raw_items_resp = client.get_raw_items(agent_id=agent_id, status="pending")
         raw_items = raw_items_resp.get("raw_items", [])
-    except Exception as e:
+    except PlatformAPIError as e:
         return {"error": f"fetch raw items failed: {e}"}
 
     if not raw_items:
@@ -82,7 +84,7 @@ def _run_evaluate_sync(
     # 3. LLM evaluation
     try:
         items: list[ItemInput] = generate_recommendations(stories, user_prompt)
-    except Exception as e:
+    except EvaluationError as e:
         return {"error": f"llm evaluation failed: {e}"}
 
     # 4. Persist promoted items
@@ -97,7 +99,7 @@ def _run_evaluate_sync(
     if items:
         try:
             client.post_items_batch(datetime.now(UTC), items)
-        except Exception as e:
+        except PlatformAPIError as e:
             return {"error": f"persist items failed: {e}"}
 
     # 5. Update raw_items statuses
@@ -114,7 +116,7 @@ def _run_evaluate_sync(
             client.update_raw_items_status(promoted_ids, "promoted")
         if rejected_ids:
             client.update_raw_items_status(rejected_ids, "rejected")
-    except Exception as e:
+    except PlatformAPIError as e:
         return {"error": f"status update failed: {e}"}
 
     total_ms = round((time.monotonic() - t0) * 1000, 1)

@@ -13,9 +13,11 @@ from typing import Any
 
 from agent_lab_shared.config import settings
 from agent_lab_shared.db import PlatformClient
+from agent_lab_shared.exceptions import PlatformAPIError
 from agent_lab_shared.schema import ItemInput
 
 from ..chains.recommend import generate_recommendations
+from ..exceptions import EvaluationError
 
 ProgressEvent = dict[str, Any]
 
@@ -40,7 +42,7 @@ async def run_evaluate_stream(
     try:
         run_result = client.create_run(agent_id=agent_id, phase="evaluate")
         run_id = run_result.get("run", {}).get("id") or run_result.get("id")
-    except Exception as e:
+    except PlatformAPIError as e:
         yield _ev(
             {
                 "type": "span",
@@ -74,7 +76,7 @@ async def run_evaluate_stream(
     try:
         raw_items_resp = client.get_raw_items(agent_id=agent_id, status="pending")
         raw_items = raw_items_resp.get("raw_items", [])
-    except Exception as e:
+    except PlatformAPIError as e:
         ms = int((time.monotonic() - t) * 1000)
         yield _ev(
             {
@@ -123,7 +125,7 @@ async def run_evaluate_stream(
 
             try:
                 payload = json.loads(payload)
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 payload = {}
         stories.append(
             {
@@ -166,7 +168,7 @@ async def run_evaluate_stream(
         items: list[ItemInput] = await asyncio.to_thread(
             generate_recommendations, stories, user_prompt
         )
-    except Exception as e:
+    except EvaluationError as e:
         ms = int((time.monotonic() - t) * 1000)
         yield _ev(
             {
@@ -244,7 +246,7 @@ async def run_evaluate_stream(
             result = client.post_items_batch(datetime.now(UTC), items)
             inserted = result.get("inserted", 0)
             skipped = result.get("skipped", 0)
-        except Exception as e:
+        except PlatformAPIError as e:
             ms = int((time.monotonic() - t) * 1000)
             yield _ev(
                 {
@@ -285,7 +287,7 @@ async def run_evaluate_stream(
             client.update_raw_items_status(promoted_ids, "promoted")
         if rejected_ids:
             client.update_raw_items_status(rejected_ids, "rejected")
-    except Exception as e:
+    except PlatformAPIError as e:
         yield _ev(
             {
                 "type": "span",
@@ -312,7 +314,7 @@ async def run_evaluate_stream(
                     },
                 },
             )
-        except Exception:
+        except PlatformAPIError:
             pass
 
     yield _ev(

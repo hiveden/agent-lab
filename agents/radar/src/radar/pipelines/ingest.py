@@ -12,9 +12,11 @@ from datetime import UTC
 from typing import Any
 
 from agent_lab_shared.db import PlatformClient
+from agent_lab_shared.exceptions import PlatformAPIError
 from agent_lab_shared.schema import SourceConfig
 
 from ..collectors.base import get_collector
+from ..exceptions import CollectorError, ConfigurationError
 
 ProgressEvent = dict[str, Any]
 
@@ -46,7 +48,7 @@ async def run_ingest_stream(
             source_ids=[s.id for s in sources],
         )
         run_id = run_result.get("run", {}).get("id") or run_result.get("id")
-    except Exception as e:
+    except PlatformAPIError as e:
         yield _ev(
             {
                 "type": "span",
@@ -86,7 +88,7 @@ async def run_ingest_stream(
         try:
             collector = get_collector(src.source_type)
             raw_items = await collector.collect(src.config)
-        except Exception as e:
+        except (CollectorError, ConfigurationError) as e:
             ms = int((time.monotonic() - t) * 1000)
             yield _ev(
                 {
@@ -149,7 +151,7 @@ async def run_ingest_stream(
             skipped = result.get("skipped", 0)
             total_inserted += inserted
             total_skipped += skipped
-        except Exception as e:
+        except PlatformAPIError as e:
             ms = int((time.monotonic() - t) * 1000)
             yield _ev(
                 {
@@ -191,7 +193,7 @@ async def run_ingest_stream(
                     },
                 },
             )
-        except Exception:
+        except PlatformAPIError:
             pass
 
     yield _ev(

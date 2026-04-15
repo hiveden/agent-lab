@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
+from agent_lab_shared.exceptions import PlatformAPIError
 from agent_lab_shared.schema import ItemInput
+from radar.exceptions import EvaluationError
 from radar.tools.evaluate import _raw_items_to_stories, _run_evaluate_sync, evaluate
 
 # ── Fixtures ──
@@ -162,7 +164,7 @@ def test_evaluate_fetch_error(mock_client_cls):
     """PlatformClient.get_raw_items raises → return error dict."""
     client = MagicMock()
     mock_client_cls.return_value = client
-    client.get_raw_items.side_effect = Exception("connection refused")
+    client.get_raw_items.side_effect = PlatformAPIError("connection refused", url="/api/raw-items", method="GET")
 
     result = _run_evaluate_sync("radar", None)
 
@@ -183,7 +185,7 @@ def test_evaluate_llm_error(mock_gen_rec, mock_client_cls):
     mock_client_cls.return_value = client
     client.get_raw_items.return_value = {"raw_items": raw_items}
 
-    mock_gen_rec.side_effect = ValueError("LLM returned non-JSON")
+    mock_gen_rec.side_effect = EvaluationError("LLM returned non-JSON")
 
     result = _run_evaluate_sync("radar", None)
 
@@ -206,7 +208,7 @@ def test_evaluate_persist_error(mock_gen_rec, mock_client_cls):
     client = MagicMock()
     mock_client_cls.return_value = client
     client.get_raw_items.return_value = {"raw_items": raw_items}
-    client.post_items_batch.side_effect = Exception("D1 write error")
+    client.post_items_batch.side_effect = PlatformAPIError("D1 write error", url="/api/items/batch", method="POST")
 
     mock_gen_rec.return_value = items
 
@@ -230,7 +232,7 @@ def test_evaluate_status_update_error(mock_gen_rec, mock_client_cls):
     mock_client_cls.return_value = client
     client.get_raw_items.return_value = {"raw_items": raw_items}
     client.post_items_batch.return_value = {"inserted": 1, "skipped": 0}
-    client.update_raw_items_status.side_effect = Exception("batch-status 500")
+    client.update_raw_items_status.side_effect = PlatformAPIError("batch-status 500", url="/api/raw-items/batch-status", method="PATCH")
 
     mock_gen_rec.return_value = items
 
