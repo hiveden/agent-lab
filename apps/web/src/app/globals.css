@@ -382,7 +382,7 @@ kbd.k {
 .user-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 2px; white-space: pre-wrap; }
 /* CopilotKit 作用域内 --accent 被 theme bridge 重写为 shadcn accent（浅色），
    .user-bubble 需要用不受重写影响的 --accent-brand */
-[data-copilotkit] .user-bubble { background: var(--accent-brand); }
+[data-copilotkit] .user-bubble { background: var(--accent-brand); width: fit-content; margin-left: auto; }
 .msg.assistant.streaming .msg-bubble::after {
   content: '▍'; display: inline-block; margin-left: 1px;
   color: var(--accent); animation: caret 1s steps(2) infinite;

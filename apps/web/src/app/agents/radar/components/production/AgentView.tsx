@@ -502,6 +502,9 @@ function AgentViewInner() {
                         }}
                         input={{
                           textArea: { style: { fontSize: '13px' } },
+                          sendButton: {
+                            children: isRunning ? '停止' : '发送',
+                          },
                         }}
                       />
                     </div>

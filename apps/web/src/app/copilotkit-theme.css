@@ -13,6 +13,7 @@
 [data-copilotkit] {
   /* shadcn bridge → 项目 design tokens */
   --background: var(--bg);
+  background: var(--bg);
   --foreground: var(--text);
   --card: var(--surface);
   --card-foreground: var(--text);
@@ -82,30 +83,84 @@
   margin-bottom: 3px;
 }
 
-/* ── Chat 输入框紧凑化 ──────────────────────────────────── */
+/* ── Chat 输入框：对齐 Inbox .input-row 风格 ───────────── */
+
+/* 输入框外层限宽容器：加边距，避免贴边和与消息重叠 */
+[data-copilotkit] .cpk\:max-w-3xl:has([data-testid="copilot-chat-input"]) {
+  margin-inline: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* 外层容器：去阴影/药丸圆角，改为 surface + border 风格 */
+[data-copilotkit] [data-testid="copilot-chat-input"] {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-hi) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: none !important;
+  transition: border-color .15s, box-shadow .15s;
+}
+[data-copilotkit] [data-testid="copilot-chat-input"]:focus-within {
+  border-color: var(--accent-line) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+/* 去掉内层元素的 focus 高亮，只保留外层 focus-within */
+[data-copilotkit] [data-testid="copilot-chat-input"] *:focus,
+[data-copilotkit] [data-testid="copilot-chat-input"] *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: inherit !important;
+}
+
+/* 内层 grid：收紧 gap 和 padding */
+[data-copilotkit] [data-testid="copilot-chat-input"] > [data-layout="compact"] {
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+}
+
+/* 附件按钮：隐藏（Inbox 没有） */
+[data-copilotkit] [data-testid="copilot-add-menu-button"] {
+  display: none;
+}
 
 /* textarea 容器：去掉 50px 最小高度 */
 [data-copilotkit] [data-layout="compact"] .cpk\:min-h-\[50px\] {
   min-height: auto;
 }
 
-/* textarea：减小纵向 padding */
+/* textarea：减小 padding，对齐 Inbox */
 [data-copilotkit] [data-testid="copilot-chat-textarea"] {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding: 2px 0 !important;
   font-size: 13px;
 }
 
-/* 发送/附件按钮：缩小 */
-[data-copilotkit] [data-layout="compact"] .cpk\:h-9 {
-  height: 32px;
-  width: 32px;
+/* 发送按钮外层 margin 去掉 */
+[data-copilotkit] [data-testid="copilot-send-button"] {
+  border-radius: var(--radius-sm) !important;
+  background: var(--accent-brand) !important;
+  color: #fff !important;
+  height: 26px !important;
+  width: auto !important;
+  padding: 0 10px !important;
+  font-size: 12px;
+  font-weight: 500;
 }
-
-/* 整个输入栏：收紧 gap 和 padding */
-[data-copilotkit] [data-layout="compact"] {
-  gap: 4px;
-  padding: 4px 8px;
+[data-copilotkit] [data-testid="copilot-send-button"]:hover {
+  opacity: 1 !important;
+  background: var(--accent-2) !important;
+}
+[data-copilotkit] [data-testid="copilot-send-button"]:disabled {
+  background: var(--accent-brand) !important;
+  opacity: 0.4 !important;
+}
+/* 发送按钮外层 div 的 margin */
+[data-copilotkit] [data-testid="copilot-send-button"].cpk\:mr-\[10px\],
+[data-copilotkit] .cpk\:mr-\[10px\]:has([data-testid="copilot-send-button"]) {
+  margin-right: 0;
+}
+/* 隐藏发送按钮的 SVG icon（用 slot 加文字替代） */
+[data-copilotkit] [data-testid="copilot-send-button"] svg {
+  display: none;
 }
 
 /* ── 滚动条对齐 ─────────────────────────────────────────── */
