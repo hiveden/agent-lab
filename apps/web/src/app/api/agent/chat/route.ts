@@ -9,11 +9,14 @@ export const runtime = 'nodejs';
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
+const radarAgent = new LangGraphHttpAgent({
+  url: `${(process.env.RADAR_AGENT_BASE || "http://localhost:8001").replace(/\/+$/, '')}/agent/chat`,
+});
+
 const copilotRuntime = new CopilotRuntime({
   agents: {
-    radar: new LangGraphHttpAgent({
-      url: `${(process.env.RADAR_AGENT_BASE || "http://localhost:8001").replace(/\/+$/, '')}/agent/chat`,
-    }),
+    radar: radarAgent,
+    default: radarAgent,  // v2 useAgent() without agentId looks for 'default'
   },
 });
 
