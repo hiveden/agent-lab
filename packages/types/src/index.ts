@@ -52,10 +52,18 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface ResultSummary {
+  evaluated: number;
+  promoted: number;
+  rejected: number;
+}
+
 export interface ChatSession {
   id: string;
   item_id: string | null;
   agent_id: AgentId;
+  config_prompt: string | null;
+  result_summary: ResultSummary | null;
   created_at: string;
 }
 
