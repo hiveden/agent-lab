@@ -274,9 +274,6 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const { session } = useAgentSession(threadId);
 
   // ── Bridge: subscribe Inspector to thread clone ──
-  // CopilotKit v1.55.3 bug: Inspector only subscribes to core.agents (registry),
-  // but CopilotChat runs on a thread clone that's not registered there.
-  // Workaround: find the Inspector web component and directly subscribe the clone.
   useEffect(() => {
     if (!agent?.agentId) return;
     let attempts = 0;
@@ -296,23 +293,16 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const isRunning = agent.isRunning;
 
   // ── Restore history messages for active session ──
-  const historyRestored = useRef(false);
   useEffect(() => {
-    if (historyRestored.current) return;
     if (!isActiveSession || !session?.messages?.length) return;
-    // Delay to ensure CopilotKit agent registry is ready
-    const timer = setTimeout(() => {
-      const filtered = session.messages
-        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
-        .map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content }));
-      if (filtered.length > 0) {
-        console.log('[SessionDetail] restoring history', filtered.length, 'messages');
-        agent.setMessages(filtered);
-      }
-      historyRestored.current = true;
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isActiveSession, session, agent]);
+    const filtered = session.messages
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
+      .map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content }));
+    if (filtered.length > 0) {
+      agent.setMessages(filtered);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
 
   // ── Refresh session list when agent run finishes ──
   const prevRunning = useRef(false);
