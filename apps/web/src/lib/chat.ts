@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { ResultSummary } from '@agent-lab/types';
 import { getDb } from './db';
 import { chatSessions, chatMessages } from './db/schema';
 import { eq, desc, asc } from 'drizzle-orm';
@@ -32,6 +33,18 @@ export async function ensureSession(
   return id;
 }
 
+export async function updateSessionMetadata(
+  d1: D1Database,
+  sessionId: string,
+  metadata: { config_prompt?: string; result_summary?: ResultSummary },
+): Promise<void> {
+  const db = getDb(d1);
+  await db
+    .update(chatSessions)
+    .set(metadata)
+    .where(eq(chatSessions.id, sessionId));
+}
+
 export async function insertMessage(
   d1: D1Database,
   sessionId: string,
@@ -53,6 +66,8 @@ export async function insertMessage(
 
 export interface SessionHistory {
   session_id: string;
+  config_prompt: string | null;
+  result_summary: ResultSummary | null;
   messages: Array<{
     id: string;
     role: string;
@@ -68,7 +83,11 @@ export async function getLatestSessionForItem(
 ): Promise<SessionHistory | null> {
   const db = getDb(d1);
   const sessions = await db
-    .select({ id: chatSessions.id })
+    .select({
+      id: chatSessions.id,
+      config_prompt: chatSessions.config_prompt,
+      result_summary: chatSessions.result_summary,
+    })
     .from(chatSessions)
     .where(eq(chatSessions.item_id, itemId))
     .orderBy(desc(chatSessions.created_at))
@@ -89,12 +108,19 @@ export async function getLatestSessionForItem(
     .where(eq(chatMessages.session_id, session.id))
     .orderBy(asc(chatMessages.created_at));
 
-  return { session_id: session.id, messages };
+  return {
+    session_id: session.id,
+    config_prompt: session.config_prompt ?? null,
+    result_summary: session.result_summary ?? null,
+    messages,
+  };
 }
 
 export interface SessionSummary {
   id: string;
   agent_id: string;
+  config_prompt: string | null;
+  result_summary: ResultSummary | null;
   created_at: string;
   message_count: number;
   preview: string;
@@ -111,6 +137,8 @@ export async function listAgentSessions(
     .select({
       id: chatSessions.id,
       agent_id: chatSessions.agent_id,
+      config_prompt: chatSessions.config_prompt,
+      result_summary: chatSessions.result_summary,
       created_at: chatSessions.created_at,
     })
     .from(chatSessions)
@@ -130,6 +158,8 @@ export async function listAgentSessions(
     result.push({
       id: s.id,
       agent_id: s.agent_id ?? 'radar',
+      config_prompt: s.config_prompt ?? null,
+      result_summary: s.result_summary ?? null,
       created_at: s.created_at ?? '',
       message_count: msgs.length,
       preview: firstUser?.content?.slice(0, 50) ?? '',
@@ -149,7 +179,11 @@ export async function getSessionByThreadId(
 ): Promise<SessionHistory | null> {
   const db = getDb(d1);
   const sessions = await db
-    .select({ id: chatSessions.id })
+    .select({
+      id: chatSessions.id,
+      config_prompt: chatSessions.config_prompt,
+      result_summary: chatSessions.result_summary,
+    })
     .from(chatSessions)
     .where(eq(chatSessions.id, threadId))
     .limit(1);
@@ -169,6 +203,11 @@ export async function getSessionByThreadId(
     .where(eq(chatMessages.session_id, session.id))
     .orderBy(asc(chatMessages.created_at));
 
-  return { session_id: session.id, messages };
+  return {
+    session_id: session.id,
+    config_prompt: session.config_prompt ?? null,
+    result_summary: session.result_summary ?? null,
+    messages,
+  };
 }
 

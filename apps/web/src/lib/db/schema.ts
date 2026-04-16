@@ -50,6 +50,8 @@ export const chatSessions = sqliteTable(
     id: text('id').primaryKey(),
     item_id: text('item_id').references(() => items.id, { onDelete: 'set null' }),
     agent_id: text('agent_id').notNull(),
+    config_prompt: text('config_prompt'),
+    result_summary: jsonType<import('@agent-lab/types').ResultSummary>('result_summary'),
     created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
   },
   (table) => [

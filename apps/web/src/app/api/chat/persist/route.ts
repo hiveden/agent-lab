@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
-import { ensureSession, insertMessage } from '@/lib/chat';
+import { ensureSession, insertMessage, updateSessionMetadata } from '@/lib/chat';
 import { z } from 'zod';
 
 export const runtime = 'edge';
@@ -15,6 +15,12 @@ const persistBodySchema = z.object({
   agent_id: z.string().min(1),
   thread_id: z.string().min(1),
   messages: z.array(messageSchema).min(1),
+  config_prompt: z.string().optional(),
+  result_summary: z.object({
+    evaluated: z.number(),
+    promoted: z.number(),
+    rejected: z.number(),
+  }).optional(),
 });
 
 export async function POST(req: Request) {
@@ -42,7 +48,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { agent_id, thread_id, messages } = parsed.data;
+  const { agent_id, thread_id, messages, config_prompt, result_summary } = parsed.data;
 
   try {
     // Ensure session exists (use thread_id as session_id)
@@ -50,6 +56,14 @@ export async function POST(req: Request) {
       sessionId: thread_id,
       agentId: agent_id,
     });
+
+    // Update session metadata if provided
+    if (config_prompt !== undefined || result_summary !== undefined) {
+      const metadata: { config_prompt?: string; result_summary?: { evaluated: number; promoted: number; rejected: number } } = {};
+      if (config_prompt !== undefined) metadata.config_prompt = config_prompt;
+      if (result_summary !== undefined) metadata.result_summary = result_summary;
+      await updateSessionMetadata(env.DB, sessionId, metadata);
+    }
 
     // Insert all messages
     const messageIds: string[] = [];
