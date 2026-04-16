@@ -191,7 +191,12 @@ class PlatformClient:
     # ── Chat Persistence ──
 
     def persist_chat(
-        self, thread_id: str, agent_id: str, messages: list[dict[str, Any]]
+        self,
+        thread_id: str,
+        agent_id: str,
+        messages: list[dict[str, Any]],
+        config_prompt: str | None = None,
+        result_summary: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         """Persist chat messages to D1 via BFF endpoint.
 
@@ -199,11 +204,15 @@ class PlatformClient:
         propagating failures to the user.
         """
         url = f"{self.base_url}/api/chat/persist"
-        payload = {
+        payload: dict[str, Any] = {
             "agent_id": agent_id,
             "thread_id": thread_id,
             "messages": messages,
         }
+        if config_prompt is not None:
+            payload["config_prompt"] = config_prompt
+        if result_summary is not None:
+            payload["result_summary"] = result_summary
 
         def _call() -> dict[str, Any]:
             with self._client() as client:

@@ -36,7 +36,8 @@ _END_TO_START: dict[EventType, tuple[EventType, str]] = {
 def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
     """Convert LangChain BaseMessage list to serialisable dicts for persistence.
 
-    Only keeps user/assistant/tool/system messages with non-empty content.
+    Keeps user/assistant/tool messages. Filters out system messages.
+    Assistant messages are kept even if content is empty when they have tool_calls.
     """
     result: list[dict[str, Any]] = []
     for msg in messages:
@@ -45,13 +46,14 @@ def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
             role = "user"
         elif role == "ai":
             role = "assistant"
-        if role not in ("user", "assistant", "tool", "system"):
+        if role not in ("user", "assistant", "tool"):
             continue
-        content = getattr(msg, "content", "")
-        if not content:
+        content = getattr(msg, "content", "") or ""
+        tool_calls = getattr(msg, "tool_calls", None)
+        # Skip messages with no content and no tool_calls
+        if not content and not tool_calls:
             continue
         entry: dict[str, Any] = {"role": role, "content": content}
-        tool_calls = getattr(msg, "tool_calls", None)
         if tool_calls:
             entry["tool_calls"] = [
                 {
@@ -61,8 +63,90 @@ def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
                 }
                 for tc in tool_calls
             ]
+        # Preserve tool_call_id for tool messages
+        if role == "tool":
+            tool_call_id = getattr(msg, "tool_call_id", None)
+            if tool_call_id:
+                entry["tool_call_id"] = tool_call_id
         result.append(entry)
     return result
+
+
+def _extract_result_summary(messages: list[Any]) -> dict[str, int] | None:
+    """Extract result summary from evaluate tool call results.
+
+    Finds the last evaluate tool call result and extracts evaluated/promoted/rejected counts.
+    """
+    import json
+
+    # Build tool_call_id → tool_name mapping from assistant messages
+    tc_id_to_name: dict[str, str] = {}
+    for msg in messages:
+        role = getattr(msg, "type", None)
+        if role != "ai":
+            continue
+        tool_calls = getattr(msg, "tool_calls", None)
+        if not tool_calls:
+            continue
+        for tc in tool_calls:
+            tc_id = tc.get("id", "")
+            tc_name = tc.get("name", "")
+            if tc_id and tc_name:
+                tc_id_to_name[tc_id] = tc_name
+
+    # Find tool messages whose tool_call_id maps to "evaluate"
+    last_summary: dict[str, int] | None = None
+    for msg in messages:
+        role = getattr(msg, "type", None)
+        if role != "tool":
+            continue
+        tool_call_id = getattr(msg, "tool_call_id", None)
+        if not tool_call_id:
+            continue
+        if tc_id_to_name.get(tool_call_id) != "evaluate":
+            continue
+        content = getattr(msg, "content", "")
+        if not content:
+            continue
+        try:
+            data = json.loads(content) if isinstance(content, str) else content
+            summary: dict[str, int] = {}
+            for key in ("evaluated", "promoted", "rejected"):
+                if key in data:
+                    summary[key] = int(data[key])
+            if summary:
+                last_summary = summary
+        except (json.JSONDecodeError, ValueError, TypeError):
+            continue
+
+    if last_summary:
+        log.info("extract_result_summary_ok", summary=last_summary)
+    else:
+        log.info("extract_result_summary_none")
+    return last_summary
+
+
+def _extract_config_prompt(messages: list[Any]) -> str | None:
+    """Extract config prompt from system messages injected by useAgentContext.
+
+    Looks for system messages containing ConfigCards keywords like
+    '核心使命', '推荐偏好', or '过滤规则'.
+    """
+    _CONFIG_KEYWORDS = ("核心使命", "推荐偏好", "过滤规则")
+
+    for msg in messages:
+        role = getattr(msg, "type", None)
+        if role != "system":
+            continue
+        content = getattr(msg, "content", "")
+        if not content:
+            continue
+        if any(kw in content for kw in _CONFIG_KEYWORDS):
+            log.info("extract_config_prompt_ok", length=len(content))
+            return content
+
+    log.info("extract_config_prompt_none")
+    return None
 
 
 class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
@@ -157,12 +241,17 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
                 log.info("persist_chat_skip", thread_id=thread_id, reason="no persistable messages")
                 return
 
+            config_prompt = _extract_config_prompt(messages)
+            result_summary = _extract_result_summary(messages)
+
             client = PlatformClient()
             await asyncio.to_thread(
                 client.persist_chat,
                 thread_id=thread_id,
                 agent_id=self.name,
                 messages=dicts,
+                config_prompt=config_prompt,
+                result_summary=result_summary,
             )
             log.info(
                 "persist_chat_ok",
