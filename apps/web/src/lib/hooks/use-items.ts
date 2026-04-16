@@ -1,11 +1,7 @@
 import useSWR from 'swr';
 import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { ItemWithState } from '@/lib/types';
-
-const fetcher = (url: string) => fetch(url).then((r) => {
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{ items: ItemWithState[] }>;
-});
+import { swrFetcher, SWR_DEFAULT_OPTIONS } from './swr-utils';
 
 function viewToStatus(view: ViewType): string {
   if (view === 'watching') return 'watching';
@@ -18,10 +14,7 @@ export function useItems(activeView: ViewType) {
   const status = viewToStatus(activeView);
   const key = isItemView ? `/api/items?agent_id=radar&limit=400&status=${status}` : null;
 
-  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 2000,
-  });
+  const { data, error, isLoading, mutate } = useSWR<{ items: ItemWithState[] }>(key, swrFetcher, SWR_DEFAULT_OPTIONS);
 
   return {
     items: data?.items ?? [],
