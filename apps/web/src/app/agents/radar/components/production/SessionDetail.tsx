@@ -258,6 +258,7 @@ interface RadarAgentState {
 }
 
 interface SessionDetailProps {
+  threadId: string;
   isActiveSession: boolean;
   sessionReload: () => void;
   sessionMutate: () => void;
@@ -265,10 +266,7 @@ interface SessionDetailProps {
 
 // ── Component ─────────────────────────────────────────────
 
-export default function SessionDetail({ isActiveSession, sessionReload, sessionMutate }: SessionDetailProps) {
-  // ── Stable threadId shared between CopilotChat and useAgent ──
-  const threadId = useMemo(() => crypto.randomUUID(), []);
-
+export default function SessionDetail({ threadId, isActiveSession, sessionReload, sessionMutate }: SessionDetailProps) {
   // ── Agent: shared state + messages + control via AbstractAgent ──
   const { agent } = useAgent({ agentId: 'radar', threadId });
 

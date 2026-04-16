@@ -52,6 +52,7 @@ export default function AgentView() {
       />
       <CopilotKit key={threadId} runtimeUrl="/api/agent/chat" showDevConsole>
         <SessionDetail
+          threadId={threadId}
           isActiveSession={isActiveSession}
           sessionReload={reload}
           sessionMutate={sessionMutate}
