@@ -33,45 +33,6 @@ _END_TO_START: dict[EventType, tuple[EventType, str]] = {
 }
 
 
-def _langchain_messages_to_dicts(messages: list[Any]) -> list[dict[str, Any]]:
-    """Convert LangChain BaseMessage list to serialisable dicts for persistence.
-
-    Keeps user/assistant/tool messages. Filters out system messages.
-    Assistant messages are kept even if content is empty when they have tool_calls.
-    """
-    result: list[dict[str, Any]] = []
-    for msg in messages:
-        role = getattr(msg, "type", None)
-        if role == "human":
-            role = "user"
-        elif role == "ai":
-            role = "assistant"
-        if role not in ("user", "assistant", "tool"):
-            continue
-        content = getattr(msg, "content", "") or ""
-        tool_calls = getattr(msg, "tool_calls", None)
-        # Skip messages with no content and no tool_calls
-        if not content and not tool_calls:
-            continue
-        entry: dict[str, Any] = {"role": role, "content": content}
-        if tool_calls:
-            entry["tool_calls"] = [
-                {
-                    "id": tc.get("id", ""),
-                    "name": tc.get("name", ""),
-                    "args": tc.get("args", {}),
-                }
-                for tc in tool_calls
-            ]
-        # Preserve tool_call_id for tool messages
-        if role == "tool":
-            tool_call_id = getattr(msg, "tool_call_id", None)
-            if tool_call_id:
-                entry["tool_call_id"] = tool_call_id
-        result.append(entry)
-    return result
-
-
 def _extract_result_summary(messages: list[Any]) -> dict[str, int] | None:
     """Extract result summary from evaluate tool call results.
 

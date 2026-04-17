@@ -45,6 +45,7 @@ export default function SessionSidebar({ sessions, activeId, loading, onNew, onS
         {sessions.map((s) => (
           <div
             key={s.id}
+            data-thread-id={s.id}
             className={cn(
               'px-3 py-2.5 cursor-pointer border-b border-border text-[12px] transition-colors',
               s.id === activeId

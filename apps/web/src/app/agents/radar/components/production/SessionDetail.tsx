@@ -6,13 +6,14 @@ import {
   CopilotChat,
   useAgent,
   useAgentContext,
+  useCopilotKit,
   type Message,
   type AssistantMessage,
   type ToolMessage,
 } from '@copilotkit/react-core/v2';
 import { cn } from '@/lib/utils';
 import type { Trace, Span, SpanSection } from '@/lib/trace';
-import { useAgentSession, type PersistedMessage } from '@/lib/hooks/use-agent-session';
+import { useAgentSession } from '@/lib/hooks/use-agent-session';
 import TraceDrawer from '../consumption/TraceDrawer';
 import MarkdownContent from '../consumption/MarkdownContent';
 import ConfigCards, { buildPromptFromCards } from './ConfigCards';
@@ -187,70 +188,6 @@ function buildTraceFromMessages(messages: Message[]): Trace {
   return { spans, totalTokens: 0, totalMs: 0, mock: false };
 }
 
-// ── Build Trace from persisted messages (history) ─────────
-
-function buildTraceFromPersistedMessages(messages: PersistedMessage[]): Trace {
-  const spans: Span[] = [];
-
-  // Build tool result map: tool_call_id → content
-  const toolResultMap = new Map<string, string>();
-  for (const m of messages) {
-    if (m.role === 'tool' && m.tool_call_id) {
-      toolResultMap.set(m.tool_call_id, m.content);
-    }
-  }
-
-  for (const m of messages) {
-    if (m.role === 'assistant') {
-      if (m.tool_calls?.length) {
-        for (const tc of m.tool_calls) {
-          const sections: SpanSection[] = [];
-
-          let argsStr = JSON.stringify(tc.args ?? {}, null, 2);
-          try {
-            argsStr = JSON.stringify(tc.args, null, 2);
-          } catch { /* use raw */ }
-          sections.push({ label: 'input', body: argsStr });
-
-          const resultContent = toolResultMap.get(tc.id);
-          if (resultContent) {
-            let resultStr = resultContent;
-            try {
-              resultStr = JSON.stringify(JSON.parse(resultContent), null, 2);
-            } catch { /* use raw */ }
-            sections.push({ label: 'output', body: resultStr });
-          }
-
-          spans.push({
-            id: `${m.id}-${tc.id}`,
-            kind: 'tool',
-            tool: tc.name,
-            title: tc.name,
-            tokens: 0,
-            ms: 0,
-            sections,
-            status: resultContent ? 'done' : 'running',
-          });
-        }
-      }
-
-      if (m.content && m.content.trim()) {
-        spans.push({
-          id: `${m.id}-text`,
-          kind: 'llm',
-          title: '生成回复',
-          tokens: 0,
-          ms: 0,
-          sections: [{ label: 'output', body: m.content.slice(0, 500) }],
-          status: 'done',
-        });
-      }
-    }
-  }
-
-  return { spans, totalTokens: 0, totalMs: 0, mock: false };
-}
-
 // ── Props ─────────────────────────────────────────────────
 
 interface RadarAgentState {
@@ -281,10 +218,24 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const messages = agent.messages;
   const isRunning = agent.isRunning;
 
-  // Note: history messages for the active session are restored automatically
-  // by CopilotKit via the MESSAGES_SNAPSHOT event that ag-ui-langgraph emits
-  // from the AsyncSqliteSaver checkpointer. No manual setMessages needed.
-  // See docs/20-LANGGRAPH-PERSISTENCE.md Phase 2.
+  // ── Restore history for read-only sessions via connectAgent ──
+  // Active sessions: <CopilotChat /> calls connectAgent() on mount (see
+  //   node_modules/@copilotkit/react-core/src/v2/components/chat/CopilotChat.tsx:194),
+  //   which triggers ag-ui-langgraph to emit MESSAGES_SNAPSHOT from the
+  //   AsyncSqliteSaver checkpointer — agent.messages gets populated automatically.
+  // Historical sessions: we render a read-only message list (no CopilotChat),
+  //   so connectAgent is never called → messages stay empty. Call it manually.
+  const { copilotkit } = useCopilotKit();
+  useEffect(() => {
+    if (isActiveSession) return; // active: CopilotChat handles it
+    if (!agent) return;
+    let detached = false;
+    void copilotkit.connectAgent({ agent }).catch((err) => {
+      if (detached) return;
+      console.error('SessionDetail: connectAgent (history) failed', err);
+    });
+    return () => { detached = true; };
+  }, [isActiveSession, agent, copilotkit]);
 
   // ── Refresh session list when agent run finishes ──
   const prevRunning = useRef(false);
@@ -319,32 +270,12 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const [traceOpen, setTraceOpen] = useState(true);
 
   // ── Derived: trace & result batches ──
-  const trace: Trace = useMemo(() => {
-    if (isActiveSession) {
-      return buildTraceFromMessages(messages);
-    }
-    return session?.messages ? buildTraceFromPersistedMessages(session.messages) : { spans: [], totalTokens: 0, totalMs: 0, mock: false };
-  }, [isActiveSession, messages, session?.messages]);
+  // Both active and historical sessions source from agent.messages — CopilotKit
+  // populates messages via MESSAGES_SNAPSHOT on connect (from the AsyncSqliteSaver
+  // checkpointer) regardless of whether the user sends a new message.
+  const trace: Trace = useMemo(() => buildTraceFromMessages(messages), [messages]);
 
-  const resultBatches = useMemo(() => {
-    if (isActiveSession) {
-      return extractResultBatches(messages);
-    }
-    // Historical: build from session.result_summary
-    if (session?.result_summary) {
-      return [{
-        runId: 'historical',
-        startedAt: session.session_id ? '' : '',
-        evaluated: session.result_summary.evaluated,
-        promoted: session.result_summary.promoted,
-        rejected: session.result_summary.rejected,
-        totalMs: 0,
-        error: null,
-        preview: [],
-      }] as ResultBatch[];
-    }
-    return [];
-  }, [isActiveSession, messages, session?.result_summary, session?.session_id]);
+  const resultBatches = useMemo(() => extractResultBatches(messages), [messages]);
 
   useEffect(() => {
     setResultPageIndex(0);
@@ -577,20 +508,32 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
                         }}
                       />
                     ) : (
-                      /* Historical: read-only message list */
+                      /* Historical: read-only message list, driven by agent.messages
+                         which CopilotKit populates via MESSAGES_SNAPSHOT from the
+                         AsyncSqliteSaver checkpointer on connect. */
                       <div className="flex-1 overflow-y-auto px-5 pt-[18px] pb-2">
-                        {session?.messages
-                          ?.filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
-                          .map(m => (
-                            <div key={m.id}>
-                              <div className="msg-meta">{m.role === 'user' ? 'you' : 'radar'}</div>
-                              <div className={cn('msg-bubble', m.role === 'user' ? 'user-bubble' : 'assistant-bubble')}>
-                                {m.role === 'assistant' ? <MarkdownContent content={m.content} /> : m.content}
+                        {messages
+                          .filter(m => (m.role === 'user' || m.role === 'assistant'))
+                          .map(m => {
+                            const content = typeof m.content === 'string'
+                              ? m.content
+                              : Array.isArray(m.content)
+                                ? m.content.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text).join('')
+                                : '';
+                            if (!content) return null;
+                            return (
+                              <div key={m.id}>
+                                <div className="msg-meta">{m.role === 'user' ? 'you' : 'radar'}</div>
+                                <div className={cn('msg-bubble', m.role === 'user' ? 'user-bubble' : 'assistant-bubble')}>
+                                  {m.role === 'assistant' ? <MarkdownContent content={content} /> : content}
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        {(!session?.messages || session.messages.filter(m => (m.role === 'user' || m.role === 'assistant') && m.content).length === 0) && (
-                          <div className="text-[12px] text-text-3 text-center py-8">无对话记录</div>
+                            );
+                          })}
+                        {messages.filter(m => (m.role === 'user' || m.role === 'assistant')).length === 0 && (
+                          <div className="text-[12px] text-text-3 text-center py-8">
+                            {session ? '正在恢复会话…' : '无对话记录'}
+                          </div>
                         )}
                       </div>
                     )}

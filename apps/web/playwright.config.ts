@@ -68,6 +68,14 @@ export default defineConfig({
       },
     },
     {
+      name: 'history-recovery',
+      testMatch: 'history-session-recovery.spec.ts',
+      use: {
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 2,
+      },
+    },
+    {
       name: 'mobile',
       testMatch: 'mobile.spec.ts',
       dependencies: ['consumption'], // mobile needs seeded data from consumption
