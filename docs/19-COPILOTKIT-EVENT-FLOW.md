@@ -154,12 +154,20 @@ function getOrCreateThreadClone(existing, threadId, headers) {
 
 ## 4. Dev Console (Inspector) 事件订阅
 
+### 当前状态（v1.56.2）
+
+CopilotKit 1.56.2（commit 9b2069b 升级）已修复此前 1.55.3 的 thread clone 订阅 bug。Inspector 现在通过 `onAgentRunStarted` 事件自动订阅 per-thread clone —— 每当一个 thread clone 开始 run，Inspector 就会调用其 `subscribeToAgent(clone)`，事件实时同步。
+
+**因此：**
+- 不再需要 `SessionDetail.tsx` 里轮询 `document.querySelector('cpk-web-inspector').subscribeToAgent(agent)` 的 DOM bridge workaround（已在升级时删除）
+- CopilotKit 的外层 `key={threadId}` 已恢复（见 commit 8e07bdf），切换 session 仍会 remount 整棵树，但因为 Inspector 自己会在新 clone 开始 run 时自动订阅，不再有"订阅丢失"的问题
+
 ### Inspector 如何订阅 Agent
 
 ```typescript
 // @copilotkit/web-inspector/src/index.ts
 
-// Inspector 内部的订阅方法
+// Inspector 内部的订阅方法（1.56.2 下仍是这个接口，但调用时机不同）
 private subscribeToAgent(agent: AbstractAgent): void {
   const subscriber = {
     onRunStartedEvent:          (e) => this.recordAgentEvent(agentId, "RUN_STARTED", e),
@@ -172,7 +180,11 @@ private subscribeToAgent(agent: AbstractAgent): void {
 }
 ```
 
-### v1.55.3 的 Bug
+1.56.2 的关键变化：Inspector 在 `onAgentRunStarted` 全局事件中拿到当前 run 的 agent（即 thread clone），主动调用上面的 `subscribeToAgent(clone)`，不再只遍历 registry。
+
+### 历史问题（1.55.3）
+
+> ✅ 已在 1.56.0 修复（PR #3872），当前项目使用 1.56.2。下面的内容仅作历史记录。
 
 ```typescript
 // Inspector 的 processAgentsChanged() 只遍历 registry
@@ -181,8 +193,6 @@ for (const agent of Object.values(agents)) {  // agents = core.agents registry
 }
 // Thread Clone 不在 registry 中 → Inspector 永远不会自动订阅到 Clone
 ```
-
-### 事件流断裂图
 
 ```
 SSE events ──> Thread Clone ──> CopilotChat ✅ 正常渲染
@@ -194,26 +204,49 @@ SSE events ──> Thread Clone ──> CopilotChat ✅ 正常渲染
                     └── 没有事件流入，因为事件只发给 Clone
 ```
 
-### Bridge Workaround
+旧方案是在 `SessionDetail.tsx` 里手动轮询 DOM 元素并调 `subscribeToAgent(clone)`，该 workaround 已随升级删除。
 
-```typescript
-// SessionDetail.tsx 中的临时方案
-useEffect(() => {
-  if (!agent?.agentId) return;           // agent = thread clone (from useAgent)
-  let attempts = 0;
-  const trySubscribe = () => {
-    const el = document.querySelector('cpk-web-inspector');
-    if (el?.subscribeToAgent) {
-      el.subscribeToAgent(agent);        // 手动把 Clone 塞给 Inspector
-      return;
-    }
-    if (++attempts < 20) setTimeout(trySubscribe, 200);  // 轮询 4 秒
-  };
-  trySubscribe();
-}, [agent]);
+## 4.1 Phase 3 A1：connectAgent 触发机制
+
+Phase 3 A1（commit a2bbc6b）引入"活跃会话 vs 历史只读"的双模式后，MESSAGES_SNAPSHOT 的触发点有两条路径：
+
+**活跃会话（渲染 `<CopilotChat>`）**
+- `<CopilotChat>` mount 时，其内部 useEffect 自动调用 `copilotkit.connectAgent({ agent })`
+- 这会往 Agent 发一个空 run 请求，Python 端 LangGraph checkpointer 命中 thread → 发 `MESSAGES_SNAPSHOT` 还原整段历史
+- 用户可继续发消息，走正常 SSE 流
+
+**历史只读（不渲染 `<CopilotChat>`）**
+- SessionDetail 手动调 `useCopilotKit().copilotkit.connectAgent({ agent })` 触发一次恢复
+- 因为没有 `<CopilotChat>` 帮忙自动 connect，必须显式触发才能让 MESSAGES_SNAPSHOT 到达前端
+- 这是 A1 让历史会话也能恢复消息列表的关键
+
+```
+活跃:   <CopilotChat mount>  ──> useEffect ──> copilotkit.connectAgent({ agent })
+                                                     │
+                                                     ▼
+                                           POST /agent/chat (empty run)
+                                                     │
+                                                     ▼
+                                           MESSAGES_SNAPSHOT (from checkpointer)
+                                                     │
+                                                     ▼
+                                           clone.messages 更新 → 渲染
+
+只读:   SessionDetail mount  ──> 手动 copilotkit.connectAgent({ agent }) ──> 同上
 ```
 
-## 5. key={threadId} 导致的问题
+## 5. key={threadId} 与 session 切换（当前状态）
+
+`<CopilotKit key={threadId}>` 保留在 AgentView 上，切换 session 时仍会整棵树 unmount + remount。
+
+**当前状态（1.56.2）**：
+- Inspector DOM 被销毁重建 → 新 run 触发 `onAgentRunStarted` → Inspector 自动订阅新 clone ✅
+- 不再需要 bridge useEffect 轮询 DOM
+- 不再有"订阅时序竞态"
+
+### 历史问题（1.55.3 + DOM bridge 时代）
+
+> 以下叙述仅作历史记录，1.56.2 下这些问题不复存在（bridge 代码已删）。
 
 ```
 Session A (threadId="aaa")        Session B (threadId="bbb")
@@ -234,7 +267,7 @@ Session A (threadId="aaa")        Session B (threadId="bbb")
          → subscribeToAgent 找不到方法 → 轮询超时 → ❌
 ```
 
-### 时序竞态
+旧方案的时序竞态（历史问题，已随 workaround 删除而消失）：
 
 ```
 t=0ms    CopilotKit remount (key change)
@@ -249,8 +282,6 @@ t=400ms  Bridge: 同上
 t=800ms  Inspector web component 初始化完成，subscribeToAgent 可用
 t=800ms  Bridge: ✅ 订阅成功
 ```
-
-正常情况下 4 秒内能订阅成功。但如果 Inspector 加载异常慢或初始化失败，bridge 超时。
 
 ## 6. 去重策略（Python 端）
 
@@ -278,98 +309,94 @@ TracingLangGraphAGUIAgent._dispatch_event()
 干净的事件流 → SSE → 前端
 ```
 
-## 7. 持久化流程（非阻塞）
+## 7. 持久化流程（非阻塞，Phase 2 后）
+
+当前架构下，消息持久化由 LangGraph 的 `AsyncSqliteSaver` checkpointer 自动完成，`_persist_chat` 只负责把元数据（配置、结果摘要）同步到 D1，**不再 POST messages**。详见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md)。
 
 ```
 SSE 流完成 (所有 event yield 完毕)
+  │
+  │   (消息已由 AsyncSqliteSaver checkpointer 写入 SQLite，
+  │    作为 thread 的 checkpoint；下次 connectAgent 时用来还原)
   │
   ▼
 asyncio.create_task(_persist_chat(thread_id))   ← fire-and-forget
   │
   ├── graph.aget_state() 获取最终状态
-  ├── _langchain_messages_to_dicts() 序列化消息
   ├── _extract_config_prompt() 提取用户配置
   ├── _extract_result_summary() 提取评判结果
   │
   ▼
 PlatformClient.persist_chat()
   │  POST /api/chat/persist (Bearer auth)
-  │  body: { agent_id, thread_id, messages, config_prompt?, result_summary? }
+  │  body: { agent_id, thread_id, config_prompt?, result_summary? }
+  │  ⚠️ 不再传 messages
   │
   ▼
-BFF: ensureSession() + insertMessage() + updateSessionMetadata()
-  │  写入 D1 (SQLite)
+BFF: ensureSession() + updateSessionMetadata()
+  │  写入 D1 (SQLite) — 仅 session 级元数据
   │
   ▼
 完成（失败只 log，不影响用户）
 ```
 
-## 8. 当前架构问题：SessionDetail 与 CopilotKit 耦合
+**两层存储职责**：
+- LangGraph checkpointer（SQLite）：messages + state，Python 端独占，消息还原的唯一真源
+- D1 `sessions` 表：会话元数据（title、config_prompt、result_summary、时间戳），供前端侧边栏列出历史会话
 
-### 现状（有 bug）
+## 8. SessionDetail 与 CopilotKit 耦合
+
+### 现状：Phase 3 A1 的实际实施方案
 
 ```
 AgentView
   ├── SessionSidebar
-  └── <CopilotKit key={threadId}>          ← 切换 session 时整棵树 remount
+  └── <CopilotKit key={threadId}>          ← 切换 session 时整棵树 remount（但 1.56.2 下不再有订阅丢失问题）
         └── <SessionDetail>
-              ├── useAgent(threadId)        ← 历史 session 也会创建 clone 并连后端
-              ├── useAgentContext()         ← 历史 session 也注册偏好
-              ├── Bridge useEffect          ← 历史 session 也尝试订阅 Inspector
-              ├── isActive → CopilotChat   ← 实时对话
-              └── !isActive → 只读列表     ← 虽然只读，但外层 hooks 全在跑
+              ├── useAgent(threadId)        ← 所有 session 都会创建 clone
+              ├── useAgentContext()
+              ├── isActive → <CopilotChat>                ← 活跃会话：CopilotChat 自动 connectAgent
+              └── !isActive → 只读列表 + useEffect(connectAgent) ← 历史：手动触发恢复
 ```
 
-**问题链**：
-1. `key={threadId}` 是为了切换 session 时清理 CopilotKit 状态
-2. 但 `key` 变化 = 整棵树 unmount + remount = Inspector 被销毁重建
-3. Inspector web component 重建后初始化有延迟，bridge 轮询订阅时序不确定
-4. 结果：Dev Console 和 Chat 不同步，需要刷新页面才能看到数据
+Phase 3 A1（commit a2bbc6b）并未走早期设想的"ActiveSession + HistoryView 完全拆分"路线，而是保留了 SessionDetail 的双模式条件渲染 —— 因为：
 
-**根因**：历史只读视图不应该在 CopilotKit 内部，但 SessionDetail 同时承担了活跃对话和历史展示两个职责。
+- **代码复用更高**：消息列表、工具调用卡片、trace 侧栏等组件两种模式共用
+- **CopilotKit 1.56.2 已修好 Inspector 订阅**：原先拆分的核心动因（避免 Inspector 订阅丢失）不再存在
+- **LangGraph checkpointer 还原消息**：历史会话不需要从 D1 读消息再渲染，而是通过 `connectAgent` 让 checkpointer 发 `MESSAGES_SNAPSHOT`，走和活跃会话完全一致的渲染路径
 
-### 目标架构
+### 双模式路径对比
 
-```
-AgentView
-  ├── SessionSidebar
-  │
-  ├── 活跃 session ──────────────────────────────
-  │   └── <CopilotKit showDevConsole>     ← 单例挂载，永不 remount
-  │         └── <ActiveSession>
-  │               ├── useAgent(threadId)  ← 唯一活跃 clone
-  │               ├── useAgentContext()
-  │               ├── Bridge useEffect    ← 订阅一次，持续有效
-  │               ├── CopilotChat         ← 实时对话
-  │               └── Inspector           ← 实时事件同步 ✅
-  │
-  └── 历史 session ──────────────────────────────
-      └── <HistoryView>                   ← 纯 React，无 CopilotKit
-            ├── 从 API 读持久化消息
-            ├── 只读消息列表
-            ├── ConfigSnapshot（配置快照）
-            └── Trace（从持久化数据构建）
-```
+| 维度 | 活跃会话 (`isActive`) | 历史只读 (`!isActive`) |
+|------|----------------------|-----------------------|
+| 渲染组件 | `<CopilotChat>` | 自定义只读消息列表 |
+| connectAgent 触发 | CopilotChat 内部 useEffect 自动 | SessionDetail 手动 `useCopilotKit().copilotkit.connectAgent({ agent })` |
+| 消息源 | MESSAGES_SNAPSHOT (checkpointer) + 实时 SSE | MESSAGES_SNAPSHOT (checkpointer) |
+| 用户可否发消息 | ✅ | ❌ |
+| Inspector 订阅 | 1.56.2 自动通过 `onAgentRunStarted` | 同上 |
 
-**关键变化**：
-- CopilotKit 只为活跃 session 挂载，**没有 `key` prop**，永不 remount
-- Inspector bridge 订阅一次，生命周期内持续有效
-- 历史 session 完全在 CopilotKit 外部渲染，不触发任何 agent 连接
-- SessionDetail 拆成 `ActiveSession`（CopilotKit 内）和 `HistoryView`（CopilotKit 外）
+### 半成品的语义
 
-### 设计原则
+当前方案仍有一些松散处（见 [`21-TECH-DEBT.md`](./21-TECH-DEBT.md) P1 #4）：
+
+- `isActive` 的判定依赖 props 传入，SessionDetail 内部对"只读"的语义没有在 useAgent 层面做隔离
+- 历史会话仍然创建了 thread clone、注册了 agent context，理论上用户如果找到办法往 clone 发消息会变"活跃"
+- 但因为 UI 层没有提供输入框，实际不会走到那条路径
+
+### 设计原则（保留）
 
 | 原则 | 说明 |
 |------|------|
-| CopilotKit 单例 | 一个页面只有一个 CopilotKit 实例，不用 `key` 触发 remount |
-| 活跃 session 独占 CopilotKit | 只有当前正在对话的 session 走 CopilotKit 事件流 |
-| 历史只读 | 历史 session 从 D1 读取持久化数据，纯展示，不创建 agent clone |
-| Inspector 稳定订阅 | Bridge 在 CopilotKit 首次挂载时订阅，整个生命周期有效 |
+| CopilotKit 为每个 threadId 挂载 | `key={threadId}` 保证切换 session 时清理 clone/state |
+| checkpointer 统一消息源 | 活跃与历史都走 MESSAGES_SNAPSHOT，不再从 D1 读消息 |
+| Inspector 自动订阅 | 1.56.2 下通过 `onAgentRunStarted` 自动订阅 clone，不需要 bridge |
+| 历史只读用 UI 层限制 | 不渲染 CopilotChat 即不提供输入，而不是在 agent 层面禁用 |
 
 ## 9. 已知限制
 
 | 限制 | 原因 | 解决方案 |
 |------|------|----------|
-| Inspector 不自动订阅 thread clone | CopilotKit v1.55.3 bug | Bridge workaround / 等 PR #3872 |
+| ~~Inspector 不自动订阅 thread clone~~ | ~~CopilotKit v1.55.3 bug~~ | ✅ 已在 1.56.0 修复（PR #3872），项目已升至 1.56.2（commit 9b2069b） |
 | RAW 事件量大 (~100+/次) | ag-ui-langgraph 无条件透传 | 仅调试用，生产可忽略 |
 | DeferredLLM 双倍 CONTENT 事件 | 包装层 artifact | Python 端 Layer 3 去重 |
+| SessionDetail 双模式 agent 层未隔离 | 历史只读仍创建 clone + context | UI 层不渲染输入即可，语义半成品，见 `21-TECH-DEBT.md` P1 #4 |

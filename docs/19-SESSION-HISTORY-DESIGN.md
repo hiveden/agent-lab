@@ -99,13 +99,17 @@ RadarWorkspace（状态中枢）
 
 ### 2.2 两套会话体系
 
-| 维度 | Inbox 会话（已实现） | Agent 会话（本次改造） |
+> **📌 现状更新（Phase 3 A1 后）**：两套体系依然并存，但消息存储介质已分化 — Inbox 继续写 D1 `chat_messages`，Agent 改由 LangGraph checkpointer 独占。
+
+| 维度 | Inbox 会话（已实现） | Agent 会话（Phase 3 A1 后） |
 |------|---------------------|----------------------|
 | **索引键** | `itemId`（每个推荐条目一个会话） | `threadId`（独立对话线程） |
-| **状态存储** | Zustand `sessions[itemId]` | 无（本次新增） |
-| **数据获取** | `store.loadSession(itemId)` → `GET /api/chat/sessions/{itemId}` | 无（本次新增） |
+| **状态存储** | Zustand `sessions[itemId]` | `useAgentSession` SWR hook（元数据）+ `useAgent().messages`（消息） |
+| **数据获取** | `store.loadSession(itemId)` → `GET /api/chat/sessions/{itemId}` | `GET /api/chat/sessions?thread_id=xxx`（只取元数据） |
 | **聊天组件** | AI SDK `useChat` hook（ChatView） | CopilotKit `useAgent` + `CopilotChat` |
-| **持久化触发** | BFF `/api/chat` route 内 `insertMessage()` | Python `_persist_chat()` fire-and-forget → `/api/chat/persist` |
+| **持久化触发** | BFF `/api/chat` route 内 `insertMessage()` | **消息**：LangGraph `AsyncSqliteSaver` 每步自动 checkpoint；**元数据**：Python `_persist_chat()` fire-and-forget 只发 `config_prompt + result_summary` → `/api/chat/persist` |
+| **消息存储** | D1 `chat_messages` 表 | `agents/radar/data/checkpoints.db`（LangGraph checkpointer，独立文件）|
+| **元数据存储** | `chat_sessions`（沿用） | `chat_sessions`（仅 `config_prompt` / `result_summary`，不再写 `chat_messages`） |
 | **会话列表** | 不需要（1 item = 1 session） | 需要（多轮独立执行） |
 | **Provider** | 无（直接 fetch） | `<CopilotKit>` Provider tree |
 
@@ -128,7 +132,9 @@ RadarWorkspace（状态中枢）
 - 侧栏和详情区耦合在同一个 render 函数里
 - 切换会话 = remount 整个组件 = 丢失所有派生状态
 
-### 2.4 持久化缺口
+### 2.4 持久化缺口（✅ 已解决 — 历史问题，Phase 1/2 前）
+
+> **⚠️ 历史叙述** — 以下问题是 Phase 2 前 D1 `chat_messages` 单一存储路径下的缺口。Phase 1（配置/结果摘要写入）+ Phase 2（LangGraph checkpointer 接管消息存储）之后，本节所列问题全部消失：tool messages / tool_calls 由 checkpointer 以 LangChain `BaseMessage` 对象原生存储，零格式损失；`config_prompt` / `result_summary` 由 `_persist_chat` 提取后单独持久化到 `chat_sessions`。详见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md)。
 
 Python `_persist_chat()` 通过 `_langchain_messages_to_dicts` 转换消息，当前逻辑：
 
@@ -163,13 +169,27 @@ apps/web/src/lib/hooks/
 
 ### 3.1 完整定义
 
+> **📌 当前实际定义（Phase 3 A1 后，commit aa0878c）** — `messages` 字段已从 `AgentSession` 中移除。消息由 LangGraph checkpointer 持有，前端通过 `useAgent().messages` 访问；本 interface 只描述"会话元数据"。定义位于 `apps/web/src/lib/hooks/use-agent-session.ts`：
+
 ```typescript
+// 当前实际类型（Phase 3 A1 后）
+interface AgentSession {
+  session_id: string;                   // threadId
+  config_prompt: string | null;         // buildPromptFromCards() 结果
+  result_summary: ResultSummary | null; // { evaluated, promoted, rejected }
+}
+```
+
+历史 / 设计时的完整形态（仅供参考，已不适用）：
+
+```typescript
+// ⚠️ 过时：原设计将 messages 内联在 AgentSession 内
 interface AgentSession {
   id: string;                    // threadId
   agent_id: string;
   created_at: string;
 
-  // 会话内容（user + assistant + tool 消息）
+  // 会话内容（user + assistant + tool 消息）—— 现已移除，改由 checkpointer 存
   messages: PersistedMessage[];
 
   // 执行上下文：创建时的配置快照
@@ -201,26 +221,30 @@ interface ToolCallRecord {
 
 ### 3.2 各字段来源与持久化方式
 
+> **📌 现状（Phase 3 A1 后）** — `messages` 不再由 `_persist_chat` 写入 D1；LangGraph `AsyncSqliteSaver` 在每个 graph step 结束时自动写 checkpoint 到 `agents/radar/data/checkpoints.db`。`_persist_chat` 只负责元数据提取。
+
 | 字段 | 写入时机 | 写入方 | 存储位置 |
 |------|---------|--------|---------|
-| `messages` | agent run 结束 | Python `_persist_chat` | D1 `chat_messages`（改：保留 tool messages） |
-| `config_prompt` | agent run 结束 | Python `_persist_chat`（从 agent state 中提取） | D1 `chat_sessions` 新字段 |
-| `result_summary` | agent run 结束 | Python `_persist_chat`（从 evaluate tool result 提取） | D1 `chat_sessions` 新字段 |
+| `messages`（LangChain `BaseMessage`） | 每个 graph step 结束 | LangGraph `AsyncSqliteSaver` 自动写 | `agents/radar/data/checkpoints.db`（SQLite，按 thread_id 索引） |
+| `config_prompt` | agent run 结束 | Python `_persist_chat`（从 agent state 中提取） | D1 `chat_sessions.config_prompt` |
+| `result_summary` | agent run 结束 | Python `_persist_chat`（从 evaluate tool result 提取） | D1 `chat_sessions.result_summary` |
 
-**单一写入方原则：** 三个字段全部由 Python `_persist_chat` 统一写入，前端只读。遵循架构约束"Agent Server 处理 → BFF 持久化"的单向数据流，避免 split-brain。
+**单一写入方原则（仍然适用，微调）：** 元数据（`config_prompt` / `result_summary`）仍由 Python `_persist_chat` 统一写入，前端只读。消息的单一写入方从"Python `_persist_chat`"下沉到"LangGraph checkpointer"（Python 进程内），前端不接触消息持久化。两层都遵循架构约束"Agent Server 处理 → BFF / checkpointer 持久化"的单向数据流，避免 split-brain。
 
 ### 3.3 持久化后如何支持各场景
 
-| 场景 | 数据来源 |
+| 场景 | 数据来源（Phase 3 A1 后） |
 |------|---------|
-| S1 刷新续对话 | `messages` 加载到 CopilotKit `agent.setMessages()` |
-| S2 回看配置 | `config_prompt` 文本展示 |
-| S3 对比结果 | `result_summary` 在会话列表和详情中展示 |
-| S4 看执行过程 | `messages`（含 tool role）通过 `buildTraceFromMessages()` 重建 trace |
+| S1 刷新续对话 | CopilotKit 连接 agent 时自动收到 `MESSAGES_SNAPSHOT` 事件（checkpointer 回放），`agent.messages` 自行恢复，**前端无需手动 `setMessages()`** |
+| S2 回看配置 | `useAgentSession` → `session.config_prompt` 文本展示 |
+| S3 对比结果 | `useAgentSession` → `session.result_summary` 在会话列表（`useSessionList`）和详情中展示 |
+| S4 看执行过程 | `agent.messages`（含 tool_calls + tool role）通过 `buildTraceFromMessages()` 构建 trace — 活跃 / 历史同源 |
 
 ## 4. 组件架构
 
 ### 4.1 拆分方案
+
+> **📌 实施差异（commit a2bbc6b / A1）** — 原设计暗示把"活跃会话"和"历史会话"拆成两个组件（`ActiveSession` + `HistoryView`）。实际实施采用 A1：**保留单一 `SessionDetail` + 双模式条件渲染**（通过 `isActiveSession` 判断），而不是拆分两个组件。原因：两种模式共享 90% 的布局与数据管道（ConfigCards / ResultsPane / Trace / messages 来源都一致，只是开关可编辑性），代码复用更高；拆分反而引入跨组件状态同步的负担。
 
 ```
 AgentView（外壳 — Provider + 状态提升）
@@ -284,12 +308,14 @@ interface SessionSummary {
 
 CopilotKit Provider 内的主内容区。根据是否为活跃会话，渲染不同模式：
 
+> **📌 实施要点（A1 后）** — 活跃 / 历史两种模式的消息数据来源**同为 `agent.messages`**（由 CopilotKit `MESSAGES_SNAPSHOT` 从 checkpointer 恢复），不再有"live messages vs 持久化 messages"的二分。历史模式需要前端手动触发 `connectAgent(threadId)` 以触发 checkpointer 回放，活跃模式由 CopilotKit 自动连接。
+
 | 区域 | 活跃会话 | 历史会话（只读） |
 |------|---------|---------------|
 | **配置** | `<ConfigCards />` 可编辑 | `<ConfigSnapshot prompt={session.config_prompt} />` 折叠文本 |
-| **结果** | `<ResultsPane>` 从 live messages 提取 `extractResultBatches()` | `<ResultsPane>` 从 `session.result_summary` 静态展示 |
-| **对话** | `<CopilotChat>` 可交互 | `<MessageList>` 只读渲染 |
-| **Trace** | `<TraceDrawer>` 从 live messages 构建 | `<TraceDrawer>` 从持久化 messages 重建 |
+| **结果** | `<ResultsPane>` 从 `agent.messages` 提取 `extractResultBatches()` | `<ResultsPane>` 从 `session.result_summary` 静态展示 |
+| **对话** | `<CopilotChat>` 可交互 + preset 按钮 | 只读消息列表（渲染 `agent.messages`，隐藏输入框 / preset） |
+| **Trace** | `<TraceDrawer>` 从 `agent.messages` 构建 | `<TraceDrawer>` 从 `agent.messages` 构建（同源） |
 
 **判断依据：** `threadId === usePersistedThread().threadId`（当前活跃 ID）时为活跃模式，否则为只读。
 
@@ -351,6 +377,8 @@ interface UseAgentSessionReturn {
 - **key-based 失效：** threadId 变化自动重新获取
 
 ### 5.2 模块间交互
+
+> **📌 精修说明（Phase 3 A1 后）** — 下图保留原设计，但 `agent.setMessages()` 箭头在当前实现中不再存在：消息通过 CopilotKit `MESSAGES_SNAPSHOT` 从 checkpointer 自动恢复，不经过前端 `useEffect` 注入。图中"agent.setMessages()"节点应理解为"CopilotKit 连接 agent 后 `agent.messages` 自动可用"。
 
 ```
                     threadId (string)
@@ -424,6 +452,15 @@ SWR 配置（与现有 hooks 一致）：
 现有所有 hooks 都在 `lib/hooks/`。新增的 3 个 hook 接口设计为通用的（`agentId` 参数化），未来其他 agent 可复用。保持一致的目录约定。
 
 ## 6. 后端变更
+
+> **⚠️ 历史方案（已被 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md) 替换）** — 本节的设计前提是"BFF 持久化完整消息到 D1 `chat_messages`"。Phase 2 切换到 LangGraph `AsyncSqliteSaver` 后，该前提不再成立：
+>
+> - §6.1 `_langchain_messages_to_dicts` 保留 tool messages —— **不再需要**：checkpointer 直接存 LangChain `BaseMessage` 对象，无格式转换
+> - §6.2 `_persist_chat` 提取 config_prompt / result_summary —— **仍然适用**（这是 Phase 1 的产物，已实施）
+> - §6.3 DB schema 变更 —— **已实施**（`chat_sessions` 表的 `config_prompt` / `result_summary` 字段已存在）
+> - §6.4 `POST /api/chat/persist` 扩展 body —— **部分适用**：`messages` 字段已从 payload 中移除（commit 9b2069b），只保留 `config_prompt` / `result_summary`；`GET /api/chat/sessions` 响应不再返回 `messages` 数组
+>
+> 以下内容保留作为历史方案记录，精修时未删除。
 
 ### 6.1 Python：`_langchain_messages_to_dicts` 保留 tool messages
 
@@ -543,49 +580,56 @@ interface SessionHistory {
        └─ CopilotKit remount → useHistoryLoader 加载 → 只读模式
 ```
 
-### 7.2 消息持久化时序（改动）
+### 7.2 消息持久化时序（Phase 3 A1 后）
+
+> **📌 更新** — 消息由 checkpointer 在每个 graph step 自动落盘，与 `_persist_chat` 解耦。`_persist_chat` 的 payload 不再携带 `messages`，`/api/chat/persist` 内部只走 `ensureSession + updateSessionMetadata`，不再调用 `insertMessage`。
 
 ```
 用户发消息 → CopilotChat → BFF SSE 透传 → Python Agent
+  → LangGraph graph 每个 step 结束
+     → AsyncSqliteSaver.aput(checkpoint) → agents/radar/data/checkpoints.db（自动、持续）
   → LangGraph run 完成
   → TracingLangGraphAGUIAgent.run() yield 完毕
   → asyncio.create_task(_persist_chat(thread_id))
      → graph.aget_state() 取全部 messages
-     → _langchain_messages_to_dicts(messages)        ← 改：保留 tool messages + tool_calls
-     → _extract_config_prompt(messages)              ← 新增：从 system message 提取配置快照
-     → _extract_result_summary(messages)             ← 新增：从 evaluate tool result 提取摘要
+     → _extract_config_prompt(messages)              ← 从 system message 提取配置快照
+     → _extract_result_summary(messages)             ← 从 evaluate tool result 提取摘要
      → PlatformClient.persist_chat()
         → POST /api/chat/persist {
             agent_id, thread_id,
-            messages[],
-            config_prompt?,                          ← 新增（Python 提取，单一写入方）
-            result_summary?                          ← 新增（Python 提取，单一写入方）
+            config_prompt?,                          ← Python 提取，单一写入方
+            result_summary?                          ← Python 提取，单一写入方
+            （不再发 messages）
           }
-        → ensureSession + 更新 session metadata + insertMessage × N → D1
+        → ensureSession + updateSessionMetadata → D1 chat_sessions（仅元数据）
 ```
 
-### 7.3 历史会话加载时序
+### 7.3 历史会话加载时序（Phase 3 A1 后）
+
+> **📌 更新** — 消息恢复从"前端 `agent.setMessages()` 注入"改为"CopilotKit 连接 agent 时自动收 `MESSAGES_SNAPSHOT`"。SWR 只负责元数据，与消息恢复解耦。
 
 ```
 threadId 变化（切换会话 / 刷新页面）
   → SWR key 变化: /api/chat/sessions?thread_id={newThreadId}
   → useAgentSession 自动 refetch（或命中 SWR 缓存）
-  → 响应: { session_id, messages[], config_prompt, result_summary }
+  → 响应: { session_id, config_prompt, result_summary }   ← 不再含 messages
 
 同时，CopilotKit Provider remount（key={threadId}）
-  → SessionDetail 内 useEffect 监听 session 数据：
-     活跃会话（threadId === localStorage 当前值）：
-       → 过滤 messages 为 CopilotKit 兼容格式（user + assistant 文本）
-       → agent.setMessages(filtered)
-       → CopilotChat 恢复消息
-       → trace 从 live messages 实时构建
+  → useAgent 内部连接 agent server
+  → 后端 checkpointer 按 thread_id 回放 checkpoint
+  → 前端收到 MESSAGES_SNAPSHOT 事件 → agent.messages 自动填充
+
+  SessionDetail 根据 isActiveSession 条件渲染：
+     活跃会话（threadId === usePersistedThread().threadId）：
+       → CopilotKit 自动连接（useAgent 默认行为）
+       → 渲染可编辑 ConfigCards + CopilotChat + preset
+       → trace 从 agent.messages 实时构建
 
      历史会话（只读）：
-       → 不调 agent.setMessages()
-       → session 对象直接供只读渲染
-       → trace 从持久化 messages 重建
-
-  → SessionDetail 根据 active/history 切换渲染模式
+       → 手动调 connectAgent(threadId) 触发 checkpointer 恢复
+       → session 元数据直接供只读渲染（ConfigSnapshot + ResultsPane）
+       → 消息列表只读渲染 agent.messages
+       → trace 从 agent.messages 构建（与活跃同源）
 ```
 
 ### 7.4 会话列表刷新时序
@@ -610,13 +654,15 @@ threadId 变化（切换会话 / 刷新页面）
 
 **约束 1：`usePersistedThread` 必须在 CopilotKit 外层。** 否则 remount 丢失 threadId state。
 
-**约束 2：`useAgentSession` 放哪层都行（SWR hook 不依赖 Provider），但消息恢复的 `useEffect`（调 `agent.setMessages()`）必须在 CopilotKit 内层。** 因为 `agent` 来自 `useAgent`，必须在 Provider 内。
+**约束 2：`useAgentSession` 放哪层都行（SWR hook 不依赖 Provider）。** ~~消息恢复的 `useEffect`（调 `agent.setMessages()`）必须在 CopilotKit 内层~~ — Phase 3 A1 后此约束已不再需要：消息由 CopilotKit 连接后通过 `MESSAGES_SNAPSHOT` 自动恢复，无须前端 `setMessages()` 注入。只需读取 `agent.messages` 的组件放 Provider 内即可。
 
 **约束 3：`SessionSidebar` 放外层。** 不依赖 CopilotKit，避免 remount 时列表重渲染和闪烁。
 
 **约束 4：`useSessionList` 放外层。** 列表数据不随 threadId 变化，避免不必要的重请求。
 
-### 8.2 Inspector workaround
+### 8.2 Inspector workaround（✅ 已删除）
+
+> **✅ 已解决** — CopilotKit 升级到 1.56.2 后，Inspector 的 thread clone bug 被官方修复，DOM bridge workaround 已从代码库删除（对应 commit 7154ba6 还原 + 后续清理）。原描述保留：
 
 当前 DOM bridge（`AgentView.tsx:222-233`）通过 `subscribeToAgent(agent)` 订阅 Inspector。threadId 来源变了但传递路径不变。**无影响。** 待 CopilotKit 升级后统一删除。
 
@@ -624,7 +670,9 @@ threadId 变化（切换会话 / 刷新页面）
 
 `useAgentContext` 注入用户偏好到 agent 上下文。Provider remount 后 `configVersion` 重置为 0，但 `buildPromptFromCards()` 从 localStorage 读配置，仍能正确生成。**无影响。**
 
-### 8.4 后端 persist 的"全量覆盖"
+### 8.4 后端 persist 的"全量覆盖"（✅ 已消失）
+
+> **✅ 已解决（Phase 2 顺带）** — 切换到 LangGraph checkpointer 后，消息不再经过 `_persist_chat` → `insertMessage` 追加路径。checkpointer 按 `thread_id + checkpoint_id` 幂等写入，天然无重复。前端去重逻辑也可下线。以下描述保留作为历史记录：
 
 `_persist_chat` 每次发全部消息给 `/api/chat/persist`，`insertMessage` 追加。多轮对话后 DB 有重复行。
 
@@ -646,7 +694,9 @@ threadId 变化（切换会话 / 刷新页面）
 - 刷新 → API 返回空 → 正常空 chat
 - 会话列表不显示（后端过滤 `message_count === 0`）
 
-### 9.3 历史消息格式兼容
+### 9.3 历史消息格式兼容（⚠️ 不再适用 — Phase 2 后）
+
+> **⚠️ 已过时** — checkpointer 直接存 LangChain `BaseMessage` 对象（pickle 序列化到 SQLite），不需要跨格式转换；CopilotKit 的 `MESSAGES_SNAPSHOT` 事件直接消费这些对象。本节描述的"D1 JSON → CopilotKit `setMessages()` 过滤"流程已被 checkpointer 自动回放取代。保留以记录历史设计。
 
 DB 存储格式（Python 写入，改后）：
 ```json
@@ -698,7 +748,7 @@ CopilotKit `agent.setMessages()` 期望：
 
 - `useAgent` 必须在 Provider 内
 - 切换 thread 只能通过 `key` remount
-- 历史加载只能在 mount 后通过 `agent.setMessages()` 注入
+- ~~历史加载只能在 mount 后通过 `agent.setMessages()` 注入~~ — Phase 3 A1 后改为 mount 后由 CopilotKit 自动发 `MESSAGES_SNAPSHOT`（checkpointer 回放），历史模式下前端手动调 `connectAgent(threadId)` 触发
 - 如果 CopilotKit 未来提供 `switchThread()` API，可消除 remount 开销
 
 ### Inbox 与 Agent 会话双轨制
@@ -722,7 +772,9 @@ Chat 成为主入口后：
 
 PR #3872 合并后删除 Inspector workaround。可能获得更好的 thread 管理 API。
 
-### → 持久化去重
+### → 持久化去重（✅ 已不再适用）
+
+> **✅ 已由 Phase 2 消除** — 切换到 checkpointer 后天然无重复，不再需要增量 persist / upsert。
 
 Python 端改为增量 persist（维护 `last_persisted_index`），或后端 `insertMessage` 加 upsert。
 

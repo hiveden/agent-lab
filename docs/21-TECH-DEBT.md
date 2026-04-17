@@ -6,13 +6,27 @@
 >
 > 非会话领域的债（如 UI v2 遗留 trace 拖拽 bug、106 个 TS implicitly-any 错误、historical E2E flakiness）只在 P2/P3 简略记录。
 
-## ✅ 已解决（Phase 3 A1 - commit a2bbc6b）
+## ✅ 已解决
 
+### Phase 3 A1 - commit a2bbc6b
 | 项 | 解决方式 |
 |----|---------|
 | **P0 #1 死代码 `_langchain_messages_to_dicts`** | 函数 + 7 个单测已删 |
 | **P1 #3 双模式渲染半成品** | 数据源统一为 `agent.messages`；双 UI 渲染保留（这是产品语义：活跃可编辑 + 历史只读 input/preset 隐藏） |
 | **P2 #9 Trace 构建两份重复** | `buildTraceFromPersistedMessages` 已删，统一 `buildTraceFromMessages(messages)` |
+
+### 批量清理 - commit aa0878c
+| 项 | 解决方式 |
+|----|---------|
+| **P1 #4 `SessionSummary.message_count`** | 字段删除 + `listAgentSessions` 不再 JOIN `chat_messages` |
+| **P1 #5 Agent/Inbox type 拆分** | 新增 `AgentSessionMeta`（Agent 路径无 messages） / `InboxSessionHistory`（Inbox 路径含 messages），`SessionHistory` 保留为 deprecated 别名 |
+| **P2 #7 `showDevConsole`** | 条件化为 `NODE_ENV === 'development'` |
+| **P2 #8 `chat_messages` 表注释** | schema.ts 加 JSDoc 区分 Agent / Inbox 路径 |
+
+### 文档精修 - 本次
+| 项 | 解决方式 |
+|----|---------|
+| **P0 #2 文档章节正文过时** | 三份文档（19-SESSION-HISTORY-DESIGN / 19-COPILOTKIT-EVENT-FLOW / 20-LANGGRAPH-PERSISTENCE）章节正文对齐实际代码：加 "已解决" / "历史叙述" / "📌 现状" 标注；代码示例与 commit a2bbc6b / aa0878c 后的实际代码一致 |
 
 ## P0 阻塞 — 直接影响代码健康
 

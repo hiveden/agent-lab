@@ -178,26 +178,68 @@ ag-ui-langgraph 从 SqliteSaver 读取该 thread 的 checkpoint
 > - ✅ Phase 2 已实施（commit 22455ab）
 > - ✅ CopilotKit 升级 1.56.2（commit 9b2069b）
 > - ✅ 侧栏回归 bug fix（commit a177393）
-> - ⏸️ Phase 3 **阻塞** — 待产品决策（见下文）
-> - ⏸️ Phase 4 部分完成 — `_langchain_messages_to_dicts` 成死代码未清理
+> - ✅ Phase 3 A1 已实施（commit a2bbc6b / aa0878c）— 历史会话从 checkpointer 恢复 trace + 消息
+> - ✅ Phase 4 部分完成 — 死代码 `_langchain_messages_to_dicts` + `message_count` 字段 + `useAgentSession.messages` 字段已清理（commit a2bbc6b / aa0878c）
 >
-> Phase 1/2 的验证记录见 `docs/checkpoints/phase1.md` 和 `phase2.md`。
+> 验证记录：`docs/checkpoints/phase1.md` / `phase2.md` / `phase3-a1.md`。剩余清理见 `docs/21-TECH-DEBT.md`。
 
 ### Phase 1：替换 checkpointer（最小改动）
 
+**改动 1 — `agent.py` 接受 checkpointer 注入**：
+
 ```python
 # agents/radar/src/radar/agent.py
-import aiosqlite
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import MemorySaver
+
+def create_radar_agent(
+    *,
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    checkpointer: BaseCheckpointSaver | None = None,
+) -> CompiledStateGraph:
+    """生产环境注入 AsyncSqliteSaver；测试/CLI fallback 到 MemorySaver。"""
+    llm = DeferredLLM(task="chat")
+    tools = get_all_tools()
+    return create_react_agent(
+        model=llm,
+        tools=tools,
+        prompt=system_prompt,
+        name="radar_agent",
+        state_schema=AgentState,
+        checkpointer=checkpointer if checkpointer is not None else MemorySaver(),
+    )
+```
+
+**改动 2 — `main.py` 在 FastAPI lifespan 中通过 `AsyncSqliteSaver.from_conn_string` 创建 saver 并注入 agent**：
+
+```python
+# agents/radar/src/radar/main.py
+from contextlib import asynccontextmanager
+from pathlib import Path
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-# 替换前
-# checkpointer = MemorySaver()
+# agents/radar/data/checkpoints.db
+_CHECKPOINT_DB = Path(__file__).resolve().parent.parent.parent / "data" / "checkpoints.db"
 
-# 替换后
-conn = await aiosqlite.connect("data/checkpoints.db")
-checkpointer = AsyncSqliteSaver(conn=conn)
-await checkpointer.setup()  # 创建表结构
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(str(_CHECKPOINT_DB)) as saver:
+        graph = create_radar_agent(checkpointer=saver)
+        ag_ui_agent = TracingLangGraphAGUIAgent(
+            name="radar",
+            description="Radar Agent — intelligent content discovery assistant",
+            graph=graph,
+        )
+        add_langgraph_fastapi_endpoint(app, ag_ui_agent, path="/agent/chat")
+        yield
+
+app = FastAPI(title="Radar Agent", version="0.1.0", lifespan=lifespan)
 ```
+
+**实现要点**：
+- 使用 `AsyncSqliteSaver.from_conn_string(path)` context manager 统一管理底层连接生命周期（自动 `setup()` + `close()`），比手动建连更干净
+- Checkpointer 通过依赖注入传入 `create_radar_agent`，测试/CLI 场景可 fallback 到 `MemorySaver`
 
 **验证**：
 - 重启 FastAPI 进程，验证之前的对话能从 SqliteSaver 恢复
@@ -205,59 +247,107 @@ await checkpointer.setup()  # 创建表结构
 
 ### Phase 2：移除自研持久化
 
+**Python `_persist_chat` — 只 POST session 元数据**：
+
 ```python
 # agents/radar/src/radar/agui_tracing.py
 async def _persist_chat(self, thread_id: str) -> None:
-    """只 POST session 元数据，不 POST messages"""
-    state = await self.graph.aget_state(config)
-    messages = state.values.get("messages", [])
+    """Persist session-level metadata to D1 (config_prompt + result_summary)."""
+    try:
+        from agent_lab_shared.db import PlatformClient
+        config = {"configurable": {"thread_id": thread_id}}
+        state = await self.graph.aget_state(config)
+        messages = state.values.get("messages", [])
+        if not messages:
+            log.info("persist_chat_skip", thread_id=thread_id, reason="no messages")
+            return
 
-    config_prompt = _extract_config_prompt(messages)
-    result_summary = _extract_result_summary(messages)
+        config_prompt = _extract_config_prompt(messages)
+        result_summary = _extract_result_summary(messages)
 
-    # 不再传 messages
-    await client.persist_chat(
-        thread_id=thread_id,
-        agent_id=self.name,
-        config_prompt=config_prompt,
-        result_summary=result_summary,
-    )
+        client = PlatformClient()
+        # 注意：client.persist_chat 签名已不含 messages 参数
+        await asyncio.to_thread(
+            client.persist_chat,
+            thread_id=thread_id,
+            agent_id=self.name,
+            config_prompt=config_prompt,
+            result_summary=result_summary,
+        )
+    except Exception:
+        log.exception("persist_chat_failed", thread_id=thread_id)
 ```
 
+**BFF `/api/chat/persist` — 只更新 chat_sessions，不再插入 chat_messages**：
+
 ```typescript
-// apps/web/src/app/api/chat/persist/route.ts
-// 只更新 session 元数据，不再循环 insertMessage
-const sessionId = await ensureSession(env.DB, { sessionId: thread_id, agentId });
+// apps/web/src/app/api/chat/persist/route.ts（核心逻辑）
+const { agent_id, thread_id, config_prompt, result_summary } = parsed.data;
+
+const sessionId = await ensureSession(env.DB, {
+  sessionId: thread_id,
+  agentId: agent_id,
+});
+
 if (config_prompt !== undefined || result_summary !== undefined) {
-  await updateSessionMetadata(env.DB, sessionId, { config_prompt, result_summary });
+  const metadata: {
+    config_prompt?: string;
+    result_summary?: { evaluated: number; promoted: number; rejected: number };
+  } = {};
+  if (config_prompt !== undefined) metadata.config_prompt = config_prompt;
+  if (result_summary !== undefined) metadata.result_summary = result_summary;
+  await updateSessionMetadata(env.DB, sessionId, metadata);
 }
-// 删除消息插入循环
+
+return NextResponse.json({ ok: true, session_id: sessionId });
 ```
 
-```typescript
+**关键变更**：
+- `persistBodySchema` 已移除 `messages` 字段
+- 原先的 `for (const msg of messages) await insertMessage(...)` 循环已删除
+- `chat_messages` 表不再有新数据写入（保留旧数据做兼容）
+
+**前端 `SessionDetail.tsx` — 删除 mount-time `setMessages` hack**：CopilotKit 的 `connectAgent` + ag-ui-langgraph 的 `MESSAGES_SNAPSHOT` 事件会从 checkpointer 自动恢复，无需再手动注入。
+
+### Phase 3 A1：历史会话消息恢复（已实施 — commit a2bbc6b / aa0878c）
+
+**决策**：采用方案 A 的精简版——**保留双模式渲染**（active 用 `<CopilotChat>`、history 用只读消息列表），但统一数据源到 `agent.messages`，并对历史分支手动触发 `connectAgent` 让 checkpointer 消息流入 `agent.messages`。
+
+**实施要点**：
+
+1. **数据源统一**：`SessionDetail` 内 trace、resultBatches、消息列表全部读自 `agent.messages`（不再读 `session.messages`，后者已不存储消息内容）
+2. **历史只读路径手动 `connectAgent`**：`<CopilotChat>` mount 时会自动调用 `copilotkit.connectAgent`，但只读分支没有它 —— 手动补上让 ag-ui-langgraph 从 checkpointer 发射 `MESSAGES_SNAPSHOT`：
+
+```tsx
 // apps/web/src/app/agents/radar/components/production/SessionDetail.tsx
-// 删除 mount-time setMessages hack（L296-305）
-// CopilotKit 通过 MessagesSnapshotEvent 自动恢复
+const { copilotkit } = useCopilotKit();
+
+useEffect(() => {
+  if (isActiveSession) return; // active: <CopilotChat /> handles it
+  if (!agent) return;
+  let detached = false;
+  void copilotkit.connectAgent({ agent }).catch((err) => {
+    if (detached) return;
+    console.error('SessionDetail: connectAgent (history) failed', err);
+  });
+  return () => { detached = true; };
+}, [isActiveSession, agent, copilotkit]);
 ```
 
-### Phase 3：统一历史浏览（⏸️ 阻塞 — 待产品决策）
+3. **保留双模式的理由**：active 会话需要 `<CopilotChat>` 的完整交互能力（输入框 + 流式渲染 + 中断按钮）；历史会话展示是只读，直接铺消息列表更清爽，避免误触发新 run
 
-**现状**：Phase 2 后历史会话切换只能看配置快照。`AgentView.isActiveSession` 逻辑仍区分"活跃"（走 CopilotChat）vs"历史"（只读），但历史分支的 `session.messages` 永远是空的，用户切到旧会话只能看 `config_prompt` + `result_summary`，看不到消息交互。
+**端到端链路**（历史会话切换）：
 
-**两个产品选项**：
-
-| 选项 | 说明 | 改动量 | 风险 |
-|------|------|--------|------|
-| **A：完成 Phase 3** | 删除双模式，任意会话走 CopilotChat，通过 `MESSAGES_SNAPSHOT` 自动从 checkpointer 恢复 | 中 | CopilotKit 1.56.2 下切换历史 threadId 的恢复链路未验证，可能有 edge case |
-| **B：砍历史消息查看** | 明确"历史会话 = 配置+结果快照"产品定位，删除双模式代码（`activeIdRef`、`isActiveSession`）+ 删除 SessionDetail 只读消息列表分支 | 小 | 产品能力退化 |
-
-**如果选 A 的 POC 步骤**：
-
-1. 临时改 `AgentView.tsx`：切换历史 session 时也更新 `activeIdRef`（让 `isActiveSession === true`）
-2. 浏览器切换到一个有 tool call 的历史会话
-3. DevTools Network 过滤 `chat`，观察 SSE 是否出现 `MESSAGES_SNAPSHOT` 事件 + `agent.messages` 是否含历史
-
-**POC 注意**：原 POC 方案（在 v1.55.3 时写的 doc §8.5）已失效，因为 Phase 2 后侧栏会话列表的 preview 展示依赖 config_prompt（见 commit a177393），用户**能看到侧栏会话项并点击切换**。
+```
+侧栏点击历史 session
+  → AgentView 更新 threadId prop
+  → SessionDetail mount（isActiveSession === false）
+  → useEffect 调用 copilotkit.connectAgent({ agent })
+  → ag-ui-langgraph 从 AsyncSqliteSaver 读该 thread 的 checkpoint
+  → 发射 MESSAGES_SNAPSHOT 事件
+  → agent.messages 填充完整历史（含 tool calls）
+  → 只读消息列表 + trace drawer 正常渲染
+```
 
 ### Phase 4：清理（可选）
 
@@ -273,35 +363,38 @@ if (config_prompt !== undefined || result_summary !== undefined) {
 
 ## 6. 风险与注意事项
 
-### 6.1 AsyncSqliteSaver 初始化
+### 6.1 AsyncSqliteSaver 初始化 — ✅ 已落地
 
-需要 async 上下文初始化，可能要调整 agent 创建逻辑：
+采用 `AsyncSqliteSaver.from_conn_string(path)` 的 async context manager 模式，在 FastAPI lifespan 中构建，生命周期自动管理（内部处理底层 `aiosqlite` 连接 + `setup()` + `close()`）：
 
 ```python
-# FastAPI lifespan event
+# agents/radar/src/radar/main.py
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    conn = await aiosqlite.connect("data/checkpoints.db")
-    checkpointer = AsyncSqliteSaver(conn=conn)
-    await checkpointer.setup()
-    app.state.checkpointer = checkpointer
-    yield
-    await conn.close()
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(str(_CHECKPOINT_DB)) as saver:
+        graph = create_radar_agent(checkpointer=saver)
+        ag_ui_agent = TracingLangGraphAGUIAgent(name="radar", ..., graph=graph)
+        add_langgraph_fastapi_endpoint(app, ag_ui_agent, path="/agent/chat")
+        yield
 ```
 
-### 6.2 CopilotKit AG-UI thread 支持仍在演进
+相比最初规划的手动建连 + `AsyncSqliteSaver(conn=...)` + 显式 `setup()` 方式，`from_conn_string` 更干净且已在 Phase 1 实测通过。
 
-相关 issue：
-- [CopilotKit#2328](https://github.com/CopilotKit/CopilotKit/pull/2328) — AG-UI agents 的 thread support 仍在 WIP
-- [CopilotKit#2402](https://github.com/CopilotKit/CopilotKit/issues/2402) — 迁移到 AG-UI 后持久化失效
-- [CopilotKit#2336](https://github.com/CopilotKit/CopilotKit/issues/2336) — PostgresSaver + CopilotKit 新对话时状态为空
+### 6.2 CopilotKit AG-UI thread 支持 — ✅ 1.56.2 已解锁
 
-需要在 Phase 1 后先做 POC 验证恢复链路。
+升级到 CopilotKit `1.56.2` 后，相关 thread 支持已合入主线（[PR #3872](https://github.com/CopilotKit/CopilotKit/pull/3872) 已合并），Phase 3 A1 的端到端恢复链路实测可用。
+
+历史遗留 issue（仅保留备查）：
+- [CopilotKit#2328](https://github.com/CopilotKit/CopilotKit/pull/2328) — 早期 WIP
+- [CopilotKit#2402](https://github.com/CopilotKit/CopilotKit/issues/2402) — 旧版持久化失效
+- [CopilotKit#2336](https://github.com/CopilotKit/CopilotKit/issues/2336) — 旧版新对话空 state
 
 ### 6.3 部署
 
-- SQLite 文件路径需要挂载持久卷（Docker 部署时）
-- 长期运行后 SQLite 文件会增长，需要定期清理老 thread 的 checkpoint（保留最新即可）
+- **实际 SQLite 文件路径**：`agents/radar/data/checkpoints.db`（仓库 `.gitignore`，首次启动自动创建）
+- Docker/生产部署时需挂载 `agents/radar/data/` 为持久卷
+- 长期运行后 SQLite 文件会增长，后续需要定期清理老 thread 的 checkpoint（保留最新即可）
 
 ### 6.4 config_prompt 提取仍依赖 CopilotKit 编码
 
@@ -310,6 +403,8 @@ async def lifespan(app: FastAPI):
 ---
 
 ## 7. 对比：方案 A（先删后插）vs 方案 B（checkpointer）
+
+> ✅ **方案 B（checkpointer）已采纳并实施完成**。以下对比保留作为决策叙述参考。
 
 | 维度 | 方案 A：先删后插 | 方案 B：SqliteSaver |
 |------|-----------------|-------------------|
