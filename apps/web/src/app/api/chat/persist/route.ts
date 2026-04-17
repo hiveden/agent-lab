@@ -1,27 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getEnv } from '@/lib/env';
-import { ensureSession, insertMessage, updateSessionMetadata } from '@/lib/chat';
-import { z } from 'zod';
+import { ensureSession, updateSessionMetadata } from '@/lib/chat';
+import { persistBodySchema } from './schema';
 
 export const runtime = 'edge';
-
-const messageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'tool', 'system']),
-  content: z.string(),
-  tool_calls: z.array(z.unknown()).nullable().optional(),
-});
-
-const persistBodySchema = z.object({
-  agent_id: z.string().min(1),
-  thread_id: z.string().min(1),
-  messages: z.array(messageSchema).min(1),
-  config_prompt: z.string().optional(),
-  result_summary: z.object({
-    evaluated: z.number(),
-    promoted: z.number(),
-    rejected: z.number(),
-  }).optional(),
-});
 
 export async function POST(req: Request) {
   const env = getEnv();
@@ -48,7 +30,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { agent_id, thread_id, messages, config_prompt, result_summary } = parsed.data;
+  const { agent_id, thread_id, config_prompt, result_summary } = parsed.data;
 
   try {
     // Ensure session exists (use thread_id as session_id)
@@ -65,23 +47,9 @@ export async function POST(req: Request) {
       await updateSessionMetadata(env.DB, sessionId, metadata);
     }
 
-    // Insert all messages
-    const messageIds: string[] = [];
-    for (const msg of messages) {
-      const id = await insertMessage(
-        env.DB,
-        sessionId,
-        msg.role,
-        msg.content,
-        msg.tool_calls ?? null,
-      );
-      messageIds.push(id);
-    }
-
     return NextResponse.json({
       ok: true,
       session_id: sessionId,
-      message_count: messageIds.length,
     });
   } catch (err) {
     return NextResponse.json(

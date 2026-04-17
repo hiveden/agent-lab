@@ -292,17 +292,10 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const messages = agent.messages;
   const isRunning = agent.isRunning;
 
-  // ── Restore history messages for active session ──
-  useEffect(() => {
-    if (!isActiveSession || !session?.messages?.length) return;
-    const filtered = session.messages
-      .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
-      .map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content }));
-    if (filtered.length > 0) {
-      agent.setMessages(filtered);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only on mount
+  // Note: history messages for the active session are restored automatically
+  // by CopilotKit via the MESSAGES_SNAPSHOT event that ag-ui-langgraph emits
+  // from the AsyncSqliteSaver checkpointer. No manual setMessages needed.
+  // See docs/20-LANGGRAPH-PERSISTENCE.md Phase 2.
 
   // ── Refresh session list when agent run finishes ──
   const prevRunning = useRef(false);

@@ -225,7 +225,13 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
             asyncio.create_task(self._persist_chat(thread_id))
 
     async def _persist_chat(self, thread_id: str) -> None:
-        """Extract messages from graph state and persist via PlatformClient."""
+        """Persist session-level metadata to D1 (config_prompt + result_summary).
+
+        Messages themselves are persisted by LangGraph's AsyncSqliteSaver
+        checkpointer — see docs/20-LANGGRAPH-PERSISTENCE.md. This method only
+        writes session metadata to make sessions appear in the sidebar list
+        and preserve the config/result snapshots for historical review.
+        """
         try:
             from agent_lab_shared.db import PlatformClient
 
@@ -236,11 +242,6 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
                 log.info("persist_chat_skip", thread_id=thread_id, reason="no messages")
                 return
 
-            dicts = _langchain_messages_to_dicts(messages)
-            if not dicts:
-                log.info("persist_chat_skip", thread_id=thread_id, reason="no persistable messages")
-                return
-
             config_prompt = _extract_config_prompt(messages)
             result_summary = _extract_result_summary(messages)
 
@@ -249,14 +250,14 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
                 client.persist_chat,
                 thread_id=thread_id,
                 agent_id=self.name,
-                messages=dicts,
                 config_prompt=config_prompt,
                 result_summary=result_summary,
             )
             log.info(
                 "persist_chat_ok",
                 thread_id=thread_id,
-                message_count=len(dicts),
+                has_config=config_prompt is not None,
+                has_result=result_summary is not None,
             )
         except Exception:
             log.exception("persist_chat_failed", thread_id=thread_id)

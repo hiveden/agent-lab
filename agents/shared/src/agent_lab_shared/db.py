@@ -194,11 +194,14 @@ class PlatformClient:
         self,
         thread_id: str,
         agent_id: str,
-        messages: list[dict[str, Any]],
         config_prompt: str | None = None,
         result_summary: dict[str, int] | None = None,
     ) -> dict[str, Any]:
-        """Persist chat messages to D1 via BFF endpoint.
+        """Persist chat session metadata to D1 via BFF endpoint.
+
+        Only session-level metadata (config_prompt, result_summary) is sent.
+        Messages themselves are persisted by LangGraph's AsyncSqliteSaver
+        checkpointer — see docs/20-LANGGRAPH-PERSISTENCE.md.
 
         Best-effort: callers should catch exceptions and log rather than
         propagating failures to the user.
@@ -207,7 +210,6 @@ class PlatformClient:
         payload: dict[str, Any] = {
             "agent_id": agent_id,
             "thread_id": thread_id,
-            "messages": messages,
         }
         if config_prompt is not None:
             payload["config_prompt"] = config_prompt
