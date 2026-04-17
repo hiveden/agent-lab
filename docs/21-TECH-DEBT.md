@@ -86,25 +86,24 @@
 
 ---
 
-### P1 #6 遗留 Zustand `sessions` slice（Inbox 会话体系）
+### 架构注释：两条会话路线（非技术债，并存设计）
 
-**位置**：`apps/web/src/lib/stores/radar-store.ts:272-319`（`loadSession` / `updateSession`）
+> 此前此项被错误归为 P1 #6 "技术债"。经讨论修正：**两条会话路线是有意并存的 A/B 架构**，不是待清理的债务。记录在此仅用于建立正确的心智模型。
 
-**问题**：
-- 项目有**两套并行**的会话体系：
-  - Inbox 会话：`itemId` 索引，存在 Zustand `sessions[itemId]`，走 D1 `chat_messages` 表（老路径，仍在写入）
-  - Agent 会话：`threadId` 索引，走 LangGraph checkpointer（新路径）
-- Inbox 这边 **仍然依赖 `chat_messages` 表**（通过 `/api/chat/sessions/{itemId}` 和 `getLatestSessionForItem`）
-- Phase 2 只改了 Agent 端持久化，Inbox 端没动
-- 双轨制是隐性约束：`chat_messages` 表不能彻底删除（Inbox 还在用）
+**两条路线**：
 
-**原因**：Inbox 对话用 AI SDK `useChat` hook + Next.js route，不是 CopilotKit。没有 checkpointer。
+| 路线 | 产品入口 | 索引 | Chat 组件 | 消息存储 |
+|-----|---------|------|---------|---------|
+| **Inbox 会话**（老路线）| Inbox 列表点击单个 item 聊天 | `itemId` | AI SDK `useChat` + ChatView | D1 `chat_messages` 表 |
+| **Agent 会话**（新路线）| Agent 页面自由对话 | `threadId` | CopilotKit `useAgent` + CopilotChat | LangGraph AsyncSqliteSaver |
 
-**修复方向**：
-- 短期：文档化这是"两套体系"，`chat_messages` 表是 Inbox 专属
-- 长期：若统一为 CopilotKit，可移除 Zustand sessions slice + AI SDK
+**隐性约束**：
+- `chat_messages` 表是 Inbox 专属，Agent 路线不写（见 `schema.ts` 注释）
+- 两个 API 路径：`POST /api/chat`（Inbox）vs `POST /api/agent/chat`（Agent）
+- 前端 state：Zustand `sessions[itemId]`（Inbox）vs `useAgent().messages`（Agent）
+- 元数据：共享 `chat_sessions` 表（通过 `agent_id` 区分）
 
-**工作量**：短期 0h（只记录），长期 1-2 天（重写 Inbox 会话）
+**何时考虑合并**：产品层面决定 Inbox 和 Agent 对话能力要不要统一（tool 调用、checkpointer 恢复、trace 可见等 Agent 路线的能力是否需要下沉到 Inbox）。这是产品决策，不是重构决策。
 
 ---
 
@@ -184,6 +183,5 @@
 - P2 #7 条件化 `showDevConsole`（10min）
 - P2 #8 加注释说明 `chat_messages` 表归属（30min）
 
-### 阶段 3：架构收敛（长期）
-- P1 #6 Inbox 会话体系是否统一为 CopilotKit（1-2 天，改 UX）
-- P0 #2 修订 docs/19-* 章节正文（替换过时的代码示例、架构图）
+### 架构演进（产品决策后触发，非技术债）
+- Inbox vs Agent 两条会话路线：是否要产品层面统一（见"架构注释"章节）
