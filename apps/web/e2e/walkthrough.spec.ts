@@ -23,7 +23,7 @@ test('Full walkthrough: sources → trigger → runs result', async ({ page }) =
   await page.waitForLoadState('networkidle');
   await PAUSE(1000);
 
-  await page.click('button[aria-label="同步"]');
+  await page.click('button[aria-label="Sync"]');
   await PAUSE(1500);
 
   const triggerBtn = page.locator('button.trigger-btn').first();

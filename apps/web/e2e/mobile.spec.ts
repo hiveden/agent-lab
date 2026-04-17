@@ -111,7 +111,9 @@ test('Step 5: back button returns to list', async ({ page }) => {
 
 test('Step 6: tab switching, each view visual clean', async ({ page }) => {
   await page.goto('/agents/radar');
-  await page.waitForLoadState('networkidle');
+  // Wait for TabBar to render instead of networkidle — CopilotKit / SWR may
+  // keep background requests open long enough to starve networkidle.
+  await expect(page.locator('nav button[aria-label="Watch"]')).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(500);
 
   // Watch tab
@@ -122,7 +124,7 @@ test('Step 6: tab switching, each view visual clean', async ({ page }) => {
   // Mirror tab
   await page.locator('button[aria-label="Mirror"]').click();
   await page.waitForTimeout(500);
-  await expect(page.getByRole('heading', { name: /Attention/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: /注意力镜像|Attention/i })).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: 'e2e/test-results/m-07-attention.png' });
   await runVisualAudit(page, 'mobile-attention');
 
@@ -136,7 +138,7 @@ test('Step 6: tab switching, each view visual clean', async ({ page }) => {
   // Settings tab
   await page.locator('button[aria-label="Settings"]').click();
   await page.waitForTimeout(500);
-  await expect(page.getByRole('heading', { name: /LLM Settings/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: /LLM (设置|Settings)/i })).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: 'e2e/test-results/m-09-settings.png' });
   await runVisualAudit(page, 'mobile-settings');
 });

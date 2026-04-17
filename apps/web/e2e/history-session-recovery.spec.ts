@@ -23,12 +23,15 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 test.describe.configure({ mode: 'serial' });
+// A→B→切回 A 需要 3 次 agent run，全量顺序跑时容易超过默认 120s
+test.setTimeout(600_000);
 
 async function sendOneTurn(page: Page, presetLabel: string): Promise<void> {
   const userCountBefore = await page.locator('.user-bubble').count();
   await page.locator(`button:has-text("${presetLabel}")`).first().click();
   await expect(page.locator('.user-bubble')).toHaveCount(userCountBefore + 1, { timeout: 15_000 });
-  await expect(page.locator('button:has-text("停止")')).toHaveCount(0, { timeout: 120_000 });
+  // 180s 容忍全量跑时 agent 冷启动 / 负载高
+  await expect(page.locator('button:has-text("停止")')).toHaveCount(0, { timeout: 180_000 });
   await page.waitForTimeout(500);
 }
 

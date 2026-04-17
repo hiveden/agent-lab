@@ -11,11 +11,20 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { cleanChatTables } from './helpers/db-reset';
 
 test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 test.describe.configure({ mode: 'serial' });
 
 const ROUNDS = 3;
+
+// 全量顺序跑时，前面 spec（consumption / walkthrough / styles 等）会在
+// chat_sessions 留下旧记录，拖慢 listAgentSessions 查询与 RadarWorkspace
+// 初始渲染——导致本 spec 的 sendOneTurn 90s 超时。
+// 单跑 OK 是因为 run-e2e.sh Step 1b 已清过。
+test.beforeAll(() => {
+  cleanChatTables();
+});
 
 async function sendOneTurn(page: Page, presetLabel: string): Promise<void> {
   // Use preset buttons (宽松预设) — they trigger sendPreset which calls
@@ -29,9 +38,14 @@ async function sendOneTurn(page: Page, presetLabel: string): Promise<void> {
 
   // Wait for the send button to go back to 发送 (meaning isRunning=false).
   // When running, it becomes 停止.
-  await expect(page.locator('button:has-text("停止")')).toHaveCount(0, { timeout: 90_000 });
+  // 180s 容忍全量顺序跑时 agent 冷启动 / 机器负载高的场景（"执行评判" preset
+  // 会触发 evaluate tool call，真实耗时 30-90s）。
+  await expect(page.locator('button:has-text("停止")')).toHaveCount(0, { timeout: 180_000 });
   await page.waitForTimeout(500);
 }
+
+// 3 轮 × (~60-90s agent run + overhead) 需要 5+ 分钟
+test.setTimeout(600_000);
 
 test('N 轮对话后 DOM 消息数精确无膨胀，D1 chat_messages 无写入', async ({ page, request }) => {
   // 1. Open page + 切到 Agent 视图 + 新建会话

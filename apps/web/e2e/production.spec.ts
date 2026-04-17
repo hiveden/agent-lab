@@ -132,7 +132,7 @@ test('Step 4: sync view renders clean', async ({ page }) => {
   await page.waitForLoadState('networkidle');
 
   // Open sync view (merged Sources + Runs)
-  await page.click('button[aria-label="同步"]');
+  await page.click('button[aria-label="Sync"]');
   await page.waitForTimeout(500);
 
   // Sources checkboxes visible
