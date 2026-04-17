@@ -273,20 +273,9 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   // ── Session data ──
   const { session } = useAgentSession(threadId);
 
-  // ── Bridge: subscribe Inspector to thread clone ──
-  useEffect(() => {
-    if (!agent?.agentId) return;
-    let attempts = 0;
-    const trySubscribe = () => {
-      const el = document.querySelector('cpk-web-inspector') as any;
-      if (el?.subscribeToAgent) {
-        el.subscribeToAgent(agent);
-        return;
-      }
-      if (++attempts < 20) setTimeout(trySubscribe, 200);
-    };
-    trySubscribe();
-  }, [agent]);
+  // Note: Inspector DOM bridge workaround removed after upgrading to
+  // CopilotKit v1.56.2 (PR #3872). The web inspector now auto-subscribes
+  // to per-thread agent clones via the onAgentRunStarted event.
 
   const agentState = (agent.state ?? {}) as RadarAgentState;
   const messages = agent.messages;
