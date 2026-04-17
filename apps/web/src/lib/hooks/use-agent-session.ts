@@ -2,18 +2,17 @@ import useSWR from 'swr';
 import type { ResultSummary } from '@/lib/types';
 import { swrFetcher, SWR_DEFAULT_OPTIONS } from './swr-utils';
 
-export interface PersistedMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  content: string;
-  tool_calls?: Array<{ id: string; name: string; args: Record<string, unknown> }> | null;
-  tool_call_id?: string | null;
-  created_at: string;
-}
-
+/**
+ * Agent 会话元数据（Phase 3 A1 之后）。
+ *
+ * 注意：不含 messages 字段。Agent 会话的消息由 LangGraph AsyncSqliteSaver
+ * checkpointer 持有，前端通过 CopilotKit MESSAGES_SNAPSHOT 恢复（`agent.messages`
+ * 来自 `useAgent` hook）。本 hook 只返回元数据用于 ConfigSnapshot / ResultsPane。
+ *
+ * 对应后端 `lib/chat.ts` 的 `AgentSessionMeta` type。
+ */
 export interface AgentSession {
   session_id: string;
-  messages: PersistedMessage[];
   config_prompt: string | null;
   result_summary: ResultSummary | null;
 }

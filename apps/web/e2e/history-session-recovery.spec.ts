@@ -119,9 +119,8 @@ test('切换回历史会话: 消息 + trace 从 checkpointer 完整恢复', asyn
   const traceContent = await page.locator('aside + div, .trace-drawer, [role="complementary"]').last().innerText().catch(() => '');
   console.log(`[A1] Trace content (first 200 chars): ${traceContent.slice(0, 200)}`);
 
-  // ── API: chat_messages 无写入（Phase 2 没回归）──
-  // 只检查 A 的 API 返回
+  // ── API: 响应体无 messages 字段（Phase 3 A1 后 AgentSessionMeta 纯元数据）──
   const resp = await page.request.get(`/api/chat/sessions?thread_id=${threadIdA}`);
   const session = await resp.json();
-  expect(session.messages ?? []).toHaveLength(0);
+  expect(session).not.toHaveProperty('messages');
 });

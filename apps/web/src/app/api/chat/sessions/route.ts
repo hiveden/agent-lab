@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     const result = await getSessionByThreadId(env.DB, threadId);
 
     if (!result) {
-      return NextResponse.json({ session_id: null, messages: [] });
+      return NextResponse.json({ session_id: null });
     }
 
     return NextResponse.json(result);

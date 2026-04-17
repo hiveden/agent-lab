@@ -44,6 +44,15 @@ export const userStates = sqliteTable(
   ]
 );
 
+/**
+ * Chat sessions — shared metadata table for two session paths:
+ *
+ * 1. Inbox path (AI SDK useChat, itemId-indexed): writes session metadata + messages.
+ * 2. Agent path (CopilotKit / LangGraph, threadId-indexed): writes only metadata
+ *    (config_prompt, result_summary) via /api/chat/persist. Message content is
+ *    owned by LangGraph AsyncSqliteSaver checkpointer (agents/radar/data/checkpoints.db),
+ *    see docs/20-LANGGRAPH-PERSISTENCE.md.
+ */
 export const chatSessions = sqliteTable(
   'chat_sessions',
   {
@@ -59,6 +68,13 @@ export const chatSessions = sqliteTable(
   ]
 );
 
+/**
+ * Chat messages for the Inbox session path (AI SDK useChat, itemId-indexed).
+ *
+ * ⚠️ 不是 Agent 会话的消息存储！Agent 会话消息由 LangGraph AsyncSqliteSaver
+ * checkpointer 持有（agents/radar/data/checkpoints.db），见 docs/20-LANGGRAPH-PERSISTENCE.md。
+ * Agent 路径 (/api/chat/persist) 不向此表写入数据。
+ */
 export const chatMessages = sqliteTable(
   'chat_messages',
   {

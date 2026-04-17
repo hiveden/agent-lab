@@ -80,12 +80,13 @@ test('N 轮对话后 DOM 消息数精确无膨胀，D1 chat_messages 无写入',
     `刷新前后 assistant 消息数应一致（=${assistantBefore}），实际 ${assistantAfter}`,
   ).toBe(assistantBefore);
 
-  // 6. 核心断言：D1 chat_messages 无写入 — session.messages 应为空（Phase 2 目标）
+  // 6. 核心断言：API 响应体不包含 messages 字段（Phase 3 A1 后的 AgentSessionMeta）
+  // Phase 2 后 Agent 路径消息由 checkpointer 持有，API 只返回元数据
   const resp = await request.get(`/api/chat/sessions?thread_id=${threadId}`);
   expect(resp.status()).toBe(200);
   const session = await resp.json();
   expect(
-    session.messages ?? [],
-    'Phase 2: BFF 不应再写入 chat_messages 表',
-  ).toHaveLength(0);
+    session,
+    'Agent 路径 API 响应不应含 messages 字段（见 AgentSessionMeta）',
+  ).not.toHaveProperty('messages');
 });

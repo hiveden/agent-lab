@@ -50,7 +50,7 @@ export default function AgentView() {
         onNew={handleNew}
         onSwitch={switchThread}
       />
-      <CopilotKit key={threadId} runtimeUrl="/api/agent/chat" showDevConsole>
+      <CopilotKit key={threadId} runtimeUrl="/api/agent/chat" showDevConsole={process.env.NODE_ENV === 'development'}>
         <SessionDetail
           threadId={threadId}
           isActiveSession={isActiveSession}

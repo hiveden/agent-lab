@@ -64,7 +64,25 @@ export async function insertMessage(
   return id;
 }
 
-export interface SessionHistory {
+/**
+ * Agent 会话元数据 — Phase 3 A1 之后 Agent 路径（threadId 索引）使用。
+ *
+ * 消息内容不在 D1，由 LangGraph AsyncSqliteSaver checkpointer 持有
+ * （`agents/radar/data/checkpoints.db`）。前端通过 CopilotKit MESSAGES_SNAPSHOT
+ * 从 checkpointer 恢复消息。
+ */
+export interface AgentSessionMeta {
+  session_id: string;
+  config_prompt: string | null;
+  result_summary: ResultSummary | null;
+}
+
+/**
+ * Inbox 会话完整历史 — itemId 索引，走 AI SDK useChat + D1 chat_messages 表。
+ *
+ * ⚠️ 不要用于 Agent 路径。Agent 会话的消息不存 D1（见 AgentSessionMeta）。
+ */
+export interface InboxSessionHistory {
   session_id: string;
   config_prompt: string | null;
   result_summary: ResultSummary | null;
@@ -77,10 +95,13 @@ export interface SessionHistory {
   }>;
 }
 
+/** @deprecated 使用 InboxSessionHistory（Inbox 路径）或 AgentSessionMeta（Agent 路径）。 */
+export type SessionHistory = InboxSessionHistory;
+
 export async function getLatestSessionForItem(
   d1: D1Database,
   itemId: string,
-): Promise<SessionHistory | null> {
+): Promise<InboxSessionHistory | null> {
   const db = getDb(d1);
   const sessions = await db
     .select({
@@ -122,7 +143,6 @@ export interface SessionSummary {
   config_prompt: string | null;
   result_summary: ResultSummary | null;
   created_at: string;
-  message_count: number;
   preview: string;
 }
 
@@ -146,38 +166,25 @@ export async function listAgentSessions(
     .orderBy(desc(chatSessions.created_at))
     .limit(limit);
 
-  const result: SessionSummary[] = [];
-  for (const s of sessions) {
-    // Messages are persisted by LangGraph AsyncSqliteSaver checkpointer since
-    // Phase 2 (docs/20-LANGGRAPH-PERSISTENCE.md). chat_messages is only kept
-    // for legacy rows. Fall back to config_prompt → result_summary → '' for
-    // preview, so the sidebar always shows a meaningful summary.
-    const msgs = await db
-      .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
-      .from(chatMessages)
-      .where(eq(chatMessages.session_id, s.id))
-      .orderBy(asc(chatMessages.created_at));
-
-    const firstUser = msgs.find(m => m.role === 'user');
-    const legacyPreview = firstUser?.content?.slice(0, 50) ?? '';
+  // Messages are persisted by LangGraph AsyncSqliteSaver checkpointer since
+  // Phase 2 (docs/20-LANGGRAPH-PERSISTENCE.md); chat_messages only holds legacy
+  // rows. Preview is derived from session metadata (config_prompt → result_summary).
+  return sessions.map((s) => {
     const configPreview = s.config_prompt?.slice(0, 50) ?? '';
     const resultPreview = s.result_summary
       ? `推 ${s.result_summary.promoted} / 滤 ${s.result_summary.rejected}`
       : '';
-    const preview = legacyPreview || configPreview || resultPreview;
+    const preview = configPreview || resultPreview;
 
-    result.push({
+    return {
       id: s.id,
       agent_id: s.agent_id ?? 'radar',
       config_prompt: s.config_prompt ?? null,
       result_summary: s.result_summary ?? null,
       created_at: s.created_at ?? '',
-      message_count: msgs.length,
       preview,
-    });
-  }
-
-  return result;
+    };
+  });
 }
 
 /**
@@ -186,7 +193,9 @@ export async function listAgentSessions(
 export async function getSessionByThreadId(
   d1: D1Database,
   threadId: string,
-): Promise<SessionHistory | null> {
+): Promise<AgentSessionMeta | null> {
+  // Agent 会话的消息由 LangGraph AsyncSqliteSaver 持有（见 AgentSessionMeta 注释），
+  // 所以这里只查 chat_sessions 元数据，不再 JOIN chat_messages 表。
   const db = getDb(d1);
   const sessions = await db
     .select({
@@ -201,23 +210,10 @@ export async function getSessionByThreadId(
   if (sessions.length === 0) return null;
   const session = sessions[0];
 
-  const messages = await db
-    .select({
-      id: chatMessages.id,
-      role: chatMessages.role,
-      content: chatMessages.content,
-      tool_calls: chatMessages.tool_calls,
-      created_at: chatMessages.created_at,
-    })
-    .from(chatMessages)
-    .where(eq(chatMessages.session_id, session.id))
-    .orderBy(asc(chatMessages.created_at));
-
   return {
     session_id: session.id,
     config_prompt: session.config_prompt ?? null,
     result_summary: session.result_summary ?? null,
-    messages,
   };
 }
 

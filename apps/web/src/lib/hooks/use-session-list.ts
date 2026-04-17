@@ -6,7 +6,6 @@ export interface SessionSummary {
   id: string;
   agent_id: string;
   created_at: string;
-  message_count: number;
   preview: string;
   config_prompt: string | null;
   result_summary: ResultSummary | null;
