@@ -173,6 +173,16 @@ ag-ui-langgraph 从 SqliteSaver 读取该 thread 的 checkpoint
 
 ## 5. 实施步骤
 
+> **当前进度（2026-04-17）**：
+> - ✅ Phase 1 已实施（commit 108ece6）
+> - ✅ Phase 2 已实施（commit 22455ab）
+> - ✅ CopilotKit 升级 1.56.2（commit 9b2069b）
+> - ✅ 侧栏回归 bug fix（commit a177393）
+> - ⏸️ Phase 3 **阻塞** — 待产品决策（见下文）
+> - ⏸️ Phase 4 部分完成 — `_langchain_messages_to_dicts` 成死代码未清理
+>
+> Phase 1/2 的验证记录见 `docs/checkpoints/phase1.md` 和 `phase2.md`。
+
 ### Phase 1：替换 checkpointer（最小改动）
 
 ```python
@@ -230,23 +240,34 @@ if (config_prompt !== undefined || result_summary !== undefined) {
 // CopilotKit 通过 MessagesSnapshotEvent 自动恢复
 ```
 
-### Phase 3：统一历史浏览
+### Phase 3：统一历史浏览（⏸️ 阻塞 — 待产品决策）
 
-```
-当前：
-  活跃会话 → 可编辑 CopilotChat
-  历史会话 → 只读 MessageList（从 D1 读）
+**现状**：Phase 2 后历史会话切换只能看配置快照。`AgentView.isActiveSession` 逻辑仍区分"活跃"（走 CopilotChat）vs"历史"（只读），但历史分支的 `session.messages` 永远是空的，用户切到旧会话只能看 `config_prompt` + `result_summary`，看不到消息交互。
 
-改造后：
-  任意会话 → CopilotChat（通过 threadId 从 checkpointer 恢复）
-  需求"历史只读"可通过 UI 层 disable input 实现，不需要数据层区分
-```
+**两个产品选项**：
 
-### Phase 4：清理 D1（可选）
+| 选项 | 说明 | 改动量 | 风险 |
+|------|------|--------|------|
+| **A：完成 Phase 3** | 删除双模式，任意会话走 CopilotChat，通过 `MESSAGES_SNAPSHOT` 自动从 checkpointer 恢复 | 中 | CopilotKit 1.56.2 下切换历史 threadId 的恢复链路未验证，可能有 edge case |
+| **B：砍历史消息查看** | 明确"历史会话 = 配置+结果快照"产品定位，删除双模式代码（`activeIdRef`、`isActiveSession`）+ 删除 SessionDetail 只读消息列表分支 | 小 | 产品能力退化 |
 
-- `chat_messages` 表可以废弃，或保留做审计日志
-- `chat_sessions` 表保留，去掉与消息相关的查询（如 preview、message_count）
-- 侧栏 preview 改从 checkpointer 读首条 user 消息（或在 persist 时额外 POST 一次 preview 字段）
+**如果选 A 的 POC 步骤**：
+
+1. 临时改 `AgentView.tsx`：切换历史 session 时也更新 `activeIdRef`（让 `isActiveSession === true`）
+2. 浏览器切换到一个有 tool call 的历史会话
+3. DevTools Network 过滤 `chat`，观察 SSE 是否出现 `MESSAGES_SNAPSHOT` 事件 + `agent.messages` 是否含历史
+
+**POC 注意**：原 POC 方案（在 v1.55.3 时写的 doc §8.5）已失效，因为 Phase 2 后侧栏会话列表的 preview 展示依赖 config_prompt（见 commit a177393），用户**能看到侧栏会话项并点击切换**。
+
+### Phase 4：清理（可选）
+
+- ⏸️ `_langchain_messages_to_dicts` 函数（`agui_tracing.py:36-72`）和 `TestLangchainMessagesToDicts` 测试类 — Phase 2 后已成死代码
+- ⏸️ `SessionSummary.message_count` 字段 — 前端 UI 不使用但 `listAgentSessions` 仍查询
+- ⏸️ `useAgentSession.messages` 字段 — 永远返回空数组，字段存在误导
+- ⏸️ `chat_messages` 表 — 保留做历史数据兼容，新数据不写入
+- ⏸️ 生产环境 `showDevConsole` 条件化
+
+详见 [`21-TECH-DEBT.md`](./21-TECH-DEBT.md)。
 
 ---
 

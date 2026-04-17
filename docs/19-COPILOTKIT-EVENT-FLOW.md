@@ -1,5 +1,11 @@
 # CopilotKit 事件流架构
 
+> **⚠️ 部分过时（2026-04-17）**：CopilotKit 已升级到 v1.56.2（commit 9b2069b），PR #3872 修复了 thread clone bug，Inspector 自动订阅 per-thread clone。
+>
+> **已删除**：§4（Dev Console / Inspector 订阅）中的 DOM bridge workaround 代码（`document.querySelector('cpk-web-inspector').subscribeToAgent(agent)`）已在升级后移除。§5（key={threadId} 导致的问题）的时序竞态已不再存在。
+>
+> **仍然有效**：§1-3（事件流路径、AG-UI 事件类型、Thread Clone vs Registry Agent 原理）、§6（Python 端去重策略）、§7（持久化流程 — **但注意 Phase 2 后 `_persist_chat` 不再传 messages**，见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md)）、§8（SessionDetail 与 CopilotKit 耦合 — 双模式渲染仍然存在，语义半成品，见 [`21-TECH-DEBT.md`](./21-TECH-DEBT.md) P1 #4）。
+
 ## 1. 完整事件流路径
 
 ```

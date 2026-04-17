@@ -1,8 +1,18 @@
 # 会话历史 — 技术方案
 
-> **⚠️ 架构已演进（2026-04-17）**：§6 的"全量 POST messages 持久化"方案被发现会导致消息重复 bug。
-> 新方案见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md) — 用 LangGraph AsyncSqliteSaver 作为 source of truth，D1 只存 session 元数据。
-> 本文档的产品需求分析（§1）、会话数据模型（§3）、组件架构（§4）、前端 Hooks（§5.1-5.3）仍然有效。
+> **⚠️ 架构已演进（2026-04-17）** — Phase 1/2 实施完成后，本文档部分章节已过时：
+>
+> **当前实际架构**：
+> - 消息（`messages`）持久化 = LangGraph `AsyncSqliteSaver`（`agents/radar/data/checkpoints.db`），详见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md)
+> - 会话元数据（`config_prompt` / `result_summary`）= D1 `chat_sessions` 表
+> - D1 `chat_messages` 表**不再写入**（遗留，向后兼容旧数据）
+> - 刷新页面后活跃会话的消息通过 CopilotKit `MESSAGES_SNAPSHOT` 事件自动恢复
+>
+> **仍然有效**：§1 产品需求、§2.3 AgentView 架构问题、§4 组件架构（已实施）、§5 模块设计
+>
+> **已过时**：§2.4 持久化缺口（已由 checkpointer 解决）、§3 Session 数据模型中 messages 字段的读写路径、§6 后端变更（Python 端 `_persist_chat` 不再传 messages，只传元数据；BFF persist 不再调 insertMessage）、§9.3 历史消息格式兼容（checkpointer 内部 LangChain 对象，不需要格式转换）
+>
+> **新发现的半成品（2026-04-17）**：Phase 2 后历史会话切换只能看配置快照（`useAgentSession.messages` 返回空数组）。`AgentView.isActiveSession` 双模式渲染代码仍然保留但语义不完整。详见 [`21-TECH-DEBT.md`](./21-TECH-DEBT.md) P1 #4。
 
 ## 1. 产品需求分析
 
