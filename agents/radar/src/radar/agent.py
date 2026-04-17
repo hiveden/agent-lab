@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, NotRequired
 
 from agent_lab_shared.llm import DeferredLLM
 from copilotkit import CopilotKitState
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.managed import RemainingSteps
 from langgraph.prebuilt import create_react_agent
@@ -36,6 +37,7 @@ DEFAULT_SYSTEM_PROMPT = (
 def create_radar_agent(
     *,
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
     """Create and return a compiled ReAct agent for the Radar workflow.
 
@@ -43,6 +45,10 @@ def create_radar_agent(
         system_prompt: The system prompt for the agent. Defaults to a
             Chinese-language Radar assistant prompt. Pass a custom string
             to override.
+        checkpointer: LangGraph checkpointer instance. Defaults to
+            MemorySaver (suitable for tests and CLI). Production server
+            should inject AsyncSqliteSaver for persistence across
+            process restarts.
 
     Returns:
         A compiled LangGraph StateGraph ready to be streamed or invoked.
@@ -56,5 +62,5 @@ def create_radar_agent(
         prompt=system_prompt,
         name="radar_agent",
         state_schema=AgentState,
-        checkpointer=MemorySaver(),
+        checkpointer=checkpointer if checkpointer is not None else MemorySaver(),
     )

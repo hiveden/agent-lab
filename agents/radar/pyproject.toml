@@ -17,6 +17,7 @@ dependencies = [
     "feedparser>=6.0",
     "click>=8.1",
     "langgraph>=0.4",
+    "langgraph-checkpoint-sqlite>=2.0",
     "ag-ui-protocol>=0.1",
     "ag-ui-langgraph>=0.0.30",
     "copilotkit>=0.1.74",

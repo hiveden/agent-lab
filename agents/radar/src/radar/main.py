@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
@@ -17,15 +19,41 @@ from agent_lab_shared.sse import SSE_DONE, progress_sse
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
 from .agent import create_radar_agent
+from .agui_tracing import TracingLangGraphAGUIAgent
 from .exceptions import RadarError
 from .middleware import RequestLoggingMiddleware, generic_error_handler, radar_error_handler
 from .pipelines.evaluate import run_evaluate_stream
 from .pipelines.ingest import run_ingest_stream
 
-app = FastAPI(title="Radar Agent", version="0.1.0")
+# ── Checkpoint DB path (persisted across process restarts) ──
+# agents/radar/data/checkpoints.db
+_CHECKPOINT_DB = Path(__file__).resolve().parent.parent.parent / "data" / "checkpoints.db"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Initialise AsyncSqliteSaver, build agent, register AG-UI endpoint.
+
+    The checkpointer is the single source of truth for conversation history —
+    LangGraph state is persisted to SQLite and survives process restarts.
+    """
+    _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(str(_CHECKPOINT_DB)) as saver:
+        graph = create_radar_agent(checkpointer=saver)
+        ag_ui_agent = TracingLangGraphAGUIAgent(
+            name="radar",
+            description="Radar Agent — intelligent content discovery assistant",
+            graph=graph,
+        )
+        add_langgraph_fastapi_endpoint(app, ag_ui_agent, path="/agent/chat")
+        yield
+
+
+app = FastAPI(title="Radar Agent", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,18 +66,6 @@ app.add_middleware(RequestLoggingMiddleware)
 # ── 全局异常处理器 ──
 app.add_exception_handler(RadarError, radar_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(Exception, generic_error_handler)
-
-# ── AG-UI Agent (instantiated once at startup) ──
-
-_radar_graph = create_radar_agent()
-from .agui_tracing import TracingLangGraphAGUIAgent
-
-_ag_ui_agent = TracingLangGraphAGUIAgent(
-    name="radar",
-    description="Radar Agent — intelligent content discovery assistant",
-    graph=_radar_graph,
-)
-add_langgraph_fastapi_endpoint(app, _ag_ui_agent, path="/agent/chat")
 
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",

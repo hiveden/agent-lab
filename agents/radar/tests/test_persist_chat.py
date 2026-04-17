@@ -221,6 +221,8 @@ class TestAgentPersistChat:
                     {"role": "user", "content": "hello"},
                     {"role": "assistant", "content": "hi"},
                 ],
+                config_prompt=None,
+                result_summary=None,
             )
 
     @pytest.mark.asyncio

@@ -1,5 +1,9 @@
 # 会话历史 — 技术方案
 
+> **⚠️ 架构已演进（2026-04-17）**：§6 的"全量 POST messages 持久化"方案被发现会导致消息重复 bug。
+> 新方案见 [`20-LANGGRAPH-PERSISTENCE.md`](./20-LANGGRAPH-PERSISTENCE.md) — 用 LangGraph AsyncSqliteSaver 作为 source of truth，D1 只存 session 元数据。
+> 本文档的产品需求分析（§1）、会话数据模型（§3）、组件架构（§4）、前端 Hooks（§5.1-5.3）仍然有效。
+
 ## 1. 产品需求分析
 
 ### 1.1 从产品哲学推导
