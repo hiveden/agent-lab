@@ -148,6 +148,10 @@ export async function listAgentSessions(
 
   const result: SessionSummary[] = [];
   for (const s of sessions) {
+    // Messages are persisted by LangGraph AsyncSqliteSaver checkpointer since
+    // Phase 2 (docs/20-LANGGRAPH-PERSISTENCE.md). chat_messages is only kept
+    // for legacy rows. Fall back to config_prompt → result_summary → '' for
+    // preview, so the sidebar always shows a meaningful summary.
     const msgs = await db
       .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
       .from(chatMessages)
@@ -155,6 +159,13 @@ export async function listAgentSessions(
       .orderBy(asc(chatMessages.created_at));
 
     const firstUser = msgs.find(m => m.role === 'user');
+    const legacyPreview = firstUser?.content?.slice(0, 50) ?? '';
+    const configPreview = s.config_prompt?.slice(0, 50) ?? '';
+    const resultPreview = s.result_summary
+      ? `推 ${s.result_summary.promoted} / 滤 ${s.result_summary.rejected}`
+      : '';
+    const preview = legacyPreview || configPreview || resultPreview;
+
     result.push({
       id: s.id,
       agent_id: s.agent_id ?? 'radar',
@@ -162,12 +173,11 @@ export async function listAgentSessions(
       result_summary: s.result_summary ?? null,
       created_at: s.created_at ?? '',
       message_count: msgs.length,
-      preview: firstUser?.content?.slice(0, 50) ?? '',
+      preview,
     });
   }
 
-  // 过滤掉空 session（0 条消息）
-  return result.filter(s => s.message_count > 0);
+  return result;
 }
 
 /**
