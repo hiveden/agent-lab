@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,9 +22,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from pydantic import BaseModel
 
 from .agent import create_radar_agent
@@ -59,14 +63,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Radar Agent", version="0.1.0", lifespan=lifespan)
 
-# ── OpenTelemetry: 接 traceparent 进 current span context ──
-# Phase 1 不配 exporter (OTEL_TRACES_EXPORTER=none) — span 不外发但 context 传播仍工作。
-# Phase 4 切到 SigNoz/Langfuse 时改 OTEL_TRACES_EXPORTER + 配 endpoint。
-# 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a / Phase 1。
-trace.set_tracer_provider(
-    TracerProvider(resource=Resource.create({"service.name": "radar"}))
+# ── OpenTelemetry: 接 traceparent + 推 OTLP 到本地 collector ──
+# Phase 3: TracerProvider + BatchSpanProcessor → OTLPSpanExporter → http://localhost:4318
+#  → Collector → Langfuse Cloud。详见 docs/22 ADR-003 / Phase 3。
+# Phase 1 起 OTel 已经在接 traceparent (FastAPIInstrumentor)，Phase 3 增加 exporter。
+_otlp_endpoint = os.environ.get(
+    "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+).rstrip("/")
+_tracer_provider = TracerProvider(resource=Resource.create({"service.name": "radar"}))
+_tracer_provider.add_span_processor(
+    BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{_otlp_endpoint}/v1/traces"))
 )
+trace.set_tracer_provider(_tracer_provider)
 FastAPIInstrumentor.instrument_app(app)
+HTTPXClientInstrumentor().instrument()  # Python httpx 出站调用 (Platform API / Tavily / Grok 等)
+
+# OpenLLMetry: auto-instrument LangChain / OpenAI / Anthropic 等 (Phase 3)
+# 用我们已 set 的 TracerProvider, 不重复创建; disable_batch 因为我们已配 BatchSpanProcessor
+try:
+    from traceloop.sdk import Traceloop
+
+    Traceloop.init(
+        app_name="radar",
+        disable_batch=True,
+        api_endpoint=_otlp_endpoint,  # OpenLLMetry span 也走本地 collector
+    )
+except Exception as e:  # 不阻塞主流程
+    import logging as _stdlog
+
+    _stdlog.getLogger("radar").warning("traceloop_init_failed: %s", e)
 
 app.add_middleware(
     CORSMiddleware,

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from uuid import UUID
 
 from ag_ui.core import EventType, RunAgentInput
 from agent_lab_shared.config import langfuse_enabled
@@ -216,24 +215,17 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
             asyncio.create_task(self._persist_chat(thread_id))
 
     def _inject_trace_context(self) -> None:
-        """从 OTel current span 提取 trace_id, 注入 LangChain config.run_id + Langfuse callback。
+        """注入 Langfuse callback + 把 OTel trace_id 写入 LangChain metadata (诊断用).
 
-        LangChain 把 config['run_id'] 作为 root run tree id (LangSmith/Langfuse trace id)。
-        让它 == OTel trace_id，使三段 (OTel / LangChain / AG-UI BaseEvent.runId) 对齐。
-
-        同时注入 Langfuse CallbackHandler (Phase 2)，让 LangChain run tree 自动写
-        Langfuse trace。callback 接收的 run_id 即 trace_id, Langfuse 自动按它关联。
+        Phase 3 修正 (ADR-002c, supersedes ADR-002a):
+        - 不再用 OTel trace_id 强制覆盖 LangChain config.run_id (那是 ag-ui input.runId
+          的来源, 强行改会破坏 ag-ui 协议层)。
+        - OTel trace_id 通过 W3C traceparent 由 BFF 自动传到 Python 当前 span,
+          与 BFF/浏览器 OTel trace 自然串成一棵树, 不需要应用代码干预。
+        - LangChain 仍允许默认 run_id (auto-uuid), Langfuse callback 收到后用
+          OpenTelemetry context 自动关联到当前 OTel trace_id。
+        - metadata.trace_id 仍写入, 便于日志关联。
         """
-        span = trace.get_current_span()
-        ctx = span.get_span_context()
-        if not ctx.is_valid:
-            log.debug("trace_context_skip", reason="no_valid_span")
-            return
-
-        trace_id_int = ctx.trace_id  # 128-bit
-        trace_id_hex = format(trace_id_int, "032x")
-        run_id = str(UUID(int=trace_id_int))
-
         existing = self.config or {}
         existing_metadata = (
             existing.get("metadata", {}) if isinstance(existing, dict) else {}
@@ -242,21 +234,27 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
             list(existing.get("callbacks", []) or []) if isinstance(existing, dict) else []
         )
 
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        trace_id_hex = format(ctx.trace_id, "032x") if ctx.is_valid else None
+
         # Phase 2: Langfuse LangChain callback (key 未配时返回 None, 静默跳过)
         langfuse_cb = _build_langfuse_callback()
         if langfuse_cb is not None:
             existing_callbacks.append(langfuse_cb)
 
+        new_metadata = dict(existing_metadata)
+        if trace_id_hex:
+            new_metadata["trace_id"] = trace_id_hex
+
         self.config = {
             **(existing if isinstance(existing, dict) else {}),
-            "run_id": run_id,
-            "metadata": {**existing_metadata, "trace_id": trace_id_hex},
+            "metadata": new_metadata,
             "callbacks": existing_callbacks,
         }
         log.info(
             "trace_context_injected",
             trace_id=trace_id_hex,
-            run_id=run_id,
             langfuse=langfuse_cb is not None,
         )
 
