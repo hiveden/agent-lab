@@ -218,6 +218,23 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const messages = agent.messages;
   const isRunning = agent.isRunning;
 
+  // ── Phase 1 trace_id 验证埋点 ──────────────────────────────
+  // 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a / Phase 1 Step D。
+  // BFF 在出站 fetch 注入 traceparent，Python 把 trace_id 注入 LangGraph
+  // run_id，AG-UI BaseEvent.runId 自然 == trace_id。订阅打印 console 验证。
+  // Phase 4 接 Axiom/SigNoz 后改为正式 trace UI，移除 console.log。
+  useEffect(() => {
+    if (!agent) return;
+    const sub = agent.subscribe({
+      onRunStartedEvent: ({ event }) => {
+        // event.runId 是 AG-UI BaseEvent.runId，等于 Python LangGraph 注入的
+        // run_id，等于 OTel trace_id（去掉 UUID 连字符的 32-hex）
+        console.log('[trace] RUN_STARTED', { runId: event.runId, threadId: event.threadId });
+      },
+    });
+    return () => sub.unsubscribe();
+  }, [agent]);
+
   // ── Restore history for read-only sessions via connectAgent ──
   // Active sessions: <CopilotChat /> calls connectAgent() on mount (see
   //   node_modules/@copilotkit/react-core/src/v2/components/chat/CopilotChat.tsx:194),
