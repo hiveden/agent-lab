@@ -19,6 +19,7 @@ import MarkdownContent from '../consumption/MarkdownContent';
 import ConfigCards, { buildPromptFromCards } from './ConfigCards';
 import ConfigSnapshot from './ConfigSnapshot';
 import ResultsPane, { type ResultBatch } from './ResultsPane';
+import TraceLinkChip from './TraceLinkChip';
 
 // ── Layout persistence ─────────────────────────────────────
 
@@ -218,18 +219,15 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const messages = agent.messages;
   const isRunning = agent.isRunning;
 
-  // ── Phase 1 trace_id 验证埋点 ──────────────────────────────
-  // 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a / Phase 1 Step D。
-  // BFF 在出站 fetch 注入 traceparent，Python 把 trace_id 注入 LangGraph
-  // run_id，AG-UI BaseEvent.runId 自然 == trace_id。订阅打印 console 验证。
-  // Phase 4 接 Axiom/SigNoz 后改为正式 trace UI，移除 console.log。
+  // ── trace_id 收集：Phase 1 验证埋点 → Phase A 升级为 UI chip ──
+  // event.runId == AG-UI BaseEvent.runId == Python LangGraph run_id == OTel trace_id
+  // (32-hex 去连字符)。详见 docs/22 ADR-002a。
+  const [latestRunId, setLatestRunId] = useState<string | null>(null);
   useEffect(() => {
     if (!agent) return;
     const sub = agent.subscribe({
       onRunStartedEvent: ({ event }) => {
-        // event.runId 是 AG-UI BaseEvent.runId，等于 Python LangGraph 注入的
-        // run_id，等于 OTel trace_id（去掉 UUID 连字符的 32-hex）
-        console.log('[trace] RUN_STARTED', { runId: event.runId, threadId: event.threadId });
+        setLatestRunId(event.runId);
       },
     });
     return () => sub.unsubscribe();
@@ -429,6 +427,7 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
                       {!isActiveSession && (
                         <span className="text-[10px] text-text-3 ml-1">(只读)</span>
                       )}
+                      <span className="ml-2"><TraceLinkChip runId={latestRunId} /></span>
                     </div>
                     <button
                       className={cn(
