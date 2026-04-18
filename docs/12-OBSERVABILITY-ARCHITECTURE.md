@@ -1,7 +1,17 @@
-# 12 - 可观测性与异常处理架构
+# 12 - 可观测性与异常处理架构（v1，**已被 superseded**）
 
+> ⚠️ **状态变更（2026-04-18）**：本文已被 [`22-OBSERVABILITY-ENTERPRISE.md`](./22-OBSERVABILITY-ENTERPRISE.md) **完全替代**。
+>
+> v1 选型基于"个人项目"假设（拒绝 OTel "太重"、拒绝 Langfuse "需自建服务"、拒绝 Sentry "单用户不需要"），与 agent-lab 实际定位"全栈企业级落地项目脚手架"不符。
+>
+> v2 在 v1 已落地工作（structlog、FastAPI 中间件、`agui_tracing`、LangSmith SDK 配置）基础上，重新选型 OpenTelemetry 全栈 + 三平面分立（trace/log/metric + LLM + Eval）+ 自托管栈（SigNoz + Langfuse + GlitchTip）。详见 v2 文档第 0 章"v1 → v2 演进的真实原因"。
+>
+> **本文保留作历史设计演进参考，新工作以 v2 为准。**
+>
+> ---
+>
 > 日期: 2026-04-14
-> 状态: 设计阶段
+> 状态: ❌ superseded by 22-OBSERVABILITY-ENTERPRISE.md
 > 触发: Agent Chat tool call 事件流 bug，排查时发现系统零可观测性
 
 ## 1. 现状分析
