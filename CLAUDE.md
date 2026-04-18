@@ -49,6 +49,37 @@ Agent 对话:
 | `agents/shared` | Python 3.12 | uv | 配置、LLM 工厂、Pydantic schema、SSE 工具、PlatformClient |
 | `agents/radar` | Python 3.12 | uv | Radar Agent（LangGraph agent + pipelines + collectors） |
 
+## Observability 栈（重要：新 session 必读）
+
+**全栈企业级可观测性已上线**（Phase 0-5#1 完成，2026-04-18）。详见：
+- [`docs/22-OBSERVABILITY-ENTERPRISE.md`](docs/22-OBSERVABILITY-ENTERPRISE.md) — 架构 / 10 ADR / 28 风险 / 所有 Phase 实施状态
+- [`docs/24-OBSERVABILITY-PLAYBOOK.md`](docs/24-OBSERVABILITY-PLAYBOOK.md) — 排查手册 / Cloud↔自托管切换
+- [`docs/23-ARCHITECTURE-BACKLOG.md`](docs/23-ARCHITECTURE-BACKLOG.md) — 未做的其他架构缺口
+- [`docker/README.md`](docker/README.md) — 自托管栈启动顺序 / 端口总表
+
+**自托管栈端口总览（`docker/` 下 4 个独立 compose）：**
+
+| 栈 | UI | OTLP / API | 资源 |
+|---|---|---|---|
+| OTel Collector | — | :4317 gRPC + :4318 HTTP | 轻 |
+| SigNoz（通用 trace/log/metric）| :3301 | :4327 gRPC + :4328 HTTP | 4GB RAM |
+| Langfuse 自托管 v3（LLM trace + eval）| :3010 | :3010/api/public/otel | 3GB RAM |
+| GlitchTip（错误聚合）| :8002 | Sentry SDK 协议 | 1GB RAM |
+
+**日常开发**：可观测性栈**非必需**跑起来（Python OTel 默认推 collector，collector 不在时会 retry 但不阻塞服务）。**排查 trace / 错误时**才起：`bash docker/start-all.sh`（或各 compose 分别 `up -d`）。
+
+**关键 env 变量**（见 `.env.example`）：
+- `SENTRY_DSN`：GlitchTip 错误上报（未配静默跳过）
+- `LANGFUSE_PUBLIC_KEY` / `SECRET_KEY` / `HOST`：LLM trace（Cloud / 自托管切换）
+- `OTEL_EXPORTER_OTLP_ENDPOINT`：默认 `http://localhost:4318`（collector 在时推，不在时退化到 stdout）
+- `LANGCHAIN_CALLBACKS_BACKGROUND=false`：Langfuse callback 必需
+- `REPAIR_AGUI_DEDUP=0`：临时关 agui_tracing 补丁层看根因（排查用）
+- `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_LANGFUSE_HOST` / `NEXT_PUBLIC_LANGFUSE_PROJECT_ID`：前端（`apps/web/.env.local`）
+
+**trace_id 贯穿**（ADR-002c）：浏览器 OTel SDK 生成 → W3C traceparent → BFF Node OTel auto-propagate → Python FastAPIInstrumentor 接收 → LangGraph + LLM call。三端 structlog/OTel log 都带 `trace_id`，一个 ID grep 全栈。
+
+---
+
 ## Common Commands
 
 ```bash
@@ -59,6 +90,10 @@ uv sync               # Python 侧
 # 开发（需要同时运行两个进程）
 pnpm dev:web          # Next.js on :8788（含本地 D1）
 cd agents/radar && uv run radar-serve   # FastAPI on :8001
+
+# 可观测性栈（按需启动，排查时用）
+bash docker/start-all.sh                # 一键启动 4 个 compose (见 docker/README.md)
+bash docker/stop-all.sh                 # 一键停止
 
 # 手动触发（CLI 子命令）
 cd agents/radar && uv run radar-push ingest     # 仅采集
@@ -138,6 +173,7 @@ uv tool run ruff format agents/
 - `PLATFORM_API_BASE`: Python Agent 回调 Next.js 的地址（默认 `http://127.0.0.1:8788`）
 - `SETTINGS_SECRET`: LLM Settings 加密密钥（64 字符 hex）
 - `HTTPS_PROXY` / `HTTP_PROXY`: 代理配置
+- **Observability** (见上面"Observability 栈"章节): `SENTRY_DSN` / `LANGFUSE_*` / `OTEL_EXPORTER_OTLP_ENDPOINT` / `LANGCHAIN_CALLBACKS_BACKGROUND` / `REPAIR_AGUI_DEDUP`
 
 ## Testing
 

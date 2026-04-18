@@ -51,6 +51,17 @@
 | **pnpm** | Node 包管理 (workspace monorepo) | https://pnpm.io |
 | **uv** | Python 包管理 + 虚拟环境 | https://docs.astral.sh/uv |
 
+### 可观测性栈（详见 [`docs/22`](./22-OBSERVABILITY-ENTERPRISE.md) + [`docker/README.md`](../docker/README.md)）
+
+| 层 | 选型 | 文档 |
+|---|---|---|
+| **Instrumentation 标准** | OpenTelemetry (三端 SDK) + OpenInference | https://opentelemetry.io |
+| **LLM auto-instrument** | OpenLLMetry / traceloop-sdk | https://traceloop.com |
+| **通用 trace/log/metric** | SigNoz 自托管 (UI :3301, OTLP :4327/4328) | https://signoz.io |
+| **LLM 专用 trace + eval** | Langfuse 自托管 v3 (UI :3010) | https://langfuse.com |
+| **错误聚合** | GlitchTip + Sentry SDK 三端 (:8002) | https://glitchtip.com |
+| **Collector** | otel-collector-contrib v0.144 (:4317/4318) | https://opentelemetry.io/docs/collector |
+
 ---
 
 ## 二、核心架构图
@@ -124,6 +135,21 @@
 * 配置优先级: env var > DB (测试环境覆盖生产)
 * 状态归属: 所有持久化状态在 BFF DB，Agent Server 无状态
 ```
+
+**可观测性层**（2026-04-18 上线，横切所有层）：
+
+```
+  Browser OTel SDK  ─┐
+  BFF Node OTel     ─┼─► OTel Collector (:4317/:4318)
+  Python OTel+OpenLLMetry ─┘    │
+                                ├─► Langfuse (LLM trace + eval, :3010)
+                                └─► SigNoz (通用 trace/log/metric, :3301)
+
+  Sentry SDK 三端  ─────────────► GlitchTip (错误聚合, :8002)
+
+  trace_id W3C 标准 OTel 自动 propagate, 所有层共享一个 ID
+```
+详见 [`docs/22-OBSERVABILITY-ENTERPRISE.md`](./22-OBSERVABILITY-ENTERPRISE.md)。
 
 ---
 
