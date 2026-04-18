@@ -715,20 +715,28 @@ def _inject_trace_context(self):
 
 ### ADR-010：`agui_tracing.py` 重构（拆 observation / enforcement + GenAI semconv 适配）
 
-**决策**：将 `agents/radar/src/radar/agui_tracing.py` 拆分为三个模块：
+> ✅ **2026-04-18 已实施（Phase 5 #1, commit `093bac8`）**：agui_tracing.py 已拆为薄壳 orchestration，4 个职责模块进 `observability/`。
+
+**决策**：将 `agents/radar/src/radar/agui_tracing.py` 拆分为四个模块：
 
 ```
 agents/radar/src/radar/observability/
-  ├── tracer.py       # 只观测，不修改事件流；emit OTel span 给 collector
-  ├── repair.py       # 现有 3 层去重，按 env flag (REPAIR_AGUI_DEDUP=1) 启用
-  ├── gen_ai_attrs.py # AG-UI event → GenAI semconv attribute 映射
-  └── persist.py      # 现有 chat persistence 逻辑（与 trace 解耦）
+  ├── tracer.py       # 只观测, 不修改事件流; OTel span 读取 + Langfuse callback 附挂
+  ├── repair.py       # 3 层去重, env flag REPAIR_AGUI_DEDUP=1 启用 (默认开)
+  ├── persist.py      # chat 元数据持久化 (config_prompt + result_summary)
+  └── gen_ai_attrs.py # AG-UI event → GenAI semconv attribute 映射占位 (预留)
 ```
 
-**同时给上游开 issue/PR**：
-- `ag-ui-langgraph` 重复 START 事件
-- DeferredLLM 引发的 `on_chat_model_stream` 双重发射
-- CopilotKit `convertEventToMessage` 丢 rawEvent (issue #3039 关注 + 评论)
+**实际拆分结果**：
+- `tracer.py`：`build_langfuse_callback()` + `inject_trace_context(config) -> new_config`，**纯函数式**，不改状态
+- `repair.py`：`AGUIEventDedup` class 封装 3 层状态机 + `repair_enabled()` 读 env；每请求 clone agent 时新实例
+- `persist.py`：`persist_chat()` + `extract_config_prompt()` + `extract_result_summary()`，messages 持久化仍由 LangGraph AsyncSqliteSaver 管
+- `gen_ai_attrs.py`：GenAI semconv keys 常量 + `agui_event_to_gen_ai_attrs()` 占位（当前返回 {}）；OpenLLMetry 已自动产同类 attribute，预留未来扩展
+- `agui_tracing.py`：只剩 `TracingLangGraphAGUIAgent` orchestration class（<40 行），组合 3 模块
+
+**同时给上游开 issue/PR**（Phase 5 #2）：
+
+> ⚠️ **2026-04-18 暂缓**：CONTENT 重复已确认根因是项目 `DeferredLLM` 包装器（`BaseChatModel` 子类）+ LangGraph `astream_events` 捕获所有 BaseChatModel 节点的组合效应——**我们自己的代码决定**，不是 ag-ui-langgraph 的 bug。START 重复根因**未严格验证**（17 文档描述是猜测），需要对照实验（临时绕过 DeferredLLM 跑一次）验证是否真是 ag-ui-langgraph bug 再决定是否提 issue。参见 commit `093bac8` 后的讨论。
 
 **选项对比**：
 
@@ -879,25 +887,29 @@ agents/radar/src/radar/observability/
 
 ---
 
-### Phase 5：`agui_tracing` 重构 + GenAI semconv 适配
+### Phase 5：`agui_tracing` 重构 + GenAI semconv 适配 ✅ #1 完成 / ⚠️ #2 暂缓 (2026-04-18)
 
-**目标**：观测/修复分离，所有 span 按 OpenInference / GenAI semconv 标准化。
+**目标**：观测/修复分离，根因重新可见，所有 span 按 OpenInference / GenAI semconv 标准化。
 
-**任务**：
-1. 拆 `agui_tracing.py` 为 4 模块（见 ADR-010）
-2. `tracer.py` 用 OTel API 产 span（双轨与现有 structlog 并存一段时间）
-3. `gen_ai_attrs.py` 把 AG-UI event 字段映射到 GenAI semconv attribute
-4. `repair.py` 加 env flag `REPAIR_AGUI_DEDUP=1`，默认开启（保护前端不崩）
-5. `persist.py` 独立 chat 持久化逻辑
-6. `LANGCHAIN_CALLBACKS_BACKGROUND=false` 验证
+**Phase 5 #1 实际实施**（commit `093bac8`）：
+1. ✅ 拆 `agui_tracing.py` 为 4 模块 `observability/`（tracer + repair + persist + gen_ai_attrs）
+2. ✅ `repair.py` 加 env flag `REPAIR_AGUI_DEDUP=1`（默认开启保护前端）
+3. ✅ `persist.py` 独立 chat 持久化逻辑
+4. ✅ `LANGCHAIN_CALLBACKS_BACKGROUND=false` 已在 `.env.example` + Phase 1 commit 里设
+5. ⏳ `tracer.py` 当前仍是"读 OTel current span → 注入 LangChain config"，**未独立产 OTel span**（OpenLLMetry 已自动产含 traceloop.* + LangGraph node attribute 的 span，重复产无价值；未来要 GenAI semconv 标准化时再扩展）
+6. ⏳ `gen_ai_attrs.py` 占位实现（OpenLLMetry 已自动覆盖大部分场景，非阻塞）
 
-**验收**：
-- SigNoz 中所有 LangGraph node span 用 OpenInference / GenAI semconv 字段
-- 关闭 `REPAIR_AGUI_DEDUP` 时能在 collector 看到原始重复 START 事件（root cause 重新可见）
+**Phase 5 #2 暂缓**（原计划"给 ag-ui-langgraph / CopilotKit 提 issue/PR"）：
+
+- CONTENT 重复：根因已确认是项目 `DeferredLLM` 包装器 + LangGraph `astream_events` 设计组合（我们自己代码决定），**不是上游 bug**，不提 issue
+- START 重复：根因**未严格验证**（17 文档描述为猜测），需要对照实验（临时绕过 `DeferredLLM` 跑一次 chat 看事件流）确认是否真是 `ag-ui-langgraph` 的独立 bug，再决定
+- CopilotKit #3039 / #3208 / #3456：已存在 issue 跟踪中，无新信息可补充
+
+**未来工作**：做对照实验（15 min）验证 START 根因 → 若是上游 bug 再按 Phase 5 #2 原计划提 issue
+
+**实际工作量**：#1 约 45 min（比估 1 周大幅压缩）
 
 **依赖**：Phase 4
-
-**估算**：1 周
 
 ---
 
@@ -953,6 +965,17 @@ agents/radar/src/radar/observability/
 | 15 | CopilotKit HITL 场景 runId 会变 | issue #3456，PR #3458 | 当前无 HITL；上 HITL 前复查 PR 状态 |
 | 16 | CORS 配置错误导致 trace 不连 | OTel JS discussion #2209 | CI/CD 加自动验证 |
 | 17 | 1.26.0 opentelemetry-python auto-instrument 回归 | issue #4111 | 锁定版本，升级前看回归 |
+| 18 | **HTTP_PROXY 环境让 gRPC 走 ClashX 代理**（grpc v1.78+ auto proxy） | Phase 4 #2 实测 | `NO_PROXY` 白名单内部服务 hostname（host.docker.internal + signoz-otel-collector + ...）|
+| 19 | 空 body curl OTel endpoint 返回 200 `partialSuccess{}` ≠ 真接受 | Phase 4 #2 实测 | 走 receiver 短路不进 pipeline，验证必须 `telemetrygen` 发真实 trace |
+| 20 | Langfuse 只 index 含 LLM 框架 attribute 的 trace | Phase 4 #4 实测 | 浏览器 fetch / BFF undici 的 generic HTTP trace 不建 Langfuse 条目；前端 chip 拿到的 trace_id 必须是真实 chat（含 LangGraph span）才能跳 Langfuse 详情页 |
+| 21 | GlitchTip 硬编码 redis hostname | Phase 4 #3 实测 | 用 valkey image 但 service 名必须叫 `redis`，否则连接失败 500 |
+| 22 | Next.js `_` 前缀 API route 是 internal 不识别 | Phase 4 #3 实测 | 避开 `_` 前缀 |
+| 23 | Next.js `instrumentation.ts` 项目用 src/ 布局时必须放 src/ 下 | Phase 3 BFF 实测 | 放根目录不会被 register |
+| 24 | `@opentelemetry/instrumentation-fetch` 的 `requestHook` 拿不到 url | Phase 3 浏览器实测 | 改用 `applyCustomAttributesOnSpan` 从 `span.attributes['http.url']` 拿 |
+| 25 | SigNoz 首次启动 OPAMP 报 "cannot create agent without orgId" | Phase 4 #1 | 通过 `/api/v1/register` 注册 admin 后消失（正常行为）|
+| 26 | Docker credential helper "docker-credential-desktop not found" | Phase 4 #1 Mac 环境 | 删 `~/.docker/config.json` 的 `credsStore` 字段 |
+| 27 | Langfuse self-host web 启动比 postgres healthy 快进 restart loop | Phase 4 #4 | 一次 restart 自愈（depends_on service_healthy 已配但秒级差异）|
+| 28 | telemetrystore-migrator container Exited（看似失败）| Phase 4 #1 | 这是**一次性 Job**，ExitCode 0 正常完成 |
 
 ---
 
