@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(default="radar", alias="LANGSMITH_PROJECT")
     langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")
 
+    # Langfuse (LLM-specific trace + eval — Phase 2 of docs/22)
+    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
+    langfuse_host: str = Field(default="https://cloud.langfuse.com", alias="LANGFUSE_HOST")
+
     # Proxy (local dev needs proxy, production does not)
     https_proxy: str = Field(default="", alias="HTTPS_PROXY")
     http_proxy: str = Field(default="", alias="HTTP_PROXY")
@@ -111,4 +116,20 @@ def _sync_langsmith_env(s: Settings) -> None:
         os.environ.setdefault("LANGSMITH_TRACING", "true")
 
 
+def _sync_langfuse_env(s: Settings) -> None:
+    """同步 Langfuse 配置到 os.environ (langfuse SDK 直接读)。"""
+    if s.langfuse_public_key:
+        os.environ.setdefault("LANGFUSE_PUBLIC_KEY", s.langfuse_public_key)
+    if s.langfuse_secret_key:
+        os.environ.setdefault("LANGFUSE_SECRET_KEY", s.langfuse_secret_key)
+    if s.langfuse_host:
+        os.environ.setdefault("LANGFUSE_HOST", s.langfuse_host)
+
+
 _sync_langsmith_env(settings)
+_sync_langfuse_env(settings)
+
+
+def langfuse_enabled() -> bool:
+    """Langfuse 是否已配置 (PUBLIC_KEY + SECRET_KEY 都填)。"""
+    return bool(settings.langfuse_public_key and settings.langfuse_secret_key)

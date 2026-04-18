@@ -17,11 +17,31 @@ from typing import Any
 from uuid import UUID
 
 from ag_ui.core import EventType, RunAgentInput
+from agent_lab_shared.config import langfuse_enabled
 from agent_lab_shared.logging import get_logger
 from copilotkit import LangGraphAGUIAgent
 from opentelemetry import trace
 
 log = get_logger("radar.agui_tracing")
+
+
+def _build_langfuse_callback() -> Any | None:
+    """返回 Langfuse LangChain CallbackHandler 实例 (未启用时 None)。
+
+    Phase 2 of docs/22 — LLM 专用 trace。Langfuse v4 SDK 自动从 env 读
+    LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST。
+    LangChain callback 接收的 run_id 已在 _inject_trace_context 设为 trace_id,
+    所以 Langfuse trace 会按 trace_id 关联。
+    """
+    if not langfuse_enabled():
+        return None
+    try:
+        from langfuse.langchain import CallbackHandler
+
+        return CallbackHandler()
+    except Exception as e:  # 装了 langfuse 但运行时失败 (网络/key) → 不阻塞主流程
+        log.warning("langfuse_callback_init_failed", error=str(e))
+        return None
 
 # START → END 配对映射，以及各自用来取 ID 的字段名
 _PAIRED_EVENTS: dict[EventType, tuple[EventType, str]] = {
@@ -196,10 +216,13 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
             asyncio.create_task(self._persist_chat(thread_id))
 
     def _inject_trace_context(self) -> None:
-        """从 OTel current span 提取 trace_id, 注入 LangChain config.run_id。
+        """从 OTel current span 提取 trace_id, 注入 LangChain config.run_id + Langfuse callback。
 
         LangChain 把 config['run_id'] 作为 root run tree id (LangSmith/Langfuse trace id)。
         让它 == OTel trace_id，使三段 (OTel / LangChain / AG-UI BaseEvent.runId) 对齐。
+
+        同时注入 Langfuse CallbackHandler (Phase 2)，让 LangChain run tree 自动写
+        Langfuse trace。callback 接收的 run_id 即 trace_id, Langfuse 自动按它关联。
         """
         span = trace.get_current_span()
         ctx = span.get_span_context()
@@ -212,13 +235,30 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
         run_id = str(UUID(int=trace_id_int))
 
         existing = self.config or {}
-        existing_metadata = existing.get("metadata", {}) if isinstance(existing, dict) else {}
+        existing_metadata = (
+            existing.get("metadata", {}) if isinstance(existing, dict) else {}
+        )
+        existing_callbacks = (
+            list(existing.get("callbacks", []) or []) if isinstance(existing, dict) else []
+        )
+
+        # Phase 2: Langfuse LangChain callback (key 未配时返回 None, 静默跳过)
+        langfuse_cb = _build_langfuse_callback()
+        if langfuse_cb is not None:
+            existing_callbacks.append(langfuse_cb)
+
         self.config = {
             **(existing if isinstance(existing, dict) else {}),
             "run_id": run_id,
             "metadata": {**existing_metadata, "trace_id": trace_id_hex},
+            "callbacks": existing_callbacks,
         }
-        log.info("trace_context_injected", trace_id=trace_id_hex, run_id=run_id)
+        log.info(
+            "trace_context_injected",
+            trace_id=trace_id_hex,
+            run_id=run_id,
+            langfuse=langfuse_cb is not None,
+        )
 
     async def _persist_chat(self, thread_id: str) -> None:
         """Persist session-level metadata to D1 (config_prompt + result_summary).

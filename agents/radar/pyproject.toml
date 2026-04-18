@@ -23,6 +23,8 @@ dependencies = [
     "copilotkit>=0.1.74",
     "opentelemetry-distro>=0.62b0",
     "opentelemetry-instrumentation-fastapi>=0.62b0",
+    "langfuse>=4.3.1",
+    "socksio>=1.0.0",
 ]
 
 [project.scripts]
