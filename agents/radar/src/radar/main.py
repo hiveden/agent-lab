@@ -14,6 +14,27 @@ from agent_lab_shared.logging import setup_logging
 
 # ── 初始化结构化日志（在 import 阶段即完成，确保后续所有模块都能使用） ──
 setup_logging(deploy_env=settings.deploy_env, agent_id="radar")
+
+# ── Sentry / GlitchTip 错误上报 (Phase 4 #3 of docs/22) ──
+# DSN 未配时静默跳过 (init 接受空字符串但实际不发)
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.deploy_env,
+        # 错误自动 capture; trace 走 OTel (Phase 3) 不重复
+        traces_sample_rate=0.0,
+        # 自动 instrument FastAPI / Starlette
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            StarletteIntegration(transaction_style="endpoint"),
+        ],
+        send_default_pii=False,
+        # 全局 tag 关联 OTel trace_id (sentry-sdk 2.x 自动从 OpenTelemetry 拿)
+    )
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.schema import SourceConfig
 from agent_lab_shared.sse import SSE_DONE, progress_sse

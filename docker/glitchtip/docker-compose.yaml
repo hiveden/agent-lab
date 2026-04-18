@@ -15,7 +15,8 @@ x-environment: &default-environment
   DEFAULT_FROM_EMAIL: noreply@agent-lab.local
   CELERY_WORKER_AUTOSCALE: "1,3"
   CELERY_WORKER_MAX_TASKS_PER_CHILD: "10000"
-  VALKEY_URL: redis://valkey:6379/0
+  REDIS_URL: redis://redis:6379/0
+  VALKEY_URL: redis://redis:6379/0
   # trace context propagation: GlitchTip 用 sentry-trace / baggage header
   # 与我们的 W3C traceparent 独立 (无法直接关联); 但 SDK 会自动把 OTel
   # trace_id 当作 context attribute 写入, 用户可搜。
@@ -30,9 +31,10 @@ services:
     volumes:
       - glitchtip-pg:/var/lib/postgresql/data
 
-  valkey:
+  redis:
+    # GlitchTip 默认硬编码 hostname=redis (即使用 valkey 镜像也要叫 redis 服务名)
     image: valkey/valkey:8-alpine
-    container_name: glitchtip-valkey
+    container_name: glitchtip-redis
     restart: unless-stopped
 
   web:
@@ -40,7 +42,7 @@ services:
     container_name: glitchtip-web
     depends_on:
       - postgres
-      - valkey
+      - redis
     ports:
       - "8002:8000"  # 8000 被其他项目占用 (toolref-backend), 改 8002
     environment: *default-environment
@@ -52,7 +54,7 @@ services:
     command: ./bin/run-celery-with-beat.sh
     depends_on:
       - postgres
-      - valkey
+      - redis
     environment: *default-environment
     restart: unless-stopped
 

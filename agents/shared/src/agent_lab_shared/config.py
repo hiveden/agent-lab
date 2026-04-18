@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(default="https://cloud.langfuse.com", alias="LANGFUSE_HOST")
 
+    # GlitchTip / Sentry (Phase 4 #3 of docs/22) — 错误聚合
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+
     # Proxy (local dev needs proxy, production does not)
     https_proxy: str = Field(default="", alias="HTTPS_PROXY")
     http_proxy: str = Field(default="", alias="HTTP_PROXY")

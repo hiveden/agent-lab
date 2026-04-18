@@ -35,6 +35,20 @@ export function startBrowserOtel(): void {
   if (started || typeof window === 'undefined') return;
   started = true;
 
+  // Sentry / GlitchTip 浏览器错误聚合 (Phase 4 #3 of docs/22)
+  // 用 NEXT_PUBLIC_SENTRY_DSN 或 NEXT_PUBLIC_GLITCHTIP_DSN
+  const sentryDsn =
+    process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.NEXT_PUBLIC_GLITCHTIP_DSN;
+  if (sentryDsn) {
+    void import('@sentry/nextjs').then((Sentry) => {
+      Sentry.init({
+        dsn: sentryDsn,
+        environment: process.env.NODE_ENV || 'development',
+        tracesSampleRate: 0, // trace 走 OTel
+      });
+    });
+  }
+
   const otlpEndpoint = (
     process.env.NEXT_PUBLIC_OTEL_COLLECTOR_URL || 'http://localhost:4318'
   ).replace(/\/$/, '');
