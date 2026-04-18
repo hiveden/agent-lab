@@ -3,7 +3,7 @@
 
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.116.1
+    image: otel/opentelemetry-collector-contrib:0.144.0
     container_name: agent-lab-otel-collector
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yml"]
@@ -18,6 +18,15 @@ services:
       # ClashX 7890 是 HTTP/SOCKS 混合, container 走 host.docker.internal
       HTTPS_PROXY: ${OTEL_HTTPS_PROXY:-http://host.docker.internal:7890}
       HTTP_PROXY: ${OTEL_HTTP_PROXY:-http://host.docker.internal:7890}
-      NO_PROXY: localhost,127.0.0.1
+      # signoz/glitchtip 等自托管服务走内部 docker network, 不能走 ClashX 代理
+      NO_PROXY: localhost,127.0.0.1,signoz-otel-collector,signoz,signoz-clickhouse,glitchtip,.svc
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - signoz-net  # 加入 SigNoz network 直接访问 signoz-otel-collector:4317
+
+networks:
+  default:
+  signoz-net:
+    external: true

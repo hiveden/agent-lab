@@ -1,8 +1,9 @@
 # OpenTelemetry Collector — 本地开发 gateway 模式
-# 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-003 / Phase 3
+# 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-003 / Phase 3 + Phase 4
 #
-# 接收三端 (Browser / BFF / Python) 的 OTLP，转发到 Langfuse Cloud。
-# memory_limiter 必填（陷阱：不配会 OOM 干掉整个 collector — 几乎所有教程都漏掉）
+# 接收三端 (Browser / BFF / Python) 的 OTLP, 双写到:
+#   1. Langfuse Cloud (LLM 维度 trace + Eval)
+#   2. SigNoz 自托管 (通用 trace/log/metric backend)
 
 receivers:
   otlp:
@@ -25,18 +26,33 @@ processors:
     check_interval: 1s
     limit_mib: 512
     spike_limit_mib: 128
-  batch:
+  # 拆 batch 给 Langfuse + SigNoz 各一份, 避免共用导致单端慢拖累另一端
+  # send_batch_max_size: 200 限制单批 span 数 — CopilotKit/LangGraph span attribute
+  # 体积大 (messages payload 整段塞 attribute), 单 batch 超 1MB 会触发 SigNoz
+  # collector OPAMP 下发的 max_recv_msg_size 限制, 502 返回 (调研陷阱 #6)
+  batch/langfuse:
     send_batch_size: 512
+    send_batch_max_size: 1024
+    timeout: 5s
+  batch/signoz:
+    send_batch_size: 200
+    send_batch_max_size: 200
     timeout: 5s
 
 exporters:
-  # 转发到 Langfuse Cloud OTel endpoint (v3.22+ 接 OTLP/HTTP, 不接 gRPC)
-  # Authorization: Basic <base64(LANGFUSE_PUBLIC_KEY:LANGFUSE_SECRET_KEY)>
-  # 由 docker-compose 把 LANGFUSE_AUTH_BASE64 注入进来
+  # 转发到 Langfuse Cloud OTel endpoint (v3.22+ 接 OTLP/HTTP)
   otlphttp/langfuse:
     endpoint: ${env:LANGFUSE_OTEL_ENDPOINT}
     headers:
       Authorization: "Basic ${env:LANGFUSE_AUTH_BASE64}"
+
+  # 转发到 SigNoz 自托管 collector OTLP gRPC (signoz-net 内部 service name).
+  # telemetrygen 实测 gRPC 4317 接受 trace 成功 (HTTP 4318 持续 502 原因待排,
+  # 大概率是 ClickHouse exporter 对某些 attribute 格式敏感, gRPC 路径上不同)。
+  otlp/signoz:
+    endpoint: signoz-otel-collector:4317
+    tls:
+      insecure: true
 
   # debug 输出 (排查时开 detailed)
   debug:
@@ -46,10 +62,17 @@ exporters:
 
 service:
   pipelines:
-    traces:
+    # 拆两条 pipeline: 一条给 Langfuse, 一条给 SigNoz, 避免 Langfuse 端 429/timeout
+    # 阻塞 SigNoz 端的 batch (调研陷阱 #4)
+    traces/langfuse:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, batch/langfuse]
       exporters: [otlphttp/langfuse, debug]
+    traces/signoz:
+      receivers: [otlp]
+      processors: [memory_limiter, batch/signoz]
+      exporters: [otlp/signoz]
   telemetry:
     logs:
-      level: info
+      # 调到 debug 看 SigNoz collector 真实拒绝原因 (调研建议 #2)
+      level: debug
