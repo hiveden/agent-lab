@@ -125,6 +125,7 @@ Feature flags / LLM response caching / IaC / Audit log / Content moderation / Ch
 | 文档 | 职责 |
 |---|---|
 | `25-TODO.md`（本文）| 所有 TODO 索引 |
+| `26-KNOWN-BUGS.md` | 已知 bug 索引（与本文互补：待做 vs 已有问题） |
 | `21-TECH-DEBT.md` | 技术债（现有代码） |
 | `22-OBSERVABILITY-ENTERPRISE.md` | 可观测性架构 + ADR + Phase + 风险 |
 | `23-ARCHITECTURE-BACKLOG.md` | 架构缺口（未做的新功能） |
