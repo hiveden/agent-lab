@@ -841,27 +841,41 @@ agents/radar/src/radar/observability/
 
 ---
 
-### Phase 4：自托管栈搭建（SigNoz + Langfuse + GlitchTip）
+### Phase 4：自托管栈搭建（SigNoz + Langfuse + GlitchTip） ✅ 完成 (2026-04-18)
 
 **目标**：所有 OTel 数据落到自己控制的后端。
 
-**任务**：
-1. **SigNoz**：docker-compose 起单机版（含 ClickHouse），配置数据保留 30 天
-2. **Langfuse**：docker-compose 起 v3（与 SigNoz 共享 ClickHouse）
-3. **GlitchTip**：docker-compose 起轻量版
-4. **collector exporter 配置**：trace 双写到 SigNoz + Langfuse；log → SigNoz；metric → SigNoz；error → GlitchTip（独立协议）
-5. **Eval 平面**：Langfuse 内置 LLM-as-judge，配独立 `environment=eval`
-6. **dashboard / alert**：SigNoz 配几个基础 dashboard（chat 延迟、LLM token 用量、错误率）
+**实际实施**（commits `8db74c1` + `2b752ff` + `fd44906` + `2524a6e`）：
 
-**验收**：
-- SigNoz 看到所有 trace/log/metric
-- Langfuse 看到 LLM 维度细节
-- GlitchTip 看到错误聚合
-- 三个工具用同一 trace_id 互查
+1. ✅ **SigNoz 自托管** (`docker/signoz/`)：基于官方 v0.119.0 5 组件栈。端口避让 4327/4328/3301。`/api/v1/register` 自动注册 admin 激活 OPAMP。
+2. ✅ **Langfuse 自托管 v3** (`docker/langfuse/`)：官方 6 组件 self-contained（PG + ClickHouse + Redis + MinIO + web + worker）。host port +10 避让其他项目。Langfuse Cloud（Phase 2）保留 fallback 注释，主线切自托管。
+3. ✅ **GlitchTip 自托管** (`docker/glitchtip/`)：glitchtip/glitchtip:v5.1 + Postgres + Valkey。端口 8002:8000。
+4. ✅ **Collector 双写 trace**：拆两条 pipeline (`traces/langfuse` + `traces/signoz`) 各自 batch，避免一端阻塞另一端。
+5. ✅ **Sentry SDK 三端接入 GlitchTip**：Python sentry-sdk[fastapi] + Next.js @sentry/nextjs（server + browser），错误自动关联 OTel trace_id。
+6. ⏳ **Eval 平面 + dashboard/alert**：基础设施就绪，实际配置留 Phase 5+。
+7. ⚠️ **"与 SigNoz 共享 ClickHouse" 未实现，标未来探索**：SigNoz 和 Langfuse 都 demand 独占 ClickHouse schema，共享冲突风险高。两个独立实例更安全（本地 64GB 够用）。
+
+**验收实测**：
+- SigNoz UI (`http://127.0.0.1:3301`): Services 列表三端都有 (`agent-lab-browser` / `agent-lab-web` / `radar`)
+- 自托管 Langfuse UI (`http://127.0.0.1:3010`): 完整 LangGraph node + LLM call trace tree
+- GlitchTip UI (`http://127.0.0.1:8002`): 三端 Sentry 测试事件全部到 Issues
+
+**关键踩坑**：
+
+1. Docker credentials helper → 删 `~/.docker/config.json` 的 `credsStore`
+2. **SigNoz collector 502 根因**：`HTTP_PROXY` 让 gRPC 走 ClashX 代理。`NO_PROXY` 白名单 `host.docker.internal` + `signoz-otel-collector` 解决。升 contrib v0.116.1 → v0.144.0 与 SigNoz 版本对齐。
+3. SigNoz 注册前 OPAMP 报 `cannot create agent without orgId` 是正常的。
+4. `telemetrystore-migrator Exited` 是正常一次性 Job。
+5. GlitchTip v5 SPA 吃所有非 `/api` 路径，必须走 UI 注册。
+6. GlitchTip 硬编码 redis hostname：用 valkey image 但 service 名必须叫 `redis`。
+7. Langfuse 自托管 web 启动比 postgres healthy 快 → restart loop 一次自愈。
+8. **空 body curl OTel endpoint 返回 200 ≠ 真接受**，走 receiver 短路。验证用 telemetrygen 或真实 trace。
+9. **Langfuse 只 index 含 LLM 框架 attribute 的 trace**：浏览器 fetch / BFF undici 的 generic HTTP trace 不建 Langfuse 条目。chip 拿到的 trace_id 必须是真实 chat（含 LangGraph span）才能在 UI 查到。
+10. Next.js `_` 前缀 API route 是 internal，改 `sentry-test` 即可。
+
+**实际工作量**：~4h（估 1-2 周，Phase 3 铺垫充分大幅压缩）
 
 **依赖**：Phase 3
-
-**估算**：1-2 周（含运维学习）
 
 ---
 
