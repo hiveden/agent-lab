@@ -24,8 +24,11 @@ if [ -z "$PK" ] || [ -z "$SK" ]; then
 fi
 
 # Langfuse OTel endpoint = HOST + /api/public/otel
+# 自托管场景 (HOST 含 localhost) 需替换为 host.docker.internal, 让 collector
+# container 通过 docker gateway 访问 host 上的 Langfuse
 HOST=${HOST:-https://us.cloud.langfuse.com}
-LANGFUSE_OTEL_ENDPOINT="${HOST%/}/api/public/otel"
+CONTAINER_HOST=$(echo "$HOST" | sed -e 's|localhost|host.docker.internal|' -e 's|127.0.0.1|host.docker.internal|')
+LANGFUSE_OTEL_ENDPOINT="${CONTAINER_HOST%/}/api/public/otel"
 
 # Basic Auth = base64(public:secret) — macOS base64 默认会换行, -i 不读 stdin? 用 tr 去换行兜底
 LANGFUSE_AUTH_BASE64=$(printf '%s:%s' "$PK" "$SK" | base64 | tr -d '\n')

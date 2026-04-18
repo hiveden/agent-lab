@@ -18,8 +18,9 @@ services:
       # ClashX 7890 是 HTTP/SOCKS 混合, container 走 host.docker.internal
       HTTPS_PROXY: ${OTEL_HTTPS_PROXY:-http://host.docker.internal:7890}
       HTTP_PROXY: ${OTEL_HTTP_PROXY:-http://host.docker.internal:7890}
-      # signoz/glitchtip 等自托管服务走内部 docker network, 不能走 ClashX 代理
-      NO_PROXY: localhost,127.0.0.1,signoz-otel-collector,signoz,signoz-clickhouse,glitchtip,.svc
+      # signoz/glitchtip/langfuse 自托管服务不能走 ClashX 代理
+      # host.docker.internal = Langfuse 自托管 (在 host 上通过 docker gateway 访问)
+      NO_PROXY: localhost,127.0.0.1,host.docker.internal,signoz-otel-collector,signoz,signoz-clickhouse,glitchtip,.svc
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
