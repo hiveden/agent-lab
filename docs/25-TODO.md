@@ -20,10 +20,11 @@
 
 ## 🟡 P1 — 企业级必备
 
-**来源：[`23-ARCHITECTURE-BACKLOG.md`](./23-ARCHITECTURE-BACKLOG.md)**
+**来源：[`23-ARCHITECTURE-BACKLOG.md`](./23-ARCHITECTURE-BACKLOG.md)** + 项目管理
 
 | # | 条目 | 估 |
 |---|---|---|
+| **📋 PM** | **把 25-TODO / 26-KNOWN-BUGS 迁 GitHub Issues**（labels: p0-p3 + bug/feat/debt + observability/agent/infra; milestones; project board; 留 stub md 指向）。当前 4 份交叉引用索引已到复杂度临界点。详见 2026-04-18 讨论。| 30 min |
 | 23 #4 | **LLM Gateway**（LiteLLM / Helicone，统一 provider + cost 追踪）| 1d |
 | 23 #5 | **Secret management**（Vault / Infisical / Doppler，替代 .env 裸奔）| 半天 + 每 secret 迁 |
 | 23 #6 | **Rate limiting + CORS 收紧** | 半天 |
