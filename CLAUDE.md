@@ -54,7 +54,8 @@ Agent 对话:
 **全栈企业级可观测性已上线**（Phase 0-5#1 完成，2026-04-18）。详见：
 - [`docs/22-OBSERVABILITY-ENTERPRISE.md`](docs/22-OBSERVABILITY-ENTERPRISE.md) — 架构 / 10 ADR / 28 风险 / 所有 Phase 实施状态
 - [`docs/24-OBSERVABILITY-PLAYBOOK.md`](docs/24-OBSERVABILITY-PLAYBOOK.md) — 排查手册 / Cloud↔自托管切换
-- [`docs/23-ARCHITECTURE-BACKLOG.md`](docs/23-ARCHITECTURE-BACKLOG.md) — 未做的其他架构缺口
+- [`docs/25-TODO.md`](docs/25-TODO.md) — **所有待办统一索引**（指向 21/22/23 散落条目）
+- [`docs/23-ARCHITECTURE-BACKLOG.md`](docs/23-ARCHITECTURE-BACKLOG.md) — 架构缺口（非 observability）
 - [`docker/README.md`](docker/README.md) — 自托管栈启动顺序 / 端口总表
 
 **自托管栈端口总览（`docker/` 下 4 个独立 compose）：**
