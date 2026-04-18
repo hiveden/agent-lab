@@ -1,0 +1,2 @@
+# start.sh 自动生成 (含 LANGFUSE_AUTH_BASE64 secret)
+.env

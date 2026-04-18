@@ -1,0 +1,55 @@
+# OpenTelemetry Collector — 本地开发 gateway 模式
+# 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-003 / Phase 3
+#
+# 接收三端 (Browser / BFF / Python) 的 OTLP，转发到 Langfuse Cloud。
+# memory_limiter 必填（陷阱：不配会 OOM 干掉整个 collector — 几乎所有教程都漏掉）
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        # 浏览器直推 collector 必需 CORS（前端 fetch instrumentation 走 OTLP/HTTP）
+        cors:
+          allowed_origins:
+            - "http://localhost:8788"
+            - "http://127.0.0.1:8788"
+          allowed_headers:
+            - "*"
+
+processors:
+  # ⚠️ 不配会 OOM 杀掉 collector（陷阱清单 #5）
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  # 转发到 Langfuse Cloud OTel endpoint (v3.22+ 接 OTLP/HTTP, 不接 gRPC)
+  # Authorization: Basic <base64(LANGFUSE_PUBLIC_KEY:LANGFUSE_SECRET_KEY)>
+  # 由 docker-compose 把 LANGFUSE_AUTH_BASE64 注入进来
+  otlphttp/langfuse:
+    endpoint: ${env:LANGFUSE_OTEL_ENDPOINT}
+    headers:
+      Authorization: "Basic ${env:LANGFUSE_AUTH_BASE64}"
+
+  # debug 输出 (排查时开 detailed)
+  debug:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 50
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/langfuse, debug]
+  telemetry:
+    logs:
+      level: info
