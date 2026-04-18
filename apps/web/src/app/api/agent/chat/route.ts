@@ -4,49 +4,29 @@ import {
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
 import { LangGraphHttpAgent } from "@copilotkit/runtime/langgraph";
-import type { RunAgentInput } from "@ag-ui/core";
 
 export const runtime = 'nodejs';
 
 /**
- * BFF 端 trace_id 注入 — 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a。
+ * Phase 3 修正 (ADR-002c, supersedes ADR-002a):
  *
- * 为什么在 BFF 而非浏览器生成：CopilotKit v2 1.56.2 锁死了所有前端 per-request
- * 数据透传口子（runId / headers / properties / forwardedProps 都是 Provider
- * 构造期常量；core/index.mjs:1590 强制覆盖 agent.headers）。
+ * 不再 wrap LangGraphHttpAgent 手动注入 traceparent。BFF Node OTel SDK
+ * (auto-instrumentations-node 的 undici/fetch instrumentation) 自动 propagate
+ * 入站 traceparent 到出站 fetch (W3C 标准)，trace_id 三段串通靠 OTel context
+ * 自动维护，不需要应用代码干预。
  *
- * 等待 CopilotKit issue #3039 + #3456 落地后切回浏览器生成（W3C 标准做法）。
+ * Phase 1 ADR-002a 的 BFF 手动注入与 Phase 3 OTel auto-propagation 冲突 (覆盖
+ * 了入站 trace_id), 所以三端走出独立 trace_id。删除 wrapper 后修复。
  *
- * 为什么 override requestInit 安全：CopilotKit `agent.headers = {...}` 只覆盖
- * 实例字段，不影响方法。requestInit 内部 super.requestInit(input) 拿到（被
- * 覆盖后的）headers，再叠加 traceparent。
+ * 代价: AG-UI BaseEvent.runId (ag-ui client 自动生成) 不再 == OTel trace_id。
+ * 前端 trace 关联改用浏览器 OTel SDK 当前 span 的 trace_id (TraceLinkChip 改造)。
  *
- * 关键设计：traceparent.trace_id 直接用 input.runId（去连字符的 32-hex），
- * 而不是 BFF 自己 randomUUID。这样四段 ID 天然对齐：
- *   - AG-UI BaseEvent.runId   = input.runId               (UUID)
- *   - W3C traceparent.traceId = input.runId.replace(-)    (32-hex)
- *   - Python OTel trace_id    = 同上                       (从 traceparent 提取)
- *   - LangChain config.run_id = UUID(int=traceId_int)     (Python 端注入)
- * 否则 ag-ui client 自动生成 input.runId 与 BFF randomUUID() 是两个独立 UUID。
+ * 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002c (Phase 3 修正)。
  */
-class TracingLangGraphHttpAgent extends LangGraphHttpAgent {
-  protected requestInit(input: RunAgentInput): RequestInit {
-    const base = super.requestInit(input);
-    const traceId = input.runId.replace(/-/g, ''); // UUID → 32-hex
-    const spanId = crypto.randomUUID().replace(/-/g, '').slice(0, 16); // 16-hex (任意)
-    return {
-      ...base,
-      headers: {
-        ...(base.headers as Record<string, string>),
-        traceparent: `00-${traceId}-${spanId}-01`,
-      },
-    };
-  }
-}
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-const radarAgent = new TracingLangGraphHttpAgent({
+const radarAgent = new LangGraphHttpAgent({
   url: `${(process.env.RADAR_AGENT_BASE || "http://localhost:8001").replace(/\/+$/, '')}/agent/chat`,
 });
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import OtelClientInit from '@/components/OtelClientInit';
 
 export const metadata: Metadata = {
   title: 'agent-lab · Radar',
@@ -30,7 +31,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <OtelClientInit />
+        {children}
+      </body>
     </html>
   );
 }

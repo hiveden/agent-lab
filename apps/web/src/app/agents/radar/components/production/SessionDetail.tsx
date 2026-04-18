@@ -219,15 +219,15 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
   const messages = agent.messages;
   const isRunning = agent.isRunning;
 
-  // ── trace_id 收集：Phase 1 验证埋点 → Phase A 升级为 UI chip ──
-  // event.runId == AG-UI BaseEvent.runId == Python LangGraph run_id == OTel trace_id
-  // (32-hex 去连字符)。详见 docs/22 ADR-002a。
-  const [latestRunId, setLatestRunId] = useState<string | null>(null);
+  // ── ag-ui run id 验证埋点 (诊断辅助; trace_id 链路改用 OTel, 见 ADR-002c) ──
+  // BaseEvent.runId 不再 == OTel trace_id, 仅作为应用层 message 标识。
+  // TraceLinkChip 现在自己订阅 OTel SDK 事件拿真实 trace_id。
   useEffect(() => {
     if (!agent) return;
     const sub = agent.subscribe({
       onRunStartedEvent: ({ event }) => {
-        setLatestRunId(event.runId);
+        // eslint-disable-next-line no-console
+        console.log('[agui] RUN_STARTED runId=', event.runId, 'threadId=', event.threadId);
       },
     });
     return () => sub.unsubscribe();
@@ -427,7 +427,7 @@ export default function SessionDetail({ threadId, isActiveSession, sessionReload
                       {!isActiveSession && (
                         <span className="text-[10px] text-text-3 ml-1">(只读)</span>
                       )}
-                      <span className="ml-2"><TraceLinkChip runId={latestRunId} /></span>
+                      <span className="ml-2"><TraceLinkChip /></span>
                     </div>
                     <button
                       className={cn(

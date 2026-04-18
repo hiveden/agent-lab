@@ -1,53 +1,58 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { otelTraceEvents } from '@/lib/otel-browser';
 
 /**
- * 显示当前 chat 的 trace_id 短码 (前 8 位)，hover 看完整 UUID，
- * 点击复制完整 UUID + 跳 Langfuse trace 详情页。
+ * 显示当前 chat 的 OTel trace_id 短码 (前 8 位)，hover 看完整 32-hex，
+ * 点击复制 + 跳 Langfuse trace 详情页。
  *
- * 详见 docs/22-OBSERVABILITY-ENTERPRISE.md Phase A "前端 trace UI 缝合"。
- *
- * Langfuse URL 格式：
- * - 配了 NEXT_PUBLIC_LANGFUSE_PROJECT_ID → /project/<id>/traces/<trace>  (精准跳)
- * - 没配 → /  (Langfuse 顶层，用户自己进 Tracing 找)
- *
- * 注：Langfuse v4 是 OTel-native，URL 里的 trace_id 是 32-hex 去连字符形式
- * (即 OTel 标准 trace_id)，不是 UUID 带连字符形式。
+ * 详见 docs/22 ADR-002c (Phase 3 修正) — trace_id 来源从 BaseEvent.runId 改为
+ * 浏览器 OTel SDK 当前 chat fetch span 的 trace_id (与 BFF/Python OTel trace_id
+ * 一致)。Langfuse v4 OTel-native, trace_id 用 32-hex 形式存储/查询。
  */
-export default function TraceLinkChip({ runId }: { runId: string | null }) {
+export default function TraceLinkChip() {
   const [copied, setCopied] = useState(false);
+  const [traceIdHex, setTraceIdHex] = useState<string | null>(null);
+
+  // 从 otel-browser 派发的 chat-trace 事件拿 trace_id (32-hex)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ traceId: string }>).detail;
+      if (detail?.traceId) setTraceIdHex(detail.traceId);
+    };
+    otelTraceEvents.addEventListener('chat-trace', handler);
+    return () => otelTraceEvents.removeEventListener('chat-trace', handler);
+  }, []);
 
   const host = process.env.NEXT_PUBLIC_LANGFUSE_HOST || 'https://us.cloud.langfuse.com';
   const projectId = process.env.NEXT_PUBLIC_LANGFUSE_PROJECT_ID;
 
-  // Langfuse URL 用 32-hex (去连字符)
-  const traceIdHex = runId?.replace(/-/g, '');
   const langfuseUrl = traceIdHex && projectId
     ? `${host}/project/${projectId}/traces/${traceIdHex}`
     : host;
 
   const onCopy = useCallback(async () => {
-    if (!runId) return;
+    if (!traceIdHex) return;
     try {
-      await navigator.clipboard.writeText(runId);
+      await navigator.clipboard.writeText(traceIdHex);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
       /* clipboard 不可用 */
     }
-  }, [runId]);
+  }, [traceIdHex]);
 
-  if (!runId) {
+  if (!traceIdHex) {
     return (
-      <span className="text-[10px] text-text-3 font-mono tracking-tight" title="尚未发起 chat">
+      <span className="text-[10px] text-text-3 font-mono tracking-tight" title="尚未发起 chat (浏览器 OTel SDK 等首次 fetch)">
         trace: —
       </span>
     );
   }
 
-  const short = runId.slice(0, 8);
+  const short = traceIdHex.slice(0, 8);
 
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-mono">
@@ -55,7 +60,7 @@ export default function TraceLinkChip({ runId }: { runId: string | null }) {
       <button
         type="button"
         onClick={onCopy}
-        title={`点击复制完整 trace_id\n${runId}`}
+        title={`点击复制完整 trace_id\n${traceIdHex}`}
         className={cn(
           'px-1.5 py-[1px] rounded border border-border-hi bg-surface text-text-2',
           'cursor-pointer transition-all duration-100 hover:border-accent-line hover:bg-accent-soft hover:text-accent-brand',
