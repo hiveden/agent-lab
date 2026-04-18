@@ -1,0 +1,69 @@
+# GlitchTip 自托管 (Phase 4 #3 of docs/22)
+# 基于官方推荐栈: glitchtip/glitchtip web + worker + Postgres + Redis
+#
+# 启动: cd docker/glitchtip && docker compose up -d
+# 首次启动会自动跑 DB migration, 30-60s 就绪。
+# UI: http://127.0.0.1:8000
+# DSN: 注册账号后 → Settings → Projects → 新建 → 复制 DSN
+
+x-environment: &default-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+  SECRET_KEY: ${GLITCHTIP_SECRET_KEY:-change-me-in-prod-$(openssl rand -hex 32)}
+  PORT: "8000"
+  EMAIL_URL: consolemail://
+  GLITCHTIP_DOMAIN: http://localhost:8002
+  DEFAULT_FROM_EMAIL: noreply@agent-lab.local
+  CELERY_WORKER_AUTOSCALE: "1,3"
+  CELERY_WORKER_MAX_TASKS_PER_CHILD: "10000"
+  VALKEY_URL: redis://valkey:6379/0
+  # trace context propagation: GlitchTip 用 sentry-trace / baggage header
+  # 与我们的 W3C traceparent 独立 (无法直接关联); 但 SDK 会自动把 OTel
+  # trace_id 当作 context attribute 写入, 用户可搜。
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: glitchtip-postgres
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    restart: unless-stopped
+    volumes:
+      - glitchtip-pg:/var/lib/postgresql/data
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: glitchtip-valkey
+    restart: unless-stopped
+
+  web:
+    image: glitchtip/glitchtip:v5.1
+    container_name: glitchtip-web
+    depends_on:
+      - postgres
+      - valkey
+    ports:
+      - "8002:8000"  # 8000 被其他项目占用 (toolref-backend), 改 8002
+    environment: *default-environment
+    restart: unless-stopped
+
+  worker:
+    image: glitchtip/glitchtip:v5.1
+    container_name: glitchtip-worker
+    command: ./bin/run-celery-with-beat.sh
+    depends_on:
+      - postgres
+      - valkey
+    environment: *default-environment
+    restart: unless-stopped
+
+  migrate:
+    image: glitchtip/glitchtip:v5.1
+    container_name: glitchtip-migrate
+    depends_on:
+      - postgres
+    command: ./manage.py migrate
+    environment: *default-environment
+    restart: "no"
+
+volumes:
+  glitchtip-pg:
