@@ -309,6 +309,8 @@ Step 5: 前端从 BaseEvent.runId 关联
 
 ### ADR-002a：CopilotKit 限制下，traceId 起点退到 BFF
 
+> ⚠️ **2026-04-18 superseded by [ADR-002c](#adr-002c-phase-3-修正放弃-traceid--baseeventrunid-等式改用-otel-w3c-自动-propagation)**：Phase 3 装上 BFF Node OTel SDK 后发现 ADR-002a 的"BFF override requestInit 用 input.runId 派生 traceparent"与 OTel auto-propagation 冲突——覆盖了入站 trace_id，导致浏览器/BFF/Python 走出独立 trace。改回 W3C OTel 标准做法（trace_id 不再 == BaseEvent.runId）。本节保留作设计演化记录。
+
 > **状态**：临时妥协。等 CopilotKit issue [#3039](https://github.com/CopilotKit/CopilotKit/issues/3039)（rawEvent 透传）+ [#3456](https://github.com/CopilotKit/CopilotKit/issues/3456)（HITL runId 不刷新）落地后，回切 ADR-002 的"浏览器生成"标准做法。
 
 **决策**：traceId 由 BFF（`apps/web/src/app/api/agent/chat/route.ts`）在每个 incoming request 生成 W3C 32-hex traceparent，通过自定义 `LangGraphHttpAgent` 子类的 `requestInit(input)` override 注入到 Python 出站 fetch。前端不参与生成，通过 SSE `event.runId` 反向获取 traceId。
@@ -368,6 +370,91 @@ class TracingLangGraphHttpAgent extends LangGraphHttpAgent {
 - [CopilotKit issue #3456 — runId changes after HITL resolve](https://github.com/CopilotKit/CopilotKit/issues/3456)
 - [@ag-ui/client HttpAgent.requestInit 源码](https://github.com/ag-ui-protocol/ag-ui)
 - 本地证据：`node_modules/.pnpm/@copilotkit+core@1.56.2_*/node_modules/@copilotkit/core/dist/index.mjs:1588-1617`
+
+---
+
+### ADR-002c：Phase 3 修正——放弃 traceId == BaseEvent.runId 等式，改用 OTel W3C 自动 propagation
+
+**决策**（supersedes ADR-002a）：BFF 不再 wrap `LangGraphHttpAgent` 手动注入 traceparent。BFF Node OTel SDK 的 `auto-instrumentations-node`（含 fetch / undici / http instrumentation）自动 propagate 入站 traceparent 到出站 fetch（W3C 标准），trace_id 三段串通靠 OTel context 自动维护。AG-UI `BaseEvent.runId`（ag-ui client 自动生成）不再 == OTel trace_id，前端 trace 关联改用浏览器 OTel SDK 当前 chat fetch span 的 trace_id。
+
+**为什么 ADR-002a 必须改**：
+
+Phase 3 装上 BFF Node OTel SDK 后实测发现：
+- 浏览器 OTel `FetchInstrumentation` 在 fetch `/api/agent/chat` 时自动加 `traceparent` header（trace_id A）
+- BFF 收到 trace_id A 进入 BFF span
+- 但 BFF 出站到 Python 时，`LangGraphHttpAgent.requestInit` 被我们 override 用 `input.runId`（ag-ui client 自动生成的不同 UUID）派生**新** traceparent（trace_id B），**覆盖**了 OTel auto-propagation 加的 trace_id A
+- Python 收到 trace_id B
+- 结果：浏览器→BFF 是 trace A，BFF→Python 是 trace B，**两条独立 trace**
+
+**实测证据**（commit log）：
+```
+BFF span: POST /api/agent/chat trace_id = 88c3b05bad47f5189ed227547f6cacea
+Python span: POST /agent/chat trace_id = 30b977d7bd614761ba9cb823bdd16228
+```
+
+**修复后实测**（同次 chat trace）：
+```
+trace_id 371047b65cc5769f1965ea47dc52791f 同时出现在:
+- 浏览器 fetch span (service.name=agent-lab-browser)
+- BFF span (service.name=agent-lab-web, POST /api/agent/chat)
+- Python span (service.name=radar, POST /agent/chat)
+- LangGraph node:agent span (OpenLLMetry traceloop)
+- LLM Prompt span (含完整 prompt/messages)
+```
+
+**新等式（Phase 3）**：
+
+| 维度 | 旧 (ADR-002a) | 新 (ADR-002c) |
+|---|---|---|
+| OTel trace_id | == LangChain run_id == BaseEvent.runId | 三端 OTel 自动 propagate (W3C 标准) |
+| BaseEvent.runId | trace_id 来源 | 仅 ag-ui 应用层 message 标识，与 trace_id 无关 |
+| LangChain config.run_id | UUID(int=trace_id) 强制覆盖 | LangChain 默认 (auto-uuid) |
+| 前端 chip trace_id 来源 | event.runId | 浏览器 OTel SDK fetch span 的 traceId (32-hex) |
+| Langfuse trace 关联 | 用 LangChain run_id 当 trace_id | Langfuse callback 通过 OpenTelemetry context 自动关联当前 OTel trace_id |
+
+**实施要点**：
+
+```ts
+// apps/web/src/app/api/agent/chat/route.ts (恢复 plain LangGraphHttpAgent)
+const radarAgent = new LangGraphHttpAgent({ url: ... });
+// (不再 wrap, 让 BFF Node OTel auto-propagate 接管)
+```
+
+```ts
+// apps/web/src/lib/otel-browser.ts (浏览器 fetch 暴露 trace_id 给 chip)
+new FetchInstrumentation({
+  applyCustomAttributesOnSpan: (span) => {
+    const url = String(span.attributes?.['http.url'] || '');
+    if (url.includes('/api/agent/chat')) {
+      otelTraceEvents.dispatchEvent(
+        new CustomEvent('chat-trace', {
+          detail: { traceId: span.spanContext().traceId },
+        }),
+      );
+    }
+  },
+})
+```
+
+```python
+# agents/radar/src/radar/agui_tracing.py (不再覆盖 LangChain run_id)
+def _inject_trace_context(self):
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+    trace_id_hex = format(ctx.trace_id, "032x") if ctx.is_valid else None
+    self.config = {
+        **(self.config or {}),
+        "metadata": {**existing_metadata, "trace_id": trace_id_hex},
+        "callbacks": existing_callbacks,  # 含 langfuse callback
+    }
+    # 不再设 "run_id"
+```
+
+**踩的坑（Phase 3 新增）**：
+
+1. **`@opentelemetry/instrumentation-fetch` 的 `requestHook` 拿不到 url**：requestHook 第二个参数对原生 fetch 是 string 但实际拿到的是空字符串。改用 `applyCustomAttributesOnSpan`，从 `span.attributes['http.url']` 拿。
+2. **Next.js 15 `instrumentation.ts` 必须放 `src/` 下**（项目用了 src 布局）。放根目录不会被 register。
+3. **CopilotKit 频繁 poll `/api/agent/chat`**（announcements、status check 等），每个 fetch 都触发 chat-trace 事件。chip 拿到的是最近一次 trace_id，不一定是 send chat 的那次——但实际真实 send chat 的 trace_id 在 collector log 里能找到完整四端串通。**优化方向**：用 ag-ui agent.subscribe 监听 send 事件后才采 chip trace_id。
 
 ---
 
@@ -733,24 +820,24 @@ agents/radar/src/radar/observability/
 
 ---
 
-### Phase 3：OTel SDK 三端接入（统一 instrumentation）
+### Phase 3：OTel SDK 三端接入（统一 instrumentation）✅ 完成 (2026-04-18)
 
-**目标**：浏览器/BFF/Python 都用 OTel SDK 产出 OTLP，发给一个本地 collector。
+**目标**：浏览器/BFF/Python 都用 OTel SDK 产出 OTLP，发给一个本地 collector，转发到 Langfuse。
 
-**任务**：
-1. **本地起 OTel collector**（docker-compose），配 `memory_limiter` + `batch` + console exporter（先不连后端）
-2. **Python**：装 `opentelemetry-distro` + `opentelemetry-instrumentation-fastapi` + `opentelemetry-instrumentation-httpx`，配 OTLP HTTP exporter 指向 collector
-3. **Python**：装 `traceloop-sdk`（OpenLLMetry）auto-instrument LangChain / OpenAI
-4. **BFF**：CF Pages 接入 `evanderkoogh/otel-cf-workers`，配 OTLP HTTP exporter
-5. **浏览器**：`@opentelemetry/sdk-web` + `instrumentation-fetch` + `instrumentation-document-load`，配 OTLP HTTP exporter + `propagateTraceHeaderCorsUrls`
-6. **CORS**：BFF 允许 `traceparent` / `tracestate` header
-7. **验证**：浏览器一次 chat → collector 看到三段 span 串成一棵树
+**实际实施（commits `431c792` + `1b49beb` + `182b5fb`）**：
+1. ✅ 本地 OTel collector（docker-compose）—— `docker/observability/`，含 memory_limiter + batch + Langfuse OTLP exporter + debug stdout
+2. ✅ Python：装 `opentelemetry-exporter-otlp-proto-http` + `opentelemetry-instrumentation-httpx` + `traceloop-sdk` → main.py 配 BatchSpanProcessor + OTLPSpanExporter + Traceloop.init
+3. ✅ Python：OpenLLMetry auto-instrument 30+ LLM provider，trace 含 LangGraph node 级 prompt/messages
+4. ⚠️ BFF：**改用 `@opentelemetry/sdk-node`**（route.ts 当前 `runtime='nodejs'`，非 Edge），不是 ADR-008 说的 otel-cf-workers。Next.js 15 `instrumentation.ts` 入口（必须放 `src/` 下）
+5. ✅ 浏览器：`@opentelemetry/sdk-trace-web` + DocumentLoad + Fetch instrumentation + OtelClientInit (use client) 嵌 root layout
+6. ✅ CORS：collector 配 `cors.allowed_origins=[localhost:8788, 127.0.0.1:8788]`，allowed_headers=*
+7. ✅ ADR-002a → ADR-002c 修正：删 BFF wrap LangGraphHttpAgent 手动 traceparent，改用 OTel auto-propagation（含完整 implementation 见 ADR-002c）
 
-**验收**：collector console 输出的 trace 包含 browser fetch span / BFF span / Python FastAPI span / LangGraph node span / LLM call span。
+**验收实测**：trace_id `371047b65cc5769f1965ea47dc52791f` 同时出现在浏览器 fetch span / BFF Next.js span / Python FastAPI span / LangGraph node:agent / OpenLLMetry Prompt span。Langfuse Cloud Tracing 看到完整树。
 
-**依赖**：Phase 1
+**实际工作量**：~3h（不是估的 3-5 天）—— 含 Docker credential 修、OTel collector OOM 防护配置、Next.js instrumentation src 路径坑、fetch instrumentation requestHook url 提取坑、ADR-002a 与 OTel auto-propagation 冲突修正。
 
-**估算**：3-5 天
+**依赖**：Phase 1, Phase 2 (Langfuse Cloud)
 
 ---
 
