@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from uuid import UUID
 
 from ag_ui.core import EventType, RunAgentInput
 from agent_lab_shared.logging import get_logger
 from copilotkit import LangGraphAGUIAgent
+from opentelemetry import trace
 
 log = get_logger("radar.agui_tracing")
 
@@ -175,7 +177,15 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
     # ── 对话持久化 ──
 
     async def run(self, input: RunAgentInput):  # type: ignore[override]
-        """Override run to: 1) filter None events, 2) persist chat after completion."""
+        """Override run to: 0) inject OTel trace_id into LangGraph config,
+        1) filter None events, 2) persist chat after completion.
+
+        trace_id 注入逻辑见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a / Phase 1。
+        OTel current span 由 FastAPIInstrumentor 从 traceparent header 自动建立。
+        endpoint.py 每次请求 clone agent 实例 (line 23)，self.config 修改不会跨请求污染。
+        """
+        self._inject_trace_context()
+
         thread_id = input.thread_id
         async for event in super().run(input):
             if event is not None:
@@ -184,6 +194,31 @@ class TracingLangGraphAGUIAgent(LangGraphAGUIAgent):
         # Best-effort persistence — fire-and-forget, never block the response
         if thread_id:
             asyncio.create_task(self._persist_chat(thread_id))
+
+    def _inject_trace_context(self) -> None:
+        """从 OTel current span 提取 trace_id, 注入 LangChain config.run_id。
+
+        LangChain 把 config['run_id'] 作为 root run tree id (LangSmith/Langfuse trace id)。
+        让它 == OTel trace_id，使三段 (OTel / LangChain / AG-UI BaseEvent.runId) 对齐。
+        """
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        if not ctx.is_valid:
+            log.debug("trace_context_skip", reason="no_valid_span")
+            return
+
+        trace_id_int = ctx.trace_id  # 128-bit
+        trace_id_hex = format(trace_id_int, "032x")
+        run_id = str(UUID(int=trace_id_int))
+
+        existing = self.config or {}
+        existing_metadata = existing.get("metadata", {}) if isinstance(existing, dict) else {}
+        self.config = {
+            **(existing if isinstance(existing, dict) else {}),
+            "run_id": run_id,
+            "metadata": {**existing_metadata, "trace_id": trace_id_hex},
+        }
+        log.info("trace_context_injected", trace_id=trace_id_hex, run_id=run_id)
 
     async def _persist_chat(self, thread_id: str) -> None:
         """Persist session-level metadata to D1 (config_prompt + result_summary).

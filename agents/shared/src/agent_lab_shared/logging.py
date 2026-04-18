@@ -24,8 +24,33 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 import structlog
+
+
+def _add_otel_trace_context(
+    logger: Any, method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """structlog processor: 从 OTel current span 注入 trace_id / span_id。
+
+    Phase 1 实施依据 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a。
+    OTel auto-instrument (FastAPIInstrumentor) 自动从 traceparent header
+    提取 trace_id 进 current span context，本 processor 把它写到 log 字段。
+
+    OTel 包未装时静默跳过 (allow non-OTel processes)。
+    """
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        if ctx.is_valid:
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+    except Exception:
+        pass
+    return event_dict
 
 
 def setup_logging(
@@ -58,6 +83,7 @@ def setup_logging(
     # -- 共享 processors（structlog 和 stdlib 都走这条链） --
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
+        _add_otel_trace_context,  # OTel current span → trace_id/span_id 字段
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),

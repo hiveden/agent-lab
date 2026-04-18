@@ -20,6 +20,10 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from opentelemetry import trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
 from pydantic import BaseModel
 
 from .agent import create_radar_agent
@@ -55,11 +59,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Radar Agent", version="0.1.0", lifespan=lifespan)
 
+# ── OpenTelemetry: 接 traceparent 进 current span context ──
+# Phase 1 不配 exporter (OTEL_TRACES_EXPORTER=none) — span 不外发但 context 传播仍工作。
+# Phase 4 切到 SigNoz/Langfuse 时改 OTEL_TRACES_EXPORTER + 配 endpoint。
+# 详见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-002a / Phase 1。
+trace.set_tracer_provider(
+    TracerProvider(resource=Resource.create({"service.name": "radar"}))
+)
+FastAPIInstrumentor.instrument_app(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
-    allow_headers=["*"],
+    # 允许 traceparent / tracestate 进入 (W3C Trace Context)
+    allow_headers=["*", "traceparent", "tracestate"],
 )
 app.add_middleware(RequestLoggingMiddleware)
 

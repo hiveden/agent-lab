@@ -21,6 +21,8 @@ dependencies = [
     "ag-ui-protocol>=0.1",
     "ag-ui-langgraph>=0.0.30",
     "copilotkit>=0.1.74",
+    "opentelemetry-distro>=0.62b0",
+    "opentelemetry-instrumentation-fastapi>=0.62b0",
 ]
 
 [project.scripts]
