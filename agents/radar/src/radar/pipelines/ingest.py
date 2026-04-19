@@ -101,6 +101,20 @@ async def run_ingest_stream(
                 }
             )
             continue
+        except Exception as e:
+            # 未分类错误兜底: 仍隔离单 source, 不中断整个 ingest (#1.10 修)
+            ms = int((time.monotonic() - t) * 1000)
+            yield _ev(
+                {
+                    "type": "span",
+                    "id": span_id,
+                    "kind": "tool",
+                    "title": f"Collect crashed (unhandled {type(e).__name__}): {e}",
+                    "status": "failed",
+                    "ms": ms,
+                }
+            )
+            continue
 
         ms = int((time.monotonic() - t) * 1000)
         total_fetched += len(raw_items)
