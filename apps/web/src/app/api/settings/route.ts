@@ -50,5 +50,16 @@ export async function PUT(req: Request) {
   }
 
   await upsertSettings(env.DB, env.SETTINGS_SECRET, parsed.data);
+
+  // 通知 Python Agent 清 LLM 实例缓存, 让新配置立即生效 (#25, ADR-011).
+  // fire-and-forget: 失败不阻塞响应; 偶发漏推时下游继续用旧实例, 下次改动再试.
+  // 生产强一致可加 TTL pull 兜底, 当前单用户场景不需要.
+  void fetch(`${env.RADAR_AGENT_BASE}/internal/reload-llm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RADAR_WRITE_TOKEN}` },
+  }).catch(() => {
+    // 忽略网络错误 / Agent 未启动 / 401 等; 不让 Settings 写入失败
+  });
+
   return NextResponse.json({ ok: true });
 }
