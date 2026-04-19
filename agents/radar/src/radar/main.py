@@ -71,7 +71,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     LangGraph state is persisted to SQLite and survives process restarts.
     """
     _CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+    # 允许反序列化 ag_ui.core.types.Context (AG-UI context snapshot 写入 checkpoint)
+    # 否则 LangGraph 未来版本会 block 反序列化 + 现在打 warning. 见 #22.
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[("ag_ui.core.types", "Context")])
     async with AsyncSqliteSaver.from_conn_string(str(_CHECKPOINT_DB)) as saver:
+        saver.serde = serde
         graph = create_radar_agent(checkpointer=saver)
         ag_ui_agent = TracingLangGraphAGUIAgent(
             name="radar",

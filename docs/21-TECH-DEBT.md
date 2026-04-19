@@ -142,19 +142,21 @@
 
 ## P3 可选 / 非会话领域
 
-### P3 #10 E2E 4 个历史失败
+### P3 #10 E2E 4 个历史失败 ✅ 已验证修复（2026-04-19）
 
 测试：
-- `production Step 4: sync view renders clean`
-- `walkthrough Full walkthrough`
-- `mobile Step 6: tab switching, each view visual clean`
-- `persistence` — 全量跑时超时（单跑 OK）
+- ~~`production Step 4: sync view renders clean`~~
+- ~~`walkthrough Full walkthrough`~~
+- ~~`mobile Step 6: tab switching, each view visual clean`~~
+- ~~`persistence` — 全量跑时超时（单跑 OK）~~
 
-**根因**：
-- 前 3 个：`button[aria-label="同步"]` selector 找不到或超时（老问题，非本次改动引入）
-- 第 4 个：sequential 全量跑时机器负载高，agent run 超时
+**状态**：2026-04-19 回归验证全部通过。
+- 完整 E2E（run-e2e.sh）：24/25 passed，4 个历史失败全绿（仅 `styles.spec.ts card text colors` 偶发失败，单跑 OK）
+- 单跑验证（persistence + walkthrough + production + mobile）：18/18 全过
 
-**非本次阻塞**。
+**推测原因**：Phase 5 #1 拆 `agui_tracing` + 前端相关修复顺带治好了时序问题。
+
+**仍需观察**：`styles.spec.ts card text colors` 全量跑偶发超时（单跑 OK），疑 `persistence` 同类"sequential 全量 race"，非新增 bug。
 
 ### P3 #11 106 个 TypeScript `implicitly-any` 错误
 
