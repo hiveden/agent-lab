@@ -75,7 +75,6 @@ Agent 对话:
 - `LANGFUSE_PUBLIC_KEY` / `SECRET_KEY` / `HOST`：LLM trace（Cloud / 自托管切换）
 - `OTEL_EXPORTER_OTLP_ENDPOINT`：默认 `http://localhost:4318`（collector 在时推，不在时退化到 stdout）
 - `LANGCHAIN_CALLBACKS_BACKGROUND=false`：Langfuse callback 必需
-- `REPAIR_AGUI_DEDUP=0`：临时关 agui_tracing 补丁层看根因（排查用）
 - `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_LANGFUSE_HOST` / `NEXT_PUBLIC_LANGFUSE_PROJECT_ID`：前端（`apps/web/.env.local`）
 
 **trace_id 贯穿**（ADR-002c）：浏览器 OTel SDK 生成 → W3C traceparent → BFF Node OTel auto-propagate → Python FastAPIInstrumentor 接收 → LangGraph + LLM call。三端 structlog/OTel log 都带 `trace_id`，一个 ID grep 全栈。
@@ -175,7 +174,7 @@ uv tool run ruff format agents/
 - `PLATFORM_API_BASE`: Python Agent 回调 Next.js 的地址（默认 `http://127.0.0.1:8788`）
 - `SETTINGS_SECRET`: LLM Settings 加密密钥（64 字符 hex）
 - `HTTPS_PROXY` / `HTTP_PROXY`: 代理配置
-- **Observability** (见上面"Observability 栈"章节): `SENTRY_DSN` / `LANGFUSE_*` / `OTEL_EXPORTER_OTLP_ENDPOINT` / `LANGCHAIN_CALLBACKS_BACKGROUND` / `REPAIR_AGUI_DEDUP`
+- **Observability** (见上面"Observability 栈"章节): `SENTRY_DSN` / `LANGFUSE_*` / `OTEL_EXPORTER_OTLP_ENDPOINT` / `LANGCHAIN_CALLBACKS_BACKGROUND`
 
 ## Testing
 

@@ -716,23 +716,25 @@ def _inject_trace_context(self):
 ### ADR-010：`agui_tracing.py` 重构（拆 observation / enforcement + GenAI semconv 适配）
 
 > ✅ **2026-04-18 已实施（Phase 5 #1, commit `093bac8`）**：agui_tracing.py 已拆为薄壳 orchestration，4 个职责模块进 `observability/`。
+>
+> ⚠️ **2026-04-19 后续变更**：`repair.py`（AGUIEventDedup 补丁层）已在 #25 (ADR-011) 中**移除**。DeferredLLM 根因已修，事件流不再双发，补丁不需要。剩 3 模块（tracer / persist / gen_ai_attrs）。
 
 **决策**：将 `agents/radar/src/radar/agui_tracing.py` 拆分为四个模块：
 
 ```
 agents/radar/src/radar/observability/
   ├── tracer.py       # 只观测, 不修改事件流; OTel span 读取 + Langfuse callback 附挂
-  ├── repair.py       # 3 层去重, env flag REPAIR_AGUI_DEDUP=1 启用 (默认开)
+  ├── repair.py       # ⚠️ 已移除 (#25, ADR-011) — DeferredLLM 根因修后不需要
   ├── persist.py      # chat 元数据持久化 (config_prompt + result_summary)
   └── gen_ai_attrs.py # AG-UI event → GenAI semconv attribute 映射占位 (预留)
 ```
 
 **实际拆分结果**：
 - `tracer.py`：`build_langfuse_callback()` + `inject_trace_context(config) -> new_config`，**纯函数式**，不改状态
-- `repair.py`：`AGUIEventDedup` class 封装 3 层状态机 + `repair_enabled()` 读 env；每请求 clone agent 时新实例
+- ~~`repair.py`：`AGUIEventDedup` class 封装 3 层状态机 + `repair_enabled()` 读 env；每请求 clone agent 时新实例~~ **已在 #25 移除**
 - `persist.py`：`persist_chat()` + `extract_config_prompt()` + `extract_result_summary()`，messages 持久化仍由 LangGraph AsyncSqliteSaver 管
 - `gen_ai_attrs.py`：GenAI semconv keys 常量 + `agui_event_to_gen_ai_attrs()` 占位（当前返回 {}）；OpenLLMetry 已自动产同类 attribute，预留未来扩展
-- `agui_tracing.py`：只剩 `TracingLangGraphAGUIAgent` orchestration class（<40 行），组合 3 模块
+- `agui_tracing.py`：只剩 `TracingLangGraphAGUIAgent` orchestration class（<30 行），组合 tracer + persist
 
 **同时给上游开 issue/PR**（Phase 5 #2）：
 
@@ -774,7 +776,7 @@ agents/radar/src/radar/observability/
 
 ### ADR-011：`DeferredLLM` 替代方案 — 缓存工厂 + push invalidation
 
-> ⏳ **2026-04-19 决策已记录，实施待排期**（开了 P1 debt issue，见 M2 milestone）。
+> ✅ **2026-04-19 已实施（#25，3 个 atomic commits）**：DeferredLLM 删除，缓存工厂上线，reload endpoint 打通，补丁层移除。验证实测 AG-UI 事件不再双发（TEXT_START / TOOL_START dup 从 Phase 5#2 A 组的 3/8 降到 0/0，CONTENT consec dup 从 95 降到 3 即 Ollama 自然噪音水平）。
 
 **背景**：Phase 5#2 v3 白盒实验（docs/17 + docs/28 §3）确认所有 AG-UI 事件双发（START / CONTENT / ARGS / END）的根因是 `DeferredLLM`（`BaseChatModel` 子类包装器）+ LangGraph `astream_events`——LangChain callback manager 把 wrapper 和 inner 都当 LLM 各跑一次 `on_chat_model_stream`。`observability/repair.py` 补丁层只治标，根因在 `DeferredLLM` 架构本身。
 
@@ -849,12 +851,13 @@ LangChain 官方 `init_chat_model` 用的 `_ConfigurableModel` 继承 `RunnableS
 - **BFF 忘调 reload-llm** → pull 兜底（TTL=2s 比对 settings hash）
 - **多 worker 场景**（未来）→ 广播 invalidation 或用 Redis pub/sub（当前单进程不需要）
 
-**验证清单（实施时必过）**：
+**验证清单（实施完成）**：
 
-- [ ] 移除 `DeferredLLM` 后，`astream_events` 确认每 token 只触发一次 `on_chat_model_stream`
-- [ ] 移除 `observability/repair.py` 的 `AGUIEventDedup` 后，ag-ui-langgraph 的 `TEXT_MESSAGE_START/CONTENT/END` 和 `TOOL_CALL_START/ARGS/END` 不再双发
-- [ ] Langfuse trace 不再看到双份 LLM span
-- [ ] Settings 改动后 reload endpoint 被调用，下一次 agent invoke 使用新配置
+- [x] 移除 `DeferredLLM` 后，`astream_events` 每 token 只触发一次（实测 A 组 TEXT_START dup 从 3 降到 0）
+- [x] 移除 `observability/repair.py` 的 `AGUIEventDedup` 后，事件不双发（TEXT / TOOL_CALL / ARGS / END 全降为 0）
+- [x] 关 `REPAIR_AGUI_DEDUP` 的 3 轮验证脚本通过（/tmp/verify-step3.py）
+- [ ] Langfuse trace 不再看到双份 LLM span（需用户首次 prod 跑起 Langfuse 栈后观察，本机 OTEL_SDK_DISABLED 跑的验证没覆盖）
+- [ ] Settings 改动后 reload endpoint 被调用（需端到端跑一次 UI Settings 保存 + 查 Python log）
 - [ ] E2E 回归（chat / evaluate / ingest 三条路径）
 
 **关联**：

@@ -40,7 +40,6 @@
 │
 ├── LLM 质量 / token cost / prompt   → Langfuse Traces
 │
-├── 上游 (ag-ui-langgraph) 事件重复  → 设 REPAIR_AGUI_DEDUP=0 → OTel Collector debug exporter
 │
 └── 配置 / 环境变量问题              → `grep -E "(langfuse|sentry|otel)" .env*`
 ```
@@ -66,63 +65,13 @@
 
 ---
 
-## 场景 2：`REPAIR_AGUI_DEDUP=0` 对照实验 — 看上游原始事件流
+## 场景 2：AG-UI 事件双发（已解决，历史参考）
 
-**目的**：agui_tracing 默认开启补丁层吞重复事件。要看上游真原始发了几条，关掉补丁。
-
-**步骤**：
-
-```bash
-# 1. 改 agents/radar/.env 加一行
-REPAIR_AGUI_DEDUP=0
-
-# 2. 重启 Python
-cd agents/radar && uv run radar-serve
-
-# 3. 浏览器发一条 chat 触发 tool call + 流式输出
-
-# 4. 三处看:
-#    a) Python log 中应该没有 "duplicate_start_suppressed" / "orphaned_end_suppressed" (补丁关了)
-#       而且可能有事件重复的副作用 (前端崩 / INCOMPLETE_STREAM 错误)
-#    b) OTel Collector debug stdout: 数 TOOL_CALL_START / TEXT_MESSAGE_START 有几条
-docker compose -f docker/observability/docker-compose.yml logs --tail=500 | \
-  grep -E "(TOOL_CALL_START|TEXT_MESSAGE_START)" | wc -l
-#    c) 前端 console: 看 CopilotKit error 是否复现 (INCOMPLETE_STREAM 等)
-```
-
-**判读**：
-
-| 观察 | 结论 |
-|---|---|
-| 没有重复事件 | 可能 Phase 3 升级 contrib / OpenLLMetry 修了上游, 可以考虑删 repair.py |
-| 仍有重复 TOOL_CALL_START | ag-ui-langgraph 独立 bug, 可以提 upstream issue |
-| 仅 TEXT_MESSAGE_CONTENT 重复 | DeferredLLM 组合效应, 见场景 3 对照 |
-
-**用完恢复**：删 `REPAIR_AGUI_DEDUP=0` 或改 `=1`，重启。
+> 🗄️ **归档**：`REPAIR_AGUI_DEDUP` 补丁层和 `DeferredLLM` 已在 #25 / ADR-011 中移除，AG-UI 事件不再双发。历史排查记录见 [`17-AGUI-STREAMING-DEDUP.md`](./17-AGUI-STREAMING-DEDUP.md)（含 Phase 5#2 v3 白盒验证过程）+ [`28-DEFERRED-LLM-RESEARCH.md`](./28-DEFERRED-LLM-RESEARCH.md)（替代方案调研）。若未来在其他场景再出现事件双发，先查这两份文档比对是否同类问题。
 
 ---
 
-## 场景 3：DeferredLLM 对照实验 — 验证 CONTENT 重复根因
-
-**假设**：CONTENT 重复是项目 `DeferredLLM` 包装器 + LangGraph `astream_events` 捕获所有 `BaseChatModel` 节点的组合效应。
-
-**步骤**：
-
-1. 临时改 `agents/radar/src/radar/agent.py`（或 LLM factory）用 `ChatOpenAI` 直接替代 `DeferredLLM` 包装
-2. 重启 Python + 设 `REPAIR_AGUI_DEDUP=0`
-3. 发一条 chat 流式响应
-4. 看 OTel Collector debug：`TEXT_MESSAGE_CONTENT` 是否还每个 delta 出现两次
-
-**判读**：
-
-- **不再重复** → 根因确认是 DeferredLLM + astream_events 组合，**不是 ag-ui-langgraph bug**
-- **仍重复** → 有其他源头（上游 bug / 另一个 BaseChatModel 嵌套）
-
-**恢复**：git checkout 原 agent.py。
-
----
-
-## 场景 4：Cloud ↔ 自托管 Langfuse 切换
+## 场景 3：Cloud ↔ 自托管 Langfuse 切换
 
 **切 Cloud**（关闭自托管栈，用 Langfuse Cloud）：
 
@@ -151,7 +100,7 @@ bash docker/observability/start.sh
 
 ---
 
-## 场景 5：三端 Sentry 错误 → GlitchTip 失联
+## 场景 4：三端 Sentry 错误 → GlitchTip 失联
 
 **症状**：GlitchTip Issues 列表空的，但应用有 error。
 
@@ -195,7 +144,7 @@ bash docker/observability/start.sh
 
 ---
 
-## 场景 6：SigNoz 看不到 service.name=radar
+## 场景 5：SigNoz 看不到 service.name=radar
 
 **症状**：SigNoz UI Services 页空，或只有 `agent-lab-web` 没有 `radar`。
 
@@ -225,7 +174,7 @@ bash docker/observability/start.sh
 
 ---
 
-## 场景 7：trace_id 在浏览器和 Python 对不上
+## 场景 6：trace_id 在浏览器和 Python 对不上
 
 **症状**：浏览器 chip 显示 `abc123...`，Python log 显示 `xyz789...`。
 
@@ -259,7 +208,7 @@ bash docker/observability/start.sh
 
 ---
 
-## 场景 8：日常开发要不要跑 observability 栈？
+## 场景 7：日常开发要不要跑 observability 栈？
 
 **推荐矩阵**：
 
@@ -268,7 +217,7 @@ bash docker/observability/start.sh
 | 改 UI / 业务逻辑 | 啥都不跑（Python OTel 退化到 stdout）|
 | 调 chat 流 / LangGraph node | Langfuse + OTel Collector |
 | 排查跨端时序 / BFF 性能 | 全栈（SigNoz 额外） |
-| 改 agui_tracing / 事件流 | 全栈 + 关 `REPAIR_AGUI_DEDUP` |
+| 改 agui_tracing / 事件流 | 全栈 + OTel Collector debug exporter 看原始事件 |
 | 调错误处理 / 异常路径 | GlitchTip |
 
 资源开销（M4 Pro 64GB）：全栈约 8-10 GB RAM，可接受。
