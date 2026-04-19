@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import type { ViewType } from '../shared/NavRail';
@@ -66,18 +66,31 @@ export default function InboxView() {
   const setHighlightSpanId = useRadarStore((s) => s.setHighlightSpanId);
   const updateSession = useRadarStore((s) => s.updateSession);
 
+  // ── Local source filter (FR-3) ────────────────────────────
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+
   // ── Derived state ──────────────────────────────────────────
   const activeTab: CategoryTab =
     activeView === 'watching' ? 'watching' : activeView === 'archive' ? 'archive' : 'inbox';
 
+  // 从当前 items 动态提取所有 distinct source (按字母排)
+  const sourceOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((it) => {
+      if (it.source) set.add(it.source);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
   const filteredItems = useMemo(() => {
-    const withStatus = items.map((it) => ({
+    let list = items.map((it) => ({
       ...it,
       status: pending[it.id] ?? it.status,
     }));
-    if (filter === 'all') return withStatus;
-    return withStatus.filter((it) => it.grade === filter);
-  }, [items, filter, pending]);
+    if (filter !== 'all') list = list.filter((it) => it.grade === filter);
+    if (sourceFilter !== 'all') list = list.filter((it) => it.source === sourceFilter);
+    return list;
+  }, [items, filter, sourceFilter, pending]);
 
   const selectedItem = useMemo(
     () => items.find((it) => it.id === selectedId) ?? null,
@@ -168,26 +181,50 @@ export default function InboxView() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="ml-auto flex gap-1">
-          {gradeChips.map((c) => (
-            <Badge
-              key={c.f}
-              variant="outline"
-              className={cn(
-                'cursor-pointer text-[11px] py-[3px] px-2.5 rounded-[14px] gap-[3px]',
-                filter === c.f
-                  ? 'bg-accent-brand text-white border-transparent'
-                  : 'bg-transparent text-text-2 border-border',
-              )}
-              onClick={() => {
-                setFilter(c.f);
+        <div className="ml-auto flex items-center gap-2">
+          {/* Source 过滤 (FR-3) */}
+          {sourceOptions.length > 0 && (
+            <select
+              value={sourceFilter}
+              onChange={(e) => {
+                setSourceFilter(e.target.value);
                 setFocusedIndex(0);
               }}
+              className={cn(
+                'text-[11px] py-[3px] px-2 rounded-[14px] border cursor-pointer bg-transparent',
+                sourceFilter === 'all' ? 'border-border text-text-2' : 'border-accent-brand text-accent-brand',
+              )}
+              aria-label="source filter"
             >
-              {c.f !== 'all' && <span className={cn('grade-dot', c.f)} />}
-              {c.label || c.f}
-            </Badge>
-          ))}
+              <option value="all">所有来源</option>
+              {sourceOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-1">
+            {gradeChips.map((c) => (
+              <Badge
+                key={c.f}
+                variant="outline"
+                className={cn(
+                  'cursor-pointer text-[11px] py-[3px] px-2.5 rounded-[14px] gap-[3px]',
+                  filter === c.f
+                    ? 'bg-accent-brand text-white border-transparent'
+                    : 'bg-transparent text-text-2 border-border',
+                )}
+                onClick={() => {
+                  setFilter(c.f);
+                  setFocusedIndex(0);
+                }}
+              >
+                {c.f !== 'all' && <span className={cn('grade-dot', c.f)} />}
+                {c.label || c.f}
+              </Badge>
+            ))}
+          </div>
         </div>
       </div>
 
