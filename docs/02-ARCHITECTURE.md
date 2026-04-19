@@ -220,6 +220,8 @@ CopilotKit (useAgent / <CopilotChat>)
     ← CopilotKit 渲染消息 + trace
 ```
 
+> ⚠️ **LLM 工厂当前架构缺陷**：`agents/shared/src/agent_lab_shared/llm.py` 的 `DeferredLLM`（`BaseChatModel` 子类包装器）+ LangGraph `astream_events` 导致每 token 双发 `on_chat_model_stream`，所有 AG-UI 事件（START / CONTENT / ARGS / END）被 ag-ui-langgraph adapter 发射两次，靠 `observability/repair.py` 补丁层去重。**已决议**重构为"缓存工厂 + push invalidation"（方案 C），根治双发。调研 [`28-DEFERRED-LLM-RESEARCH.md`](./28-DEFERRED-LLM-RESEARCH.md)，决策 [`22` ADR-011](./22-OBSERVABILITY-ENTERPRISE.md#adr-011)，工单见 GitHub issues label `debt`+`agent`。
+
 ### 2. Ingestion（采集）— 确定性脚本，不涉及 LLM
 
 ```text

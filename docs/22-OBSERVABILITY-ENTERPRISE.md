@@ -736,7 +736,9 @@ agents/radar/src/radar/observability/
 
 **同时给上游开 issue/PR**（Phase 5 #2）：
 
-> ⚠️ **2026-04-18 暂缓**：CONTENT 重复已确认根因是项目 `DeferredLLM` 包装器（`BaseChatModel` 子类）+ LangGraph `astream_events` 捕获所有 BaseChatModel 节点的组合效应——**我们自己的代码决定**，不是 ag-ui-langgraph 的 bug。START 重复根因**未严格验证**（17 文档描述是猜测），需要对照实验（临时绕过 DeferredLLM 跑一次）验证是否真是 ag-ui-langgraph bug 再决定是否提 issue。参见 commit `093bac8` 后的讨论。
+> ✅ **2026-04-19 已完成，结论：无上游 bug，不需提 issue**。对照实验 v3 白盒证明**所有 AG-UI 事件重复（START / CONTENT / TOOL_CALL_ARGS / END）都是 DeferredLLM + astream_events 组合效应**，不是 ag-ui-langgraph 问题。v2 曾错判"TOOL_CALL_START 是上游 bug"，v3 读 adapter `agent.py:717-875` 源码 + 完整 `(id, name, parent_message_id)` tuple 统计后翻转——B 组（纯 ChatOpenAI）真 dup=0，v2 的"dup"是 Ollama 偶发 `parent_message_id=None` 同 id chunk 造成的"维度降维"假阳性。
+>
+> **根治路径**：问题在我们自己的 `DeferredLLM` 架构——继承 `BaseChatModel` 并 override `_astream` 让 LangChain callback manager 把 wrapper 和 inner 各触发一次 on_chat_model_stream。替代方案调研见 [`28-DEFERRED-LLM-RESEARCH.md`](./28-DEFERRED-LLM-RESEARCH.md)，决策见 ADR-011。
 
 **选项对比**：
 
@@ -767,6 +769,100 @@ agents/radar/src/radar/observability/
 **最佳实践**：
 - [LangChain: On Agent Frameworks and Agent Observability](https://blog.langchain.com/on-agent-frameworks-and-agent-observability/)
 - [VictoriaMetrics: AI Agents Observability with OTel](https://victoriametrics.com/blog/ai-agents-observability/)
+
+---
+
+### ADR-011：`DeferredLLM` 替代方案 — 缓存工厂 + push invalidation
+
+> ⏳ **2026-04-19 决策已记录，实施待排期**（开了 P1 debt issue，见 M2 milestone）。
+
+**背景**：Phase 5#2 v3 白盒实验（docs/17 + docs/28 §3）确认所有 AG-UI 事件双发（START / CONTENT / ARGS / END）的根因是 `DeferredLLM`（`BaseChatModel` 子类包装器）+ LangGraph `astream_events`——LangChain callback manager 把 wrapper 和 inner 都当 LLM 各跑一次 `on_chat_model_stream`。`observability/repair.py` 补丁层只治标，根因在 `DeferredLLM` 架构本身。
+
+**决策**：重构 `agents/shared/src/agent_lab_shared/llm.py`，用**内存缓存 LLM 实例 + push invalidation** 替代 `DeferredLLM` 包装器（调研报告方案 C）。
+
+```python
+# 伪代码示意（完整设计见 docs/28 §2.3）
+_cache: dict[str, ChatOpenAI] = {}
+
+def get_llm(task: TaskType = "chat") -> ChatOpenAI:
+    provider, base_url, api_key, model = _resolve_settings(task)
+    key = f"{task}:{provider}:{base_url}:{model}:{hash(api_key)}"
+    if key not in _cache:
+        _cache[key] = _create_llm(provider, base_url, api_key, model)
+    return _cache[key]
+
+def invalidate_cache() -> None:
+    _cache.clear()
+
+# FastAPI endpoint：BFF 在 PUT /api/settings 成功后调用
+@app.post("/internal/reload-llm")
+async def reload_llm(auth: str = Depends(internal_token)):
+    invalidate_cache()
+    return {"ok": True}
+```
+
+`create_radar_agent` 中 `DeferredLLM(task="chat")` → `get_llm("chat")`，直接拿 `ChatOpenAI`，不再包装。
+
+**业内对照**（调研报告 §3.4 摘录）：
+
+| 生态 | 动态 LLM 机制 | 热更能力 |
+|---|---|---|
+| LangChain Classic | `init_chat_model(configurable_fields=...)` | ✅ via runtime config |
+| LangGraph Platform | assistant.config.configurable | ✅ via assistant version |
+| LangChain 1.x `create_agent` | `wrap_model_call` middleware | ✅ |
+| Mastra | `model: (ctx) => string` | ✅ |
+| Vercel AI SDK | 每请求 `new OpenAI({apiKey})` | ✅ 无状态 |
+| **agent-lab 当前** | BaseChatModel 子类包装（DeferredLLM） | ⚠️ **非主流** |
+
+LangChain 官方 `init_chat_model` 用的 `_ConfigurableModel` 继承 `RunnableSerializable` 而非 `BaseChatModel`，**这是避开双 callback 的架构关键**。DeferredLLM 错就错在继承 `BaseChatModel` + override `_astream`。
+
+**选项对比**：
+
+| # | 方案 | 评价 | 选中? |
+|---|---|---|---|
+| A | `init_chat_model configurable_fields`（官方原生） | 代码优雅，但 HTTP 连接池丢失未解 | ❌ |
+| B | `RunnableConfig.configurable` + node 内选 LLM | LangGraph-idiomatic，但 3 个 task 档散落修改多 | ❌ |
+| **C** | **缓存工厂 + push invalidation** | **零请求开销 + <50ms 生效 + 解决双层 + 代码 203→60 行** | ✅ |
+| D | Reload endpoint / SIGHUP 进程级热更 | 和 C 等价，入口不同 | 后备 |
+| E | 进程重启 | 不满足 <2s | ❌ |
+| F | 客户端每请求带 config header | api_key 暴露前端，安全不可接受 | ❌ |
+
+**收益**：
+
+- ✅ `astream_events` 每 token 只跑一次 callback → **双发根治**
+- ✅ `observability/repair.py` 补丁层**可以删**（需实测验证）
+- ✅ httpx Client / TCP / TLS session 缓存命中时复用
+- ✅ DB 查询每 task 只做 1 次（miss 时）
+- ✅ Langfuse / OTel trace 不再双份
+- ✅ 配置变更 <50ms 生效（BFF `PUT /api/settings` 成功后同步 `POST /internal/reload-llm`；失败 fallback TTL=2s pull 兜底）
+
+**推理路径**：
+
+1. 用户质疑"产品需求引入 bug 的实现合理性" → 驱动业内最佳实践调研
+2. 对比发现：**LangChain 官方 `_ConfigurableModel` 继承 RunnableSerializable 不继承 BaseChatModel**，是 DeferredLLM 设计错误的对照标准
+3. 约束条件：必须解决双层、保留配置热更、延迟 <2s、单用户多设备（无并发压力）→ 方案 C 最匹配
+4. 代码量：llm.py 从 203 行（含 DeferredLLM 全 class 98 行）降到 ~60 行 + 一个 POST endpoint
+
+**风险与对策**：
+
+- **新 bug 风险** → 验证清单 4 项必过（见调研报告 §4 末尾）：移除 DeferredLLM 后 `astream_events` 每 token 只跑一次 / 移除 repair.py 后前端不崩 / Langfuse 不再双份 span / reload endpoint 改配置后下一 invoke 生效
+- **BFF 忘调 reload-llm** → pull 兜底（TTL=2s 比对 settings hash）
+- **多 worker 场景**（未来）→ 广播 invalidation 或用 Redis pub/sub（当前单进程不需要）
+
+**验证清单（实施时必过）**：
+
+- [ ] 移除 `DeferredLLM` 后，`astream_events` 确认每 token 只触发一次 `on_chat_model_stream`
+- [ ] 移除 `observability/repair.py` 的 `AGUIEventDedup` 后，ag-ui-langgraph 的 `TEXT_MESSAGE_START/CONTENT/END` 和 `TOOL_CALL_START/ARGS/END` 不再双发
+- [ ] Langfuse trace 不再看到双份 LLM span
+- [ ] Settings 改动后 reload endpoint 被调用，下一次 agent invoke 使用新配置
+- [ ] E2E 回归（chat / evaluate / ingest 三条路径）
+
+**关联**：
+
+- 调研报告全文：[`docs/28-DEFERRED-LLM-RESEARCH.md`](./28-DEFERRED-LLM-RESEARCH.md)
+- Phase 5#2 对照实验：[`docs/17-AGUI-STREAMING-DEDUP.md`](./17-AGUI-STREAMING-DEDUP.md)（Phase 5#2 章节）
+- 前置决策：ADR-010（agui_tracing 拆分 + repair 补丁层）
+- 实施工单：GitHub issues（M2 milestone，label `debt` + `agent`）
 
 ---
 

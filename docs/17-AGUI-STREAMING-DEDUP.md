@@ -144,16 +144,55 @@ DeferredLLM: delta="好" → drop（match=True）
 
 ## 完整去重层级
 
-`agui_tracing.py` 现在有三层去重：
+`observability/repair.py`（原 agui_tracing.py 拆出，ADR-010）有三层去重：
 
-| 层 | 事件类型 | 策略 | 原因 |
+| 层 | 事件类型 | 策略 | 原因（Phase 5#2 v3 验证后） |
 |----|---------|------|------|
-| START 配对 | `TEXT_MESSAGE_START`, `TOOL_CALL_START` | 同 ID 重复 START 吞掉 | Ollama/本地模型的 adapter 重复发射 |
+| START 配对 | `TEXT_MESSAGE_START`, `TOOL_CALL_START` | 同 ID 重复 START 吞掉 | **DeferredLLM 组合效应**（原文描述"Ollama/本地模型 adapter 重复发射"已证伪）|
 | END 孤立 | `TEXT_MESSAGE_END`, `TOOL_CALL_END` | 无对应 START 的 END 吞掉 | 上面吞掉 START 后 END 成孤立 |
 | CONTENT 连续 | `TEXT_MESSAGE_CONTENT` | 连续相同 `(message_id, delta)` 丢弃第二个 | DeferredLLM 包装器导致双重 `on_chat_model_stream` |
+
+**统一根因**：所有三层重复都源自 `DeferredLLM`（`BaseChatModel` 子类）让 LangGraph `astream_events` 对每 token 触发两次 `on_chat_model_stream`，ag-ui-langgraph adapter 对每次 stream 走一遍 `_handle_single_event` 状态机，两次之间 `OnChatModelEnd` 清 `has_current_stream` → 第二次判定为 START 再发一次。根治方案见 [`22` ADR-011](./22-OBSERVABILITY-ENTERPRISE.md#adr-011) + [`28-DEFERRED-LLM-RESEARCH.md`](./28-DEFERRED-LLM-RESEARCH.md)。
+
+## Phase 5#2 对照实验（2026-04-19 白盒验证）
+
+**目标**：验证 START 重复根因是否真是 DeferredLLM 组合效应（与 CONTENT 同源），还是独立的 ag-ui-langgraph 上游 bug。
+
+**设计**：关补丁（`REPAIR_AGUI_DEDUP=0`），Ollama qwen3.5:9b + 2 个 tool 诱导 tool call + 5 rounds，对照两组：
+
+- **A**：`create_react_agent(model=DeferredLLM)` — 当前生产态
+- **B**：`create_react_agent(model=直接 ChatOpenAI)` — 绕过 DeferredLLM
+
+**v2（失败 — 维度降维陷阱）**：用 `len(list) - len(set)` 单 id 维度统计，得出"B 组 TOOL_CALL_START 3/6 dup → 上游 bug"的错误结论，**差点据此给 ag-ui-langgraph 提 issue**。
+
+**v3（白盒 + 完整 tuple）**：读 ag-ui-langgraph `agent.py:717-875` 源码，发现 `TOOL_CALL_START` 带 `(id, name, parent_message_id)` 三字段。capture 完整 tuple 重新统计：
+
+| 组 | TOOL_CALL_START 总数 | **真 dup**（完整 tuple 重复） | ID 冲突（id 同 parent 不同） |
+|---|---|---|---|
+| A (DeferredLLM) | 18 | **8** | 1 |
+| B (直接 ChatOpenAI) | 10 | **0** | 1 |
+
+| 组 | TEXT_MESSAGE_START 总数 | 真 dup |
+|---|---|---|
+| A | 6 | 3 |
+| B | 4 | **0** |
+
+**结论**：
+- **所有真 dup 都在 A 组**，纯 DeferredLLM 组合效应，不是上游 bug
+- v2 的 B 组 "dup" 是 Ollama 偶发 `parent_message_id=None` 同 id chunk（r4 `call_vp17ns0g`），维度降维假阳性
+- 不需给 ag-ui-langgraph 提 issue
+- 根治方向是重构 DeferredLLM（见 [`28`](./28-DEFERRED-LLM-RESEARCH.md)）
+
+**方法论教训**：
+
+1. **黑盒降维统计是假阳性温床**：`set()` 去掉关键辨识字段导致错判
+2. **白盒优先**：读 adapter 源码 20 min 比黑盒测 1h 更能定性
+3. **小样本放大噪音**：3 rounds 的偶发行为被当系统性模式
+4. **缺负控制组**：如果加 `LLM_MOCK` 组可更早发现 B 组 "dup" 是 Ollama 特异性
+5. **"重复"必须定义到所有相关字段**，不是主 key
 
 ## 排查反思
 
 1. **应该先加日志再改代码** — 前端日志一步定位到 Python 侧，后续本应直接加 Python 日志验证去重是否生效，跳过中间两次无效尝试
 2. **验证字段可用性再写过滤逻辑** — `raw_event` 在 Python 侧为 `None`，应该先 `print(event.raw_event)` 确认
-3. **DeferredLLM 作为 BaseChatModel 子类的副作用** — LangGraph `astream_events` 捕获所有 BaseChatModel 节点的事件，包装器模式天然导致重复。这是架构决策的隐含代价，文档应记录
+3. **DeferredLLM 作为 BaseChatModel 子类的副作用** — LangGraph `astream_events` 捕获所有 BaseChatModel 节点的事件，包装器模式天然导致重复。这是架构决策的隐含代价。**Phase 5#2 v3 进一步证明 START / CONTENT / ARGS 全都同源**，补丁层只治标，根治方案见 [`28`](./28-DEFERRED-LLM-RESEARCH.md)。
