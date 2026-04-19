@@ -7,6 +7,12 @@
 - BFF 在 PUT /api/settings 成功后 POST /internal/reload-llm 主动清缓存
 - 下一次 get_llm() 读最新配置重建实例 (<50ms 生效)
 
+LLM Gateway (#4, docker/litellm/):
+- 默认所有请求经 LiteLLM Proxy (http://localhost:4000/v1) 做多 provider 路由
+- provider + model → LiteLLM model_name (例: ollama/qwen3.5:9b, anthropic/claude-sonnet-4-6)
+- api_key 是 LiteLLM master key (真实 provider key 在 LiteLLM 容器 env 里)
+- 设 LITELLM_PROXY_URL=disabled 可降级到直连 provider (调试用)
+
 架构决策见 docs/22-OBSERVABILITY-ENTERPRISE.md ADR-011 + docs/28-DEFERRED-LLM-RESEARCH.md.
 前版本用 DeferredLLM (BaseChatModel 子类包装器), 继承 BaseChatModel +
 override _astream 导致 LangChain callback manager 把 wrapper 和 inner 各触发
@@ -74,20 +80,40 @@ def _resolve_settings(task: TaskType) -> tuple[str, str, str, str]:
 
 
 def _create_llm(provider: str, base_url: str, api_key: str, model: str):
-    """创建 ChatOpenAI 实例。所有 provider 走 OpenAI-compatible API."""
+    """创建 ChatOpenAI 实例.
+
+    默认走 LiteLLM Proxy (#4). 通过环境变量 LITELLM_PROXY_URL=disabled 降级到
+    直连 provider (调试 / 单元测试用).
+    """
+    import os
+
     import httpx
     from langchain_openai import ChatOpenAI
 
     sync_client = httpx.Client(trust_env=False, timeout=180.0)
     async_client = httpx.AsyncClient(trust_env=False, timeout=180.0)
 
-    # Ollama 不需要 API key
-    effective_key = api_key or ("ollama" if provider == "ollama" else "sk-placeholder")
+    gateway_url = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000/v1")
+    if gateway_url == "disabled":
+        # 降级: 直连 provider (Ollama 不需要 key)
+        effective_key = api_key or ("ollama" if provider == "ollama" else "sk-placeholder")
+        return ChatOpenAI(
+            model=model,
+            base_url=base_url,
+            api_key=effective_key,
+            temperature=0.7,
+            http_client=sync_client,
+            http_async_client=async_client,
+        )
 
+    # 走 LiteLLM: model_name 格式 {provider}/{model}, api_key 用 master key
+    # provider/model 的真实 API key 由 LiteLLM 容器 env 管理
+    gateway_model = f"{provider}/{model}" if "/" not in model else model
+    gateway_key = os.environ.get("LITELLM_MASTER_KEY", "sk-litellm-master-dev")
     return ChatOpenAI(
-        model=model,
-        base_url=base_url,
-        api_key=effective_key,
+        model=gateway_model,
+        base_url=gateway_url,
+        api_key=gateway_key,
         temperature=0.7,
         http_client=sync_client,
         http_async_client=async_client,

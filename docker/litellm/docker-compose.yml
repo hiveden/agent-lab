@@ -1,0 +1,38 @@
+# LiteLLM Proxy — 多 provider 统一 OpenAI-compatible gateway (#4, ADR-012 pending)
+# 启动: cd docker/litellm && docker compose up -d
+# 文档: https://docs.litellm.ai/docs/proxy/quick_start
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: agent-lab-litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      # Master key: LiteLLM admin / virtual keys 管理用; 客户端也用这个 key 调 /v1/*
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-master-dev}
+      # 后端 provider 的真实 API keys (config.yaml 里用 os.environ/<KEY> 引用)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+      # 可选: Langfuse cost callback (自动算 cost 并回写 Langfuse 的 trace)
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://host.docker.internal:3010}
+      # ClashX 代理 (访问 Anthropic / OpenAI / Gemini 走 host 代理)
+      HTTPS_PROXY: ${LITELLM_HTTPS_PROXY:-http://host.docker.internal:7890}
+      HTTP_PROXY: ${LITELLM_HTTP_PROXY:-http://host.docker.internal:7890}
+      NO_PROXY: "localhost,127.0.0.1,host.docker.internal,ollama"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health/liveness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

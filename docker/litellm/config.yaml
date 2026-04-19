@@ -1,0 +1,91 @@
+# LiteLLM Proxy 配置 — agent-lab 统一 LLM gateway
+# 文档: https://docs.litellm.ai/docs/proxy/configs
+#
+# model_list: 每个 entry 是一个对外的 "model_name" (用户/客户端 see),
+# 底层 litellm_params 定义实际 provider / 真实 model / credentials.
+
+model_list:
+  # ── Ollama 本地 (无需 API key) ──
+  - model_name: ollama/qwen3.5:9b
+    litellm_params:
+      model: ollama_chat/qwen3.5:9b
+      api_base: os.environ/OLLAMA_API_BASE
+
+  - model_name: ollama/qwen3.5:35b-a3b-nvfp4
+    litellm_params:
+      model: ollama_chat/qwen3.5:35b-a3b-nvfp4
+      api_base: os.environ/OLLAMA_API_BASE
+
+  - model_name: ollama/gemma4:26b
+    litellm_params:
+      model: ollama_chat/gemma4:26b
+      api_base: os.environ/OLLAMA_API_BASE
+
+  # ── Anthropic (Claude) ──
+  - model_name: anthropic/claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: anthropic/claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: anthropic/claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── OpenAI ──
+  - model_name: openai/gpt-5
+    litellm_params:
+      model: openai/gpt-5
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: openai/gpt-5-mini
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ── Google Gemini ──
+  - model_name: gemini/gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini/gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── GLM (智谱) ──
+  - model_name: glm/glm-4.6
+    litellm_params:
+      model: openai/glm-4.6  # GLM 是 OpenAI-compatible
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+  - model_name: glm/glm-4-flash
+    litellm_params:
+      model: openai/glm-4-flash
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+# 全局设置
+litellm_settings:
+  # 自动 cost tracking (写到 response headers, 也可推到 Langfuse)
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  # Token usage / cost 统计默认开 (LiteLLM 内置)
+  set_verbose: false
+  # 请求失败时重试
+  num_retries: 2
+  request_timeout: 180
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # 允许任何客户端 (LiteLLM 自己的 virtual keys 做细粒度, 当前单用户不细分)
+  disable_spend_logs: false
+  # 健康检查端点
+  health_check_interval: 300
