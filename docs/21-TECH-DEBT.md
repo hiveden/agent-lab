@@ -109,13 +109,15 @@
 
 ## P2 优化
 
-### P2 #7 生产环境 `showDevConsole` 仍开
+### P2 #7 `showDevConsole` 首次 prod 部署前必关
 
 **位置**：`apps/web/src/app/agents/radar/components/production/AgentView.tsx:53`
 
 ```typescript
 <CopilotKit key={threadId} runtimeUrl="/api/agent/chat" showDevConsole>
 ```
+
+**前置**：当前无 prod 部署（见 [#1](https://github.com/hiveden/agent-lab/issues/1)），此问题尚未实际暴露。但首次部署 checklist 必须包含此项。
 
 **修复**：`showDevConsole={process.env.NODE_ENV === 'development'}` 或类似
 

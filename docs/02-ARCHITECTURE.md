@@ -290,7 +290,7 @@ RawCollectorItem = {external_id, title, url, raw_payload}
 
 测试环境: .env 文件 (agents/radar/.env)
 生产环境: D1 llm_settings 表 (API key 用 AES-256-GCM 加密)
-          Cloudflare Pages env vars / Fly.io secrets
+          Cloudflare Pages env vars / 云托管 secrets（候选见 #1）
 ```
 
 ---

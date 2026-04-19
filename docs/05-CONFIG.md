@@ -1,10 +1,12 @@
 # 配置管理设计
 
+> ⚠️ **部署现状（2026-04-19）**：当前**无任何 prod 部署**。BFF 的 Cloudflare Pages 工具链 + Python 的 `DEPLOY_ENV=production` 校验代码都已就绪，但从未实际部署。下文涉及"生产 / Fly.io / Cloudflare Pages URL / fly secrets" 等内容为**目标状态**，首次部署前会变动。见 [GitHub #1](https://github.com/hiveden/agent-lab/issues/1)。
+
 ## 原则
 
 1. **零代码切换环境** — 本地 dev / staging / production 仅通过环境变量区分，不改代码
 2. **生产必填项无默认值** — 忘设就启动报错，不会静默用 dev 值跑生产
-3. **利用平台原生机制** — Cloudflare Pages 环境变量 + Fly.io secrets，不自建配置中心
+3. **利用平台原生机制** — Cloudflare Pages 环境变量 + 云托管 secrets（候选 Fly.io / Railway / 自建，见 #1），不自建配置中心
 
 ## 配置层级（优先级递增）
 
@@ -33,10 +35,10 @@
 |------|------|------|------|
 | `DB` | ✅ | wrangler.toml binding | D1 数据库，本地自动创建，生产在 CF Dashboard 绑定 |
 | `RADAR_WRITE_TOKEN` | ✅ | .dev.vars / CF Env | Agent 写入 API 的 Bearer token |
-| `RADAR_AGENT_BASE` | ✅ | .dev.vars / CF Env | Python Agent 服务地址（dev: `http://127.0.0.1:8001`，prod: Fly.io URL） |
+| `RADAR_AGENT_BASE` | ✅ | .dev.vars / CF Env | Python Agent 服务地址（dev: `http://127.0.0.1:8001`，prod: 云托管 URL，见 #1） |
 | `DEFAULT_USER_ID` | — | 默认 `default_user` | MVP 单用户 ID |
 
-### Data Plane (Python / Fly.io)
+### Data Plane (Python Agent — 托管候选见 #1)
 
 | 变量 | 必填 | Dev 默认 | Prod 说明 |
 |------|------|---------|----------|
@@ -49,9 +51,9 @@
 | `LLM_MODEL_CHAT` | — | `glm-4.6` | |
 | `LLM_MODEL_AGENT` | — | `glm-4.6` | Agent chat 用的模型 |
 | `RADAR_WRITE_TOKEN` | ✅ | `dev-radar-token-change-me` | 必须和 CP 侧一致 |
-| `PLATFORM_API_BASE` | ✅ | `http://127.0.0.1:8788` | 生产设为 Cloudflare Pages URL |
+| `PLATFORM_API_BASE` | ✅ | `http://127.0.0.1:8788` | 上 prod 后设为 Cloudflare Pages URL |
 | `RADAR_AGENT_PORT` | — | `8001` | |
-| `HTTPS_PROXY` / `HTTP_PROXY` | — | 本地 ClashX | Fly.io 不需要代理，不设即可 |
+| `HTTPS_PROXY` / `HTTP_PROXY` | — | 本地 ClashX | 云托管通常不需要代理，不设即可 |
 
 ## 环境文件
 
@@ -96,6 +98,8 @@ database_id = "local-placeholder"
 Cloudflare Pages 不读 `wrangler.toml` 的 `[env.production]`，生产 D1 绑定通过 Dashboard 配置。
 
 ## 部署 Checklist
+
+> 📝 **目标状态文档**：以下步骤**尚未执行过任何一次**，是首次部署的参考 runbook。Fly.io 举例仅为候选之一（见 #1）。真实首次部署时以 GitHub #1 的结论为准，并回写本节校正。
 
 ### Cloudflare Pages (CP)
 
