@@ -864,6 +864,68 @@ LangChain 官方 `init_chat_model` 用的 `_ConfigurableModel` 继承 `RunnableS
 - 前置决策：ADR-010（agui_tracing 拆分 + repair 补丁层）
 - 实施工单：GitHub issues（M2 milestone，label `debt` + `agent`）
 
+#### §历史溯源 — 为什么当初选了错方案
+
+**git 考古**：
+
+| commit | 日期 | 事件 |
+|---|---|---|
+| `80a5dbb` | 2026-04-09 | LLM Settings 上线。`get_llm()` 每请求调一次，Agent 架构是 OpenAI-compatible `/v1/chat/completions`，入口一次性拿 LLM，**没有 wrapper 需求**。Co-authored by Claude Opus 4.6 |
+| `9c5d288` | 2026-04-15 (6 天后) | Agent 架构 v2 refactor：删 `/v1/chat/completions`，换 LangGraph ReAct + AG-UI。`create_react_agent(model=...)` 要在 server 启动时注入 LLM，settings 热更失效。**同 commit 引入 `DeferredLLM`**。Co-authored by Claude Opus 4.6 |
+
+**导致错误选择的 5 个原因**：
+
+1. **架构迁移带来新约束，没回到第一性原则**
+   - 80a5dbb 每请求调一次 `get_llm()` 天然读新配置
+   - 9c5d288 后 LangGraph graph 启动时构造，`model=` 是快照
+   - 正确解法：graph 接受动态 selector（LangGraph 1.x `create_react_agent(model=callable)`）或官方 `init_chat_model + configurable_fields`
+   - 实际解法：塞 wrapper 让 graph 外表看像 LLM 但内部每次查配置 → 选了最小侵入但最不标准的路
+
+2. **知识盲区（LangChain 双层接口）**
+   - `Runnable.astream()`（外层）vs `BaseChatModel._astream()`（内层）
+   - `on_chat_model_stream` callback 在 BaseChatModel 层自动触发
+   - 继承 BaseChatModel 并 override `_astream` = 让自己被 callback dispatcher 算一次独立 LLM 调用
+   - 这个知识散落在 LangChain internals，官方文档没显眼位置讲
+   - 当时没读 LangChain 官方 `init_chat_model` 的 `_ConfigurableModel` 源码（它继承 `RunnableSerializable` 而非 `BaseChatModel`，正是避坑关键）
+
+3. **LLM 协作开发的认知外包陷阱**
+   - 两个 commit 都带 `Co-Authored-By: Claude Opus 4.6`
+   - 用户意图正确（配置热更）→ 交给 LLM 实现
+   - LLM 选了训练数据里最常见 pattern：decorator / wrapper + 继承抽象基类
+   - 看起来完全合理（经典 Decorator Pattern）：继承接口、委托内部实例、外部透明
+   - **没做对照调研**（没 web search 当时官方 configurable pattern）
+   - **没读参考实现**（`_ConfigurableModel` 就在 `langchain.chat_models.base`）
+   - 对 LLM 产出的架构代码没白盒 review 一遍
+
+4. **单元测试没覆盖事件流维度**
+   - 当时验证只测"能收到回复内容"
+   - 没有 `astream_events` 事件流验证 / 前端 AG-UI 事件计数 / Langfuse span 数量
+   - 事件流层的错误藏了几个月，直到前端换 react-markdown 后才被暴露（docs/17 "为什么之前没暴露"）
+
+5. **补丁式修复强化了错配架构**
+   - 第一次触碰这个 bug 时加去重补丁层（`AGUIEventDedup`），而不是追问"为什么会有这个事件流"
+   - 治标：每多一种事件类型出问题就加一层去重
+   - 治本：问"为什么 adapter 看到两次 stream" → DeferredLLM
+   - 补丁上线后难拆（正面收益确定，拆有回归风险），把错误架构**固化**
+
+**模式识别**：
+
+| 类型 | 本例中的表现 |
+|---|---|
+| 快速上车陷阱 | 架构迁移时直觉上手，没对照调研 |
+| LLM 认知外包 | Claude 生成 → 直接接纳，未 diff 对标官方实现 |
+| 测试维度单一 | 只测功能不测协议 / 事件 |
+| 补丁式调试 | 症状出现先压症状，不深挖根因 |
+| 局部最优 | DeferredLLM 在"符合 LangChain 接口"局部是对的，在"不引入双 callback"全局是错的 |
+
+**避免下次的做法**：
+
+1. **引入新接口实现前必 web search**：问官方有没有 configurable / dynamic 模式再决定自己写
+2. **LLM 生成的架构代码 = 必须白盒 review**：尤其是继承抽象基类、override 底层方法的
+3. **事件流 / 协议层必须进测试**：不只测结果，测中间事件的计数和形状
+4. **bug 出现 2 次以上，停止打补丁**：第 2 次就该追问"为什么会有这个现象"
+5. **每个重要 wrapper 写 ADR**：DeferredLLM 当时如果逼自己写 ADR 记录"为什么不继承 Runnable"，可能在写的过程中就意识到问题
+
 ---
 
 ## 4. 实施路线图
