@@ -78,7 +78,7 @@ Phase 3（远期）：自建编排层
 | **FastAPI request middleware** | `agents/radar/src/radar/middleware.py` | ✅ 在用，每 request 一个 `request_id` UUID |
 | **`agui_tracing.py` 三层去重** | `agents/radar/src/radar/agui_tracing.py` | ⚠️ 在用但需重构（见 ADR-010） |
 | **LangSmith SDK 配置** | `agents/shared/src/agent_lab_shared/config.py` | ⚠️ 代码就绪，`LANGSMITH_TRACING` 默认 false |
-| **CopilotKit Dev Console** | `apps/web/src/app/agents/radar/components/production/AgentView.tsx` | ⚠️ 已知 bug：0 messages 计数（issue #3208 / #3039） |
+| **CopilotKit Dev Console** | `apps/web/src/app/agents/radar/components/production/AgentView.tsx` | ✅ 2026-04-19 修复（ADR-011 删 DeferredLLM 后自愈，不是 CopilotKit 上游 bug） |
 | **自定义 Exception 体系** | `agents/radar/src/radar/exceptions.py` | ✅ 部分（`RadarError` 基类 + 子类） |
 
 ### 1.2 缺口（按企业级标准）
@@ -112,9 +112,11 @@ Phase 3（远期）：自建编排层
    - v1 处理：`agui_tracing` 连续 `(message_id, delta)` 去重
    - v2 处理：评估是否能换实现避免包装层（GenAI semconv 项目自定义 chat model 标准做法）
 
-3. **CopilotKit Dev Console "0 messages / 0 tool calls"（200 events）**
-   - 根因：CopilotKit 把 AG-UI event 转 `Message` 时丢弃 `rawEvent`（issue #3039）+ `lc_run--<uuid>` 作 message_id 状态机错乱（issue #3208 残留）
-   - v2 影响：**不能依赖 CopilotKit Dev Console 做 observability UI**——本来也不是它的设计目标
+3. **CopilotKit Dev Console "0 messages / 0 tool calls"（200 events）** — ✅ **2026-04-19 已修复（副作用）**
+   - 原假设根因：CopilotKit 把 AG-UI event 转 `Message` 时丢弃 `rawEvent`（issue #3039）+ `lc_run--<uuid>` 作 message_id 状态机错乱（issue #3208 残留）
+   - **实际根因**：是 DeferredLLM 双发的**下游症状**——同 `message_id` 被 `TEXT_MESSAGE_START` 发两次，CopilotKit `convertEventToMessage` 状态机判不清"新 message 还是已有"而计数错乱。ADR-011 删 DeferredLLM 后自愈
+   - **实测**（2026-04-19）：发 chat "帮我执行一次内容评判" → Dev Console 显示 `Messages: 3+, Tool Calls: 2, Errors: 0, Total Events: 200`
+   - 记录留档作"下游症状溯源到上游根因"的分析教训
 
 ---
 
