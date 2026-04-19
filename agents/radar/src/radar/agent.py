@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, NotRequired
 
-from agent_lab_shared.llm import DeferredLLM
+from agent_lab_shared.llm import get_llm
 from copilotkit import CopilotKitState
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
@@ -53,7 +53,9 @@ def create_radar_agent(
     Returns:
         A compiled LangGraph StateGraph ready to be streamed or invoked.
     """
-    llm = DeferredLLM(task="chat")
+    # 缓存工厂: 首次构造后复用, Settings 改动时由 BFF 调 /internal/reload-llm 清缓存
+    # 不再包装 BaseChatModel 避免 astream_events 双发 (见 docs/22 ADR-011)
+    llm = get_llm("chat")
     tools = get_all_tools()
 
     return create_react_agent(

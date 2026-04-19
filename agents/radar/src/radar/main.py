@@ -148,6 +148,25 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# ── Internal: LLM cache invalidation ──
+
+
+@app.post("/internal/reload-llm")
+async def reload_llm(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """清 LLM 实例缓存, 下次 get_llm() 用最新 DB settings 重建.
+
+    调用方: BFF 在 PUT /api/settings 成功后调一次 (fire-and-forget).
+    若 BFF 漏调, 下游偶发脏缓存; 生产可加 TTL pull 兜底 (当前不做).
+
+    见 docs/22 ADR-011.
+    """
+    _check_auth(authorization)
+    from agent_lab_shared.llm import invalidate_cache
+
+    invalidate_cache()
+    return {"status": "ok"}
+
+
 # ── Source Types ──
 
 
