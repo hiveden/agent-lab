@@ -1,9 +1,24 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 // ── Types ────────────────────────────────────────────────
+
+export interface PromotedPreview {
+  grade: string;
+  title: string;
+  url?: string;
+  why?: string;
+  summary?: string;
+}
+
+export interface RejectedPreview {
+  title: string;
+  url?: string;
+  reason: string;
+}
 
 export interface ResultBatch {
   runId: string;
@@ -13,7 +28,10 @@ export interface ResultBatch {
   rejected: number;
   totalMs: number;
   error?: string | null;
-  preview: Array<{ grade: string; title: string; url?: string; why?: string; summary?: string }>;
+  preview: {
+    promoted: PromotedPreview[];
+    rejected: RejectedPreview[];
+  };
 }
 
 interface Props {
@@ -22,6 +40,8 @@ interface Props {
   onNavigate: (index: number) => void;
   running?: boolean;
 }
+
+type ResultTab = 'promoted' | 'rejected';
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -48,6 +68,7 @@ const gradeStyle: Record<string, string> = {
 export default function ResultsPane({ batches, currentIndex, onNavigate, running }: Props) {
   const batch = batches[currentIndex] ?? null;
   const total = batches.length;
+  const [tab, setTab] = useState<ResultTab>('promoted');
 
   if (total === 0 && !running) {
     return (
@@ -108,29 +129,98 @@ export default function ResultsPane({ batches, currentIndex, onNavigate, running
         )}
       </div>
 
+      {/* Tab 切换 promoted / rejected */}
+      {!batch.error && (
+        <div className="flex items-center gap-1 px-4 pt-1 shrink-0 border-b border-border">
+          <button
+            type="button"
+            onClick={() => setTab('promoted')}
+            className={cn(
+              'px-2 py-1 text-[12px] cursor-pointer border-b-2 transition-colors',
+              tab === 'promoted'
+                ? 'border-accent-brand text-text font-semibold'
+                : 'border-transparent text-text-3 hover:text-text-2',
+            )}
+          >
+            Promoted <span className="text-text-3 font-normal">· {batch.preview.promoted.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('rejected')}
+            className={cn(
+              'px-2 py-1 text-[12px] cursor-pointer border-b-2 transition-colors',
+              tab === 'rejected'
+                ? 'border-accent-brand text-text font-semibold'
+                : 'border-transparent text-text-3 hover:text-text-2',
+            )}
+          >
+            Rejected <span className="text-text-3 font-normal">· {batch.preview.rejected.length}</span>
+          </button>
+        </div>
+      )}
+
       {/* Result cards grid */}
       <div className="flex-1 overflow-y-auto p-3">
         {batch.error ? (
           <div className="text-[12px] text-fire p-3 bg-[var(--fire-bg,rgba(239,68,68,.08))] rounded-[8px]">
             {batch.error}
           </div>
-        ) : batch.preview.length === 0 ? (
-          <div className="text-[12px] text-text-3 p-3 text-center">
-            本轮无推荐内容
-          </div>
+        ) : tab === 'promoted' ? (
+          batch.preview.promoted.length === 0 ? (
+            <div className="text-[12px] text-text-3 p-3 text-center">本轮无推荐内容</div>
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-2.5">
+              {batch.preview.promoted.map((item, i) => (
+                <div
+                  key={`${batch.runId}-p-${i}`}
+                  className="border border-border rounded-[8px] p-3 bg-surface hover:shadow-[0_2px_8px_rgba(0,0,0,.06)] transition-shadow"
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Badge
+                      variant="outline"
+                      className={cn('text-[10px] px-1.5 py-0 h-5', gradeStyle[item.grade])}
+                    >
+                      {item.grade}
+                    </Badge>
+                    {item.url && (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-[10px] text-text-3 hover:text-accent-brand no-underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ↗ 原文
+                      </a>
+                    )}
+                  </div>
+                  <div className="font-semibold text-[13px] leading-[1.5] mb-1">{item.title}</div>
+                  {item.summary && (
+                    <div className="text-[12px] text-text-2 leading-[1.5] mb-1.5">
+                      {item.summary}
+                    </div>
+                  )}
+                  {item.why && (
+                    <div className="text-[11px] text-bolt leading-[1.4] p-1.5 px-2 bg-[var(--bolt-bg)] rounded-[4px]">
+                      {item.why}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        ) : batch.preview.rejected.length === 0 ? (
+          <div className="text-[12px] text-text-3 p-3 text-center">本轮无被拒条目</div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-2.5">
-            {batch.preview.map((item, i) => (
+            {batch.preview.rejected.map((item, i) => (
               <div
-                key={`${batch.runId}-${i}`}
-                className="border border-border rounded-[8px] p-3 bg-surface hover:shadow-[0_2px_8px_rgba(0,0,0,.06)] transition-shadow"
+                key={`${batch.runId}-r-${i}`}
+                className="border border-border rounded-[8px] p-3 bg-bg-sunk opacity-90"
               >
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Badge
-                    variant="outline"
-                    className={cn('text-[10px] px-1.5 py-0 h-5', gradeStyle[item.grade])}
-                  >
-                    {item.grade}
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-text-3 text-text-3">
+                    rejected
                   </Badge>
                   {item.url && (
                     <a
@@ -144,17 +234,10 @@ export default function ResultsPane({ batches, currentIndex, onNavigate, running
                     </a>
                   )}
                 </div>
-                <div className="font-semibold text-[13px] leading-[1.5] mb-1">{item.title}</div>
-                {item.summary && (
-                  <div className="text-[12px] text-text-2 leading-[1.5] mb-1.5">
-                    {item.summary}
-                  </div>
-                )}
-                {item.why && (
-                  <div className="text-[11px] text-bolt leading-[1.4] p-1.5 px-2 bg-[var(--bolt-bg)] rounded-[4px]">
-                    {item.why}
-                  </div>
-                )}
+                <div className="font-normal text-[13px] leading-[1.5] mb-1 text-text-2">{item.title}</div>
+                <div className="text-[11px] text-text-3 leading-[1.4] p-1.5 px-2 bg-surface rounded-[4px] border border-border">
+                  {item.reason}
+                </div>
               </div>
             ))}
           </div>

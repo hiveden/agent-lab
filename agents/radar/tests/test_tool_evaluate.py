@@ -120,7 +120,7 @@ def test_evaluate_happy_path(mock_gen_rec, mock_client_cls):
     client.post_items_batch.return_value = {"inserted": 2, "skipped": 0}
     client.update_raw_items_status.return_value = {"updated": 1}
 
-    mock_gen_rec.return_value = items
+    mock_gen_rec.return_value = (items, [])
 
     result = _run_evaluate_sync("radar", None)
 
@@ -128,8 +128,15 @@ def test_evaluate_happy_path(mock_gen_rec, mock_client_cls):
     assert result["promoted"] == 2
     assert result["rejected"] == 1
     assert result["total_ms"] >= 0
-    assert len(result["preview"]) == 2
-    assert result["preview"][0]["grade"] == "bolt"
+    # preview 新结构: {promoted: [...], rejected: [...]}
+    assert "promoted" in result["preview"]
+    assert "rejected" in result["preview"]
+    assert len(result["preview"]["promoted"]) == 2
+    assert result["preview"]["promoted"][0]["grade"] == "bolt"
+    # rejected preview 应包含 raw_items 里未入选的那 1 条, 含 title+reason
+    assert len(result["preview"]["rejected"]) == 1
+    assert "title" in result["preview"]["rejected"][0]
+    assert "reason" in result["preview"]["rejected"][0]
 
     # Verify pipeline calls
     client.get_raw_items.assert_called_once_with(agent_id="radar", status="pending")
@@ -210,7 +217,7 @@ def test_evaluate_persist_error(mock_gen_rec, mock_client_cls):
     client.get_raw_items.return_value = {"raw_items": raw_items}
     client.post_items_batch.side_effect = PlatformAPIError("D1 write error", url="/api/items/batch", method="POST")
 
-    mock_gen_rec.return_value = items
+    mock_gen_rec.return_value = (items, [])
 
     result = _run_evaluate_sync("radar", None)
 
@@ -234,7 +241,7 @@ def test_evaluate_status_update_error(mock_gen_rec, mock_client_cls):
     client.post_items_batch.return_value = {"inserted": 1, "skipped": 0}
     client.update_raw_items_status.side_effect = PlatformAPIError("batch-status 500", url="/api/raw-items/batch-status", method="PATCH")
 
-    mock_gen_rec.return_value = items
+    mock_gen_rec.return_value = (items, [])
 
     result = _run_evaluate_sync("radar", None)
 
@@ -273,7 +280,7 @@ def test_evaluate_custom_prompt(mock_gen_rec, mock_client_cls):
     client.post_items_batch.return_value = {"inserted": 1, "skipped": 0}
     client.update_raw_items_status.return_value = {"updated": 1}
 
-    mock_gen_rec.return_value = items
+    mock_gen_rec.return_value = (items, [])
 
     custom = "Focus only on Rust ecosystem news"
     _run_evaluate_sync("radar", custom)

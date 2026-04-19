@@ -108,6 +108,21 @@ function extractResultBatches(messages: Message[]): ResultBatch[] {
 
       if (r.error && !r.promoted) continue;
 
+      // 兼容新结构 ({promoted: [...], rejected: [...]}) 和旧结构 (array → 都当 promoted)
+      const rawPreview = r.preview as unknown;
+      let preview: ResultBatch['preview'];
+      if (Array.isArray(rawPreview)) {
+        preview = { promoted: rawPreview as ResultBatch['preview']['promoted'], rejected: [] };
+      } else if (rawPreview && typeof rawPreview === 'object') {
+        const p = rawPreview as Partial<ResultBatch['preview']>;
+        preview = {
+          promoted: p.promoted ?? [],
+          rejected: p.rejected ?? [],
+        };
+      } else {
+        preview = { promoted: [], rejected: [] };
+      }
+
       batches.push({
         runId: tc.id,
         startedAt: new Date().toISOString(),
@@ -116,7 +131,7 @@ function extractResultBatches(messages: Message[]): ResultBatch[] {
         rejected: Number(r.rejected ?? 0),
         totalMs: Number(r.total_ms ?? 0),
         error: r.error ? String(r.error) : null,
-        preview: (r.preview as ResultBatch['preview']) ?? [],
+        preview,
       });
     }
   }

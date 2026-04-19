@@ -81,9 +81,9 @@ def _run_evaluate_sync(
     # 2. Convert to stories
     stories = _raw_items_to_stories(raw_items)
 
-    # 3. LLM evaluation
+    # 3. LLM evaluation (返 promoted ItemInputs + rejected [{external_id_suffix, reason}])
     try:
-        items: list[ItemInput] = generate_recommendations(stories, user_prompt)
+        items, rejected_list = generate_recommendations(stories, user_prompt)
     except EvaluationError as e:
         return {"error": f"llm evaluation failed: {e}"}
 
@@ -105,6 +105,11 @@ def _run_evaluate_sync(
     # 5. Update raw_items statuses
     promoted_ids: list[str] = []
     rejected_ids: list[str] = []
+    # Build quick lookup: external_id → (title, url) 和 external_id → reason
+    raw_by_ext: dict[str, dict[str, Any]] = {ri.get("external_id", ""): ri for ri in raw_items}
+    reason_by_ext: dict[str, str] = {
+        r["external_id_suffix"]: r["reason"] for r in rejected_list
+    }
     for ri in raw_items:
         if ri.get("external_id") in promoted_suffixes:
             promoted_ids.append(ri["id"])
@@ -121,14 +126,33 @@ def _run_evaluate_sync(
 
     total_ms = round((time.monotonic() - t0) * 1000, 1)
 
+    # 构造 rejected preview: 以 raw_items 里真实被 reject 的为准,
+    # reason 从 LLM 给的 reason_by_ext 拿; 若 LLM 漏给 reason 则兜底占位.
+    rejected_preview = []
+    for ri in raw_items:
+        ext_id = ri.get("external_id", "")
+        if ext_id in promoted_suffixes:
+            continue
+        rejected_preview.append(
+            {
+                "title": ri.get("title", ""),
+                "url": ri.get("url", ""),
+                "reason": reason_by_ext.get(ext_id, "LLM 未提供理由"),
+            }
+        )
+
     return {
         "evaluated": len(raw_items),
         "promoted": len(promoted_ids),
         "rejected": len(rejected_ids),
         "total_ms": total_ms,
-        "preview": [
-            {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why} for i in items
-        ],
+        "preview": {
+            "promoted": [
+                {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why}
+                for i in items
+            ],
+            "rejected": rejected_preview,
+        },
     }
 
 
