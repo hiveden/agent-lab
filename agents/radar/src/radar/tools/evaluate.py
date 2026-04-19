@@ -15,7 +15,6 @@ from typing import Annotated, Any
 
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.exceptions import PlatformAPIError
-from agent_lab_shared.schema import ItemInput
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import InjectedToolArg, tool
 
@@ -105,11 +104,8 @@ def _run_evaluate_sync(
     # 5. Update raw_items statuses
     promoted_ids: list[str] = []
     rejected_ids: list[str] = []
-    # Build quick lookup: external_id → (title, url) 和 external_id → reason
-    raw_by_ext: dict[str, dict[str, Any]] = {ri.get("external_id", ""): ri for ri in raw_items}
-    reason_by_ext: dict[str, str] = {
-        r["external_id_suffix"]: r["reason"] for r in rejected_list
-    }
+    # 构造 external_id → reason 映射 (供 rejected preview 用)
+    reason_by_ext: dict[str, str] = {r["external_id_suffix"]: r["reason"] for r in rejected_list}
     for ri in raw_items:
         if ri.get("external_id") in promoted_suffixes:
             promoted_ids.append(ri["id"])
@@ -148,8 +144,7 @@ def _run_evaluate_sync(
         "total_ms": total_ms,
         "preview": {
             "promoted": [
-                {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why}
-                for i in items
+                {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why} for i in items
             ],
             "rejected": rejected_preview,
         },

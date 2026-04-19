@@ -44,7 +44,10 @@ def test_parse_evaluation_new_format():
 
 def test_parse_evaluation_legacy_bare_array_falls_back():
     """兼容旧格式: 裸 array 当 promoted, rejected 为空."""
-    raw = '[{"external_id_suffix": "1", "grade": "fire", "title": "T", "summary": "S", "why": "W", "tags": [], "url": "https://a.com"}]'
+    raw = (
+        '[{"external_id_suffix": "1", "grade": "fire", "title": "T", '
+        '"summary": "S", "why": "W", "tags": [], "url": "https://a.com"}]'
+    )
     result = _parse_evaluation(raw)
     assert len(result.promoted) == 1
     assert len(result.rejected) == 0
@@ -52,7 +55,10 @@ def test_parse_evaluation_legacy_bare_array_falls_back():
 
 def test_parse_evaluation_wrapped_items_legacy():
     """兼容旧: {items: [...]}."""
-    raw = '{"items": [{"external_id_suffix": "456", "grade": "bolt", "title": "T2", "summary": "S2", "why": "W2", "tags": [], "url": "https://y.com"}]}'
+    raw = (
+        '{"items": [{"external_id_suffix": "456", "grade": "bolt", "title": "T2", '
+        '"summary": "S2", "why": "W2", "tags": [], "url": "https://y.com"}]}'
+    )
     result = _parse_evaluation(raw)
     assert len(result.promoted) == 1
     assert result.promoted[0].grade == "bolt"

@@ -171,7 +171,9 @@ def test_evaluate_fetch_error(mock_client_cls):
     """PlatformClient.get_raw_items raises → return error dict."""
     client = MagicMock()
     mock_client_cls.return_value = client
-    client.get_raw_items.side_effect = PlatformAPIError("connection refused", url="/api/raw-items", method="GET")
+    client.get_raw_items.side_effect = PlatformAPIError(
+        "connection refused", url="/api/raw-items", method="GET"
+    )
 
     result = _run_evaluate_sync("radar", None)
 
@@ -215,7 +217,9 @@ def test_evaluate_persist_error(mock_gen_rec, mock_client_cls):
     client = MagicMock()
     mock_client_cls.return_value = client
     client.get_raw_items.return_value = {"raw_items": raw_items}
-    client.post_items_batch.side_effect = PlatformAPIError("D1 write error", url="/api/items/batch", method="POST")
+    client.post_items_batch.side_effect = PlatformAPIError(
+        "D1 write error", url="/api/items/batch", method="POST"
+    )
 
     mock_gen_rec.return_value = (items, [])
 
@@ -239,7 +243,9 @@ def test_evaluate_status_update_error(mock_gen_rec, mock_client_cls):
     mock_client_cls.return_value = client
     client.get_raw_items.return_value = {"raw_items": raw_items}
     client.post_items_batch.return_value = {"inserted": 1, "skipped": 0}
-    client.update_raw_items_status.side_effect = PlatformAPIError("batch-status 500", url="/api/raw-items/batch-status", method="PATCH")
+    client.update_raw_items_status.side_effect = PlatformAPIError(
+        "batch-status 500", url="/api/raw-items/batch-status", method="PATCH"
+    )
 
     mock_gen_rec.return_value = (items, [])
 

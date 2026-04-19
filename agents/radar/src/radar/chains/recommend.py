@@ -214,8 +214,7 @@ def generate_recommendations(
         )
 
     rejected_list = [
-        {"external_id_suffix": r.external_id_suffix, "reason": r.reason}
-        for r in result.rejected
+        {"external_id_suffix": r.external_id_suffix, "reason": r.reason} for r in result.rejected
     ]
 
     return items, rejected_list

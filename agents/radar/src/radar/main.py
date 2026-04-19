@@ -74,6 +74,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 允许反序列化 ag_ui.core.types.Context (AG-UI context snapshot 写入 checkpoint)
     # 否则 LangGraph 未来版本会 block 反序列化 + 现在打 warning. 见 #22.
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
     serde = JsonPlusSerializer(allowed_msgpack_modules=[("ag_ui.core.types", "Context")])
     async with AsyncSqliteSaver.from_conn_string(str(_CHECKPOINT_DB)) as saver:
         saver.serde = serde
@@ -93,9 +94,7 @@ app = FastAPI(title="Radar Agent", version="0.1.0", lifespan=lifespan)
 # Phase 3: TracerProvider + BatchSpanProcessor → OTLPSpanExporter → http://localhost:4318
 #  → Collector → Langfuse Cloud。详见 docs/22 ADR-003 / Phase 3。
 # Phase 1 起 OTel 已经在接 traceparent (FastAPIInstrumentor)，Phase 3 增加 exporter。
-_otlp_endpoint = os.environ.get(
-    "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
-).rstrip("/")
+_otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318").rstrip("/")
 _tracer_provider = TracerProvider(resource=Resource.create({"service.name": "radar"}))
 _tracer_provider.add_span_processor(
     BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{_otlp_endpoint}/v1/traces"))

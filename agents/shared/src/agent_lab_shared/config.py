@@ -99,7 +99,8 @@ class Settings(BaseSettings):
 
         if "127.0.0.1" in self.platform_api_base or "localhost" in self.platform_api_base:
             errors.append(
-                f"PLATFORM_API_BASE cannot be localhost in production (got: {self.platform_api_base})"
+                "PLATFORM_API_BASE cannot be localhost in production "
+                f"(got: {self.platform_api_base})"
             )
 
         # CORS 收紧: 生产不能是 "*" 或含 localhost

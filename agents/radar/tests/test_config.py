@@ -1,6 +1,5 @@
 """Tests for config validation."""
 
-
 import pytest
 from pydantic import ValidationError
 

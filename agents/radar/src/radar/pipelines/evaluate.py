@@ -14,7 +14,6 @@ from typing import Any
 from agent_lab_shared.config import settings
 from agent_lab_shared.db import PlatformClient
 from agent_lab_shared.exceptions import PlatformAPIError
-from agent_lab_shared.schema import ItemInput
 
 from ..chains.recommend import generate_recommendations
 from ..exceptions import EvaluationError
@@ -318,9 +317,7 @@ async def run_evaluate_stream(
             pass
 
     # 构造 rejected preview: 以 raw_items 里真实被 reject 的为准, reason 从 LLM 给的拿
-    reason_by_ext: dict[str, str] = {
-        r["external_id_suffix"]: r["reason"] for r in rejected_list
-    }
+    reason_by_ext: dict[str, str] = {r["external_id_suffix"]: r["reason"] for r in rejected_list}
     rejected_preview = []
     for ri in raw_items:
         if ri.get("external_id") in promoted_ext_ids:
@@ -344,8 +341,7 @@ async def run_evaluate_stream(
             "run_id": run_id,
             "preview": {
                 "promoted": [
-                    {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why}
-                    for i in items
+                    {"grade": i.grade, "title": i.title, "url": i.url, "why": i.why} for i in items
                 ],
                 "rejected": rejected_preview,
             },
