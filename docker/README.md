@@ -29,8 +29,9 @@
 | SigNoz | `docker/signoz/` | **:3301** | :4327 gRPC / :4328 HTTP | ~4 GB |
 | Langfuse 自托管 v3 | `docker/langfuse/` | **:3010** | :3010/api/public/otel | ~3 GB |
 | GlitchTip | `docker/glitchtip/` | **:8002** | :8002 (Sentry protocol) | ~1 GB |
+| LiteLLM Proxy (LLM Gateway) | `docker/litellm/` | — | **:4000** OpenAI-compatible API | ~500 MB |
 
-**总资源**：起全栈约 **8-10 GB RAM**，M4 Pro 64GB 轻松。
+**总资源**：起全栈约 **9-11 GB RAM**，M4 Pro 64GB 轻松。LiteLLM 非必需时可单独 stop (Python 侧 `LITELLM_PROXY_URL=disabled` 降级直连)。
 
 ---
 

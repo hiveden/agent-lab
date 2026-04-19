@@ -66,6 +66,7 @@ Agent 对话:
 | OTel Collector | — | :4317 gRPC + :4318 HTTP | 轻 |
 | SigNoz（通用 trace/log/metric）| :3301 | :4327 gRPC + :4328 HTTP | 4GB RAM |
 | Langfuse 自托管 v3（LLM trace + eval）| :3010 | :3010/api/public/otel | 3GB RAM |
+| LiteLLM Proxy（LLM Gateway）| — | :4000 OpenAI-compatible | 0.5GB RAM |
 | GlitchTip（错误聚合）| :8002 | Sentry SDK 协议 | 1GB RAM |
 
 **日常开发**：可观测性栈**非必需**跑起来（Python OTel 默认推 collector，collector 不在时会 retry 但不阻塞服务）。**排查 trace / 错误时**才起：`bash docker/start-all.sh`（或各 compose 分别 `up -d`）。
@@ -156,7 +157,8 @@ uv tool run ruff format agents/
 - **Python 配置**: `agents/shared` 使用 Pydantic Settings
 - **Python Agent**: `agents/radar/src/radar/` — LangGraph agent + pipelines + collectors
 - **Collector Protocol**: `agents/radar/src/radar/collectors/base.py`，4 种：hacker-news / http / rss / grok
-- **LLM 多 Provider**: 所有 provider 走 `ChatOpenAI`（OpenAI-compatible），通过 `base_url` 切换
+- **LLM Gateway**: 所有 Python LLM 调用 → LiteLLM Proxy (`localhost:4000`，`docker/litellm/`) → Ollama / Anthropic / OpenAI / Gemini / GLM。Python `ChatOpenAI` 的 `model` 用 LiteLLM `model_name` 格式（`ollama/qwen3.5:9b` / `anthropic/claude-sonnet-4-6`），`base_url` 固定 LiteLLM。`LITELLM_PROXY_URL=disabled` 降级直连 provider（调试用）。架构见 `docker/litellm/README.md` + #4。
+- **LLM 配置热更**: `get_llm()` 缓存 LLM 实例，BFF `PUT /api/settings` 后 `POST /internal/reload-llm` 清缓存，<50ms 生效。见 `docs/22` ADR-011。
 - **LLM Mock**: `LLM_MOCK=1` 启用 mock 模式（开发默认开启）
 - **Agent 协议**: AG-UI Protocol，Python 端用 `ag-ui-protocol` + `ag-ui-langgraph`
 - **前端 Chat**: CopilotKit 组件，消费 AG-UI SSE 事件
