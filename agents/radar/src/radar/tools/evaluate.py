@@ -69,12 +69,19 @@ def _run_evaluate_sync(
         return {"error": f"fetch raw items failed: {e}"}
 
     if not raw_items:
+        # 空结果时加显式停指令, 防止 LLM 陷入反复调 evaluate 的死循环
+        # (观察到 gemma4:26b 等模型在 0 结果下会重试 tool, 触发 GraphRecursionError)
         return {
             "evaluated": 0,
             "promoted": 0,
             "rejected": 0,
             "total_ms": 0.0,
-            "preview": [],
+            "preview": {"promoted": [], "rejected": []},
+            "message": (
+                "当前无 pending raw_items 可评判 (已全部处理完). "
+                "不要再调用 evaluate 或其他 tool, 直接告诉用户: 当前没有待处理的推荐候选, "
+                "可以稍后再试 (cron 会定时采集新内容) 或在 Runs 页手动触发一次 '同步'."
+            ),
         }
 
     # 2. Convert to stories

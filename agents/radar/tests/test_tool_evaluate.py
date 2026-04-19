@@ -160,7 +160,10 @@ def test_evaluate_no_pending_items(mock_client_cls):
     assert result["evaluated"] == 0
     assert result["promoted"] == 0
     assert result["rejected"] == 0
-    assert result["preview"] == []
+    # preview 为统一 schema {promoted, rejected} (#2.8 后)
+    assert result["preview"] == {"promoted": [], "rejected": []}
+    # 显式 stop 指令防 LLM 死循环 (GraphRecursionError)
+    assert "不要再调用" in result["message"]
 
 
 # ── Error path: fetch raw items fails ──
