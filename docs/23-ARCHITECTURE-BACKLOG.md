@@ -17,11 +17,16 @@
 
 ## 🔴 P0 — 阻塞当前目标
 
-### #1 Python Agent 部署方案
+### #1 BFF + Python Agent 首次部署（双端上线）
 
-**问题**：当前 Python Agent 只能本地 `uv run radar-serve`。BFF 在 Cloudflare Pages，Agent 无托管，chat 链路离线就断。
+**问题**：当前两端都只能本地跑。BFF（apps/web）虽然配好了 Cloudflare Pages 工具链（wrangler.toml + @cloudflare/next-on-pages + `pnpm deploy:web` 脚本），但**从未实际部署**。Python Agent 更是零托管。全链路只能 localhost。
 
-**方案候选**：
+**范围**（一次性打包）：
+1. BFF 首次 Cloudflare Pages 部署 — 真跑一次 `pnpm deploy:web`，拿到 prod URL + D1 远端 schema + secrets（wrangler pages secret put）
+2. Python Agent 部署 — 选一家云托管上线
+3. 两端连通 — `PLATFORM_API_BASE` / CORS / `RADAR_WRITE_TOKEN` 等环境变量在两侧 prod 对上
+
+**Python Agent 方案候选**：
 - Fly.io（简单、便宜、go-to 选择）
 - Railway（DX 最好）
 - 自建 Hetzner / VPS（学运维 + 与 docker/signoz+langfuse+glitchtip 共存）
@@ -29,7 +34,7 @@
 
 **依赖**：无
 
-**估算**：4h（简单 fly.io 部署）- 1d（自建 + docker-compose + reverse proxy）
+**估算**：BFF 首次部署 2-4h（首次配 D1 远端 + secrets + domain） + Python Agent 4h-1d = **半天 - 1.5d**
 
 ---
 
