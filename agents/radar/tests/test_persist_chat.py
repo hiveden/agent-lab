@@ -99,32 +99,17 @@ class TestPersistChat:
                 client.persist_chat(thread_id="t-fail", agent_id="radar")
 
 
-# ── TracingLangGraphAGUIAgent._persist_chat ──
+# ── radar.observability.persist.persist_chat (Phase 5 #1 后拆为独立函数) ──
 
 
-def _PAIRED_EVENTS_KEYS():
-    """Helper to get event type keys for fixture setup."""
-    from ag_ui.core import EventType
-
-    return {EventType.TOOL_CALL_START, EventType.TEXT_MESSAGE_START}
-
-
-class TestAgentPersistChat:
-    """_persist_chat 集成逻辑 — mock graph + PlatformClient。"""
-
-    @pytest.fixture()
-    def agent(self):
-        with patch("radar.agui_tracing.LangGraphAGUIAgent.__init__", return_value=None):
-            from radar.agui_tracing import TracingLangGraphAGUIAgent
-
-            a = TracingLangGraphAGUIAgent()
-            a._active = {k: set() for k in _PAIRED_EVENTS_KEYS()}
-            a.name = "radar"
-            return a
+class TestPersistChatFunction:
+    """persist_chat 独立函数 — mock graph + PlatformClient."""
 
     @pytest.mark.asyncio
-    async def test_persist_chat_calls_platform_client(self, agent):
-        """Phase 2: _persist_chat 只发 metadata，不再传 messages 字段。"""
+    async def test_persist_chat_calls_platform_client(self):
+        """Phase 2: persist_chat 只发 metadata, 不再传 messages 字段."""
+        from radar.observability.persist import persist_chat
+
         mock_state = MagicMock()
         mock_state.values = {
             "messages": [
@@ -132,48 +117,51 @@ class TestAgentPersistChat:
                 SimpleNamespace(type="ai", content="hi"),
             ],
         }
-        agent.graph = AsyncMock()
-        agent.graph.aget_state = AsyncMock(return_value=mock_state)
+        graph = AsyncMock()
+        graph.aget_state = AsyncMock(return_value=mock_state)
 
         with patch("agent_lab_shared.db.PlatformClient") as MockClient:
             mock_client = MockClient.return_value
             mock_client.persist_chat.return_value = {"ok": True}
-            await agent._persist_chat("thread-123")
+            await persist_chat(graph, "thread-123", "radar")
 
-            # Core assertion: messages field must NOT be passed
             mock_client.persist_chat.assert_called_once()
             kwargs = mock_client.persist_chat.call_args.kwargs
             assert "messages" not in kwargs, "Phase 2: messages field should not be sent"
             assert kwargs["thread_id"] == "thread-123"
             assert kwargs["agent_id"] == "radar"
-            # config_prompt / result_summary 在本例中没有匹配的标志性消息 → None
+            # 本例无匹配的标志性消息 → None
             assert kwargs.get("config_prompt") is None
             assert kwargs.get("result_summary") is None
 
     @pytest.mark.asyncio
-    async def test_persist_chat_no_messages_skips(self, agent):
-        """无 messages 时不调用 PlatformClient。"""
+    async def test_persist_chat_no_messages_skips(self):
+        """无 messages 时不调用 PlatformClient."""
+        from radar.observability.persist import persist_chat
+
         mock_state = MagicMock()
         mock_state.values = {"messages": []}
-        agent.graph = AsyncMock()
-        agent.graph.aget_state = AsyncMock(return_value=mock_state)
+        graph = AsyncMock()
+        graph.aget_state = AsyncMock(return_value=mock_state)
 
         with patch("agent_lab_shared.db.PlatformClient") as MockClient:
-            await agent._persist_chat("thread-empty")
+            await persist_chat(graph, "thread-empty", "radar")
             MockClient.return_value.persist_chat.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_persist_chat_failure_does_not_raise(self, agent):
-        """持久化失败不抛异常（best-effort）。"""
+    async def test_persist_chat_failure_does_not_raise(self):
+        """持久化失败不抛异常 (best-effort)."""
+        from radar.observability.persist import persist_chat
+
         mock_state = MagicMock()
         mock_state.values = {
             "messages": [SimpleNamespace(type="human", content="hello")],
         }
-        agent.graph = AsyncMock()
-        agent.graph.aget_state = AsyncMock(return_value=mock_state)
+        graph = AsyncMock()
+        graph.aget_state = AsyncMock(return_value=mock_state)
 
         with patch("agent_lab_shared.db.PlatformClient") as MockClient:
             mock_client = MockClient.return_value
             mock_client.persist_chat.side_effect = Exception("network error")
             # Should NOT raise
-            await agent._persist_chat("thread-fail")
+            await persist_chat(graph, "thread-fail", "radar")
