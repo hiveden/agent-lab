@@ -54,8 +54,8 @@ Agent 对话:
 **全栈企业级可观测性已上线**（Phase 0-5#1 完成，2026-04-18）。详见：
 - [`docs/22-OBSERVABILITY-ENTERPRISE.md`](docs/22-OBSERVABILITY-ENTERPRISE.md) — 架构 / 10 ADR / 28 风险 / 所有 Phase 实施状态
 - [`docs/24-OBSERVABILITY-PLAYBOOK.md`](docs/24-OBSERVABILITY-PLAYBOOK.md) — 排查手册 / Cloud↔自托管切换
-- [`docs/25-TODO.md`](docs/25-TODO.md) — **所有待办统一索引**（指向 21/22/23 散落条目）
-- [`docs/26-KNOWN-BUGS.md`](docs/26-KNOWN-BUGS.md) — **已知 bug 集中索引**（上游 / 下游补丁 / 低优先级）
+- **待办 + 已知 bug**：[GitHub Issues](https://github.com/hiveden/agent-lab/issues)（2026-04-19 迁入。label: `p0-p3` + 领域 + `bug`/`feat`/`debt`/`upstream`；milestone: M1 可 demo 的企业级 / M2 企业级深化）
+- [`docs/25-TODO.md`](docs/25-TODO.md) / [`docs/26-KNOWN-BUGS.md`](docs/26-KNOWN-BUGS.md) — GitHub Issues 快捷入口（label / milestone 过滤链接）
 - [`docs/23-ARCHITECTURE-BACKLOG.md`](docs/23-ARCHITECTURE-BACKLOG.md) — 架构缺口（非 observability）
 - [`docker/README.md`](docker/README.md) — 自托管栈启动顺序 / 端口总表
 
