@@ -66,9 +66,36 @@ def test_production_valid_config():
         GLM_API_KEY="real-key",
         RADAR_WRITE_TOKEN="prod-token-xyz",
         PLATFORM_API_BASE="https://app.example.com",
+        ALLOWED_ORIGINS="https://app.example.com",
     )
     assert s.deploy_env == "production"
     assert s.glm_api_key == "real-key"
+
+
+def test_production_rejects_localhost_origins():
+    """Production 不能用 localhost 作为 CORS origin (#6)."""
+    from agent_lab_shared.config import Settings
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="ALLOWED_ORIGINS must be prod domain"):
+        Settings(
+            _env_file=None,
+            DEPLOY_ENV="production",
+            GLM_API_KEY="real-key",
+            RADAR_WRITE_TOKEN="prod-token-xyz",
+            PLATFORM_API_BASE="https://app.example.com",
+            # 未设 ALLOWED_ORIGINS → 用默认 localhost
+        )
+
+    with pytest.raises(ValidationError, match="ALLOWED_ORIGINS must be prod domain"):
+        Settings(
+            _env_file=None,
+            DEPLOY_ENV="production",
+            GLM_API_KEY="real-key",
+            RADAR_WRITE_TOKEN="prod-token-xyz",
+            PLATFORM_API_BASE="https://app.example.com",
+            ALLOWED_ORIGINS="*",
+        )
 
 
 def test_settings_reads_proxy():

@@ -119,12 +119,13 @@ except Exception as e:  # 不阻塞主流程
 
     _stdlog.getLogger("radar").warning("traceloop_init_failed: %s", e)
 
+_allowed_origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    # 允许 traceparent / tracestate 进入 (W3C Trace Context)
-    allow_headers=["*", "traceparent", "tracestate"],
+    allow_origins=_allowed_origins,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    # 允许 traceparent / tracestate (W3C Trace Context) + 显式列 content-type / auth
+    allow_headers=["content-type", "authorization", "traceparent", "tracestate"],
 )
 app.add_middleware(RequestLoggingMiddleware)
 

@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     # Agent service
     radar_agent_port: int = Field(default=8001, alias="RADAR_AGENT_PORT")
 
+    # CORS: 默认 dev origins; prod 设 ALLOWED_ORIGINS (CSV, 例:
+    # "https://agent-lab.pages.dev,https://www.agent-lab.dev")
+    allowed_origins: str = Field(
+        default="http://localhost:8788,http://127.0.0.1:8788",
+        alias="ALLOWED_ORIGINS",
+    )
+
     # LangSmith (LLM observability — zero-code tracing via env vars)
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
     langsmith_project: str = Field(default="radar", alias="LANGSMITH_PROJECT")
@@ -93,6 +100,15 @@ class Settings(BaseSettings):
         if "127.0.0.1" in self.platform_api_base or "localhost" in self.platform_api_base:
             errors.append(
                 f"PLATFORM_API_BASE cannot be localhost in production (got: {self.platform_api_base})"
+            )
+
+        # CORS 收紧: 生产不能是 "*" 或含 localhost
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        if "*" in origins or any("localhost" in o or "127.0.0.1" in o for o in origins):
+            errors.append(
+                f"ALLOWED_ORIGINS must be prod domain(s) only in production "
+                f"(got: {self.allowed_origins}). Example: "
+                "'https://agent-lab.pages.dev,https://www.agent-lab.dev'"
             )
 
         if errors:
