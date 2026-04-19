@@ -81,17 +81,39 @@ export function startBrowserOtel(): void {
         // request 参数稳。span.attributes['http.url'] 才是 instrumentation
         // 真正写进的 URL。
         applyCustomAttributesOnSpan: (span) => {
-          // 这里 span 是 ReadableSpan-like, 用 attributes 字段
-          const attrs = (span as unknown as { attributes?: Record<string, unknown> }).attributes;
+          // 这里 span 是 ReadableSpan-like, 用 attributes / startTime / endTime 字段
+          const sp = span as unknown as {
+            attributes?: Record<string, unknown>;
+            startTime?: [number, number];
+            endTime?: [number, number];
+          };
+          const attrs = sp.attributes;
           const url = String(attrs?.['http.url'] || '');
-          if (url.includes('/api/agent/chat') || url.includes('/api/copilotkit')) {
-            const traceId = span.spanContext().traceId;
-            // eslint-disable-next-line no-console
-            console.log('[otel.fetch] chat-trace url=', url, 'traceId=', traceId);
-            otelTraceEvents.dispatchEvent(
-              new CustomEvent('chat-trace', { detail: { traceId } }),
-            );
-          }
+
+          // 仅监听 CopilotRuntime 入口 (/api/agent/chat 透传到 Python /agent/chat).
+          // 不匹配 /api/copilotkit (BFF 并未挂该 endpoint, 历史残留).
+          if (!url.includes('/api/agent/chat')) return;
+
+          // 过滤 CopilotKit 短暂 poll / 重连探测: 真实 chat SSE 从 connect 到
+          // stream end 一般 >1s (含 LLM 调用时间), poll/healthcheck 类请求 <500ms.
+          // 若浏览器 SDK 升级后 applyCustomAttributesOnSpan 语义变化,
+          // 此检查 fallback 到"有 duration 才过滤", 0 表示不过滤保旧行为.
+          const durMs = sp.endTime && sp.startTime
+            ? (sp.endTime[0] - sp.startTime[0]) * 1000 + (sp.endTime[1] - sp.startTime[1]) / 1e6
+            : 0;
+          if (durMs > 0 && durMs < 500) return;
+
+          const traceId = span.spanContext().traceId;
+
+          // 同 trace_id 不重复 dispatch (防 instrumentation 内部的 retry/重采)
+          if ((globalThis as { __lastChatTraceId?: string }).__lastChatTraceId === traceId) return;
+          (globalThis as { __lastChatTraceId?: string }).__lastChatTraceId = traceId;
+
+          // eslint-disable-next-line no-console
+          console.log('[otel.fetch] chat-trace url=', url, 'dur=', Math.round(durMs), 'ms traceId=', traceId);
+          otelTraceEvents.dispatchEvent(
+            new CustomEvent('chat-trace', { detail: { traceId } }),
+          );
         },
       }),
     ],

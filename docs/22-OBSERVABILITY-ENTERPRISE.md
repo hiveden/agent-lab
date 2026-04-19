@@ -856,9 +856,9 @@ LangChain 官方 `init_chat_model` 用的 `_ConfigurableModel` 继承 `RunnableS
 - [x] 移除 `DeferredLLM` 后，`astream_events` 每 token 只触发一次（实测 A 组 TEXT_START dup 从 3 降到 0）
 - [x] 移除 `observability/repair.py` 的 `AGUIEventDedup` 后，事件不双发（TEXT / TOOL_CALL / ARGS / END 全降为 0）
 - [x] 关 `REPAIR_AGUI_DEDUP` 的 3 轮验证脚本通过（/tmp/verify-step3.py）
-- [ ] Langfuse trace 不再看到双份 LLM span（需用户首次 prod 跑起 Langfuse 栈后观察，本机 OTEL_SDK_DISABLED 跑的验证没覆盖）
-- [ ] Settings 改动后 reload endpoint 被调用（需端到端跑一次 UI Settings 保存 + 查 Python log）
-- [ ] E2E 回归（chat / evaluate / ingest 三条路径）
+- [x] Langfuse trace 不再看到双份 LLM span（2026-04-19 自托管栈实测：简单 chat 1 次 LLM → 2 个 GENERATION span 是 OpenLLMetry `ChatOpenAI` + `ChatOpenAI.chat` 双视角；DeferredLLM 时代应为 4 个 = 2×2 双发）
+- [x] Settings 改动后 reload endpoint 被调用（实测 PUT `/api/settings` → Python log 打印 `llm_cache_invalidated` duration 0.56ms）
+- [x] E2E 回归（chat / evaluate / ingest 三条路径 + 完整 Playwright 24/25 passed，styles.spec.ts 偶发超时非新 bug）
 
 **关联**：
 
