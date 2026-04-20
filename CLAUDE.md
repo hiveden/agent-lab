@@ -167,6 +167,51 @@ uv tool run ruff format agents/
 - **UI Components**: shadcn/ui，从 `@/components/ui/` 导入
 - **Styling**: Tailwind utilities + CSS variables + `cn()`
 
+## 调研与诊断纪律
+
+### 结论的置信度分级
+
+写结论前先问：**我有几成把握？证据链完整吗？**
+
+| 级别 | 语气 | 要求 |
+|---|---|---|
+| **实锤** | "是 X" | 有完整证据链 + 本地复现 + 对照实验/最小 repro |
+| **推断** | "看起来是 X，依据是 ...，未验证 ..." | 明确标出推断部分 + 未验证假设 |
+| **猜测** | "可能是 X，但未验证" | 明确标 **未验证** + 给出验证步骤 |
+
+### 强制自省清单（下任何 "是 X bug" 结论前）
+
+- [ ] 我**亲自本地复现**过现象吗？（不是读 issue body 转述）
+- [ ] 我有**对照实验**吗？（最小复现 / 官方示例 vs 我们代码）
+- [ ] 我**读过源码**到触发点吗？（不是 guess）
+- [ ] 我**加过日志、E2E 跑过、抓到执行时数据**吗？
+
+**"upstream bug" 是最高成本结论**（意味着我们等、绕、或 patch upstream）。必须 4 项全 ✓ 才能下。否则用 "未确认 / 嫌疑 upstream / 需对照实验验证"。
+
+### 历史教训（2026-04-20）
+
+- **#18** FastAPI OTel span：原 issue body 写 "span 提前关闭" + 引用 3 条 upstream issue，结果**全错**。实际是 #831 extra send/receive 子 span 噪音，修法是 `exclude_spans=["send","receive"]` 一行。commit `d10be90`。
+  - **教训**：不要接受 issue body 的 premise，亲自源码读 + 抓 trace 验证。
+- **#32** Dev Console Agent tab 不同步：连续 3 次错误归因
+  1. ❌ 第一次："upstream bug / CopilotKit Inspector 不订阅 clone" — 没做对照实验
+  2. ❌ 第二次："初始化 race 窗口" — 只凭推测
+  3. ❌ 第三次："E2E 数据证伪 sessionReload 假设" — 盲信 E2E 行为 ≠ 人工行为
+  - ✅ 最终人工验证（setTimeout 1000→5000，消失时刻延迟 5s）：sessionReload 是根因
+  - 未定位层：SWR mutate → CopilotKit onAgentsChanged emit 的精确路径
+  - 完整调研过程 + 日志存档：`docs/checkpoints/issue-32-inspector-debug.log`
+  - 临时 debug 代码保留（SessionDetail `[DBG32...]` / `apps/web/e2e/debug-32-inspector.spec.ts`）下次续查
+  - **教训**:
+    - **关键现象要人类验证，再下结论**（E2E 行为 ≠ 人工行为 ≠ 生产行为）
+    - **先做最小消除实验**（注释掉可疑代码段看是否修复），比"推断 + 改 framework"快 10 倍
+    - "数据巧合"是确认偏差陷阱 — 看到 bug 1s 出现 + 代码里有 1000ms setTimeout 就联想因果，要用控制变量验证
+
+### 工具偏好
+
+- **加日志 > 读代码**：加 `console.log` + 写 E2E 脚本 + 读日志文件，比纯读源码推理更可靠
+- **E2E 触发页面行为 + `page.on('console')` 抓日志到文件**（`/tmp/xxx.log`）—— 不要让用户手动复制浏览器输出
+- **`page.evaluate` 读 DOM/state 内部**（如 `document.querySelector('cpk-web-inspector').agentMessages`）—— 比 UI screenshot 更精确
+- 诊断 Playwright 脚本放 `apps/web/e2e/debug-xx-*.spec.ts`，配套加 project 到 `playwright.config.ts`
+
 ## Environment
 
 需要 `.env` 文件（参考 `.env.example`）。关键变量：
