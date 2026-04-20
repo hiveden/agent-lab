@@ -196,14 +196,15 @@ uv tool run ruff format agents/
   1. ❌ 第一次："upstream bug / CopilotKit Inspector 不订阅 clone" — 没做对照实验
   2. ❌ 第二次："初始化 race 窗口" — 只凭推测
   3. ❌ 第三次："E2E 数据证伪 sessionReload 假设" — 盲信 E2E 行为 ≠ 人工行为
-  - ✅ 最终人工验证（setTimeout 1000→5000，消失时刻延迟 5s）：sessionReload 是根因
-  - 未定位层：SWR mutate → CopilotKit onAgentsChanged emit 的精确路径
+  - ✅ 人工对照实验（setTimeout 1000→5000，消失时刻延迟 5s）锁定 sessionReload 是触发源
+  - ✅ **最终根因（源码链实锤）**：`<CopilotKit>` 未传 `agents__unsafe_dev_only` / `selfManagedAgents` / `headers` / `properties`，`CopilotKitProvider.tsx:271-278` 的 destructure 默认 `= {}` 每次 render 产生新 ref → 同步 effect 重跑 → `setAgents__unsafe_dev_only` 无条件 `notifyAgentsChanged` → `web-inspector` 的 `processAgentsChanged` 调 `subscribeToAgent(master)` 先 `unsubscribeFromAgent(agentId)` 覆盖掉 `onAgentRunStarted` 订的 clone → `syncAgentMessages(master)`（master 从未跑 → messages=[]）→ Inspector 清空。修法：在 `AgentView.tsx` 向 `<CopilotKit>` 传模块级稳定 `EMPTY_OBJ` 引用。commit `<PLACEHOLDER>`。
   - 完整调研过程 + 日志存档：`docs/checkpoints/issue-32-inspector-debug.log`
-  - 临时 debug 代码保留（SessionDetail `[DBG32...]` / `apps/web/e2e/debug-32-inspector.spec.ts`）下次续查
+  - debug 埋点暂保留（SessionDetail `[DBG32...]` / `apps/web/e2e/debug-32-inspector.spec.ts`）
   - **教训**:
     - **关键现象要人类验证，再下结论**（E2E 行为 ≠ 人工行为 ≠ 生产行为）
     - **先做最小消除实验**（注释掉可疑代码段看是否修复），比"推断 + 改 framework"快 10 倍
     - "数据巧合"是确认偏差陷阱 — 看到 bug 1s 出现 + 代码里有 1000ms setTimeout 就联想因果，要用控制变量验证
+    - **"未定位的层" 不等于 "upstream bug 无解"**：issue body 说"SWR mutate → onAgentsChanged 精确路径未定位"，其实继续追一层 `CopilotKitProvider` 源码就能看到 destructure 默认值每 render fresh → effect 重跑。停在"未定位"并接受副作用比完整追源码便宜一次性，但会留下认知债。
 
 ### 工具偏好
 

@@ -9,6 +9,13 @@ import { useAgentSession } from '@/lib/hooks/use-agent-session';
 import SessionSidebar from './SessionSidebar';
 import SessionDetail from './SessionDetail';
 
+// #32 fix: CopilotKitProvider 对 agents__unsafe_dev_only / selfManagedAgents /
+// headers / properties 使用 destructure 默认 `= {}`，每次 render 产生新 ref →
+// 同步 effect 触发 setAgents__unsafe_dev_only → 无条件 notifyAgentsChanged →
+// web-inspector 重订阅 master（clone 订阅被覆盖）→ Dev Console Agent tab 清空。
+// 传模块级稳定引用让 effect deps 稳定，effect 只在 mount 跑一次。
+const EMPTY_OBJ: Record<string, never> = {};
+
 export default function AgentView() {
   const { threadId, switchThread } = usePersistedThread();
   const { sessions, isLoading: sessionsLoading, reload } = useSessionList('radar');
@@ -69,7 +76,15 @@ export default function AgentView() {
         onNew={handleNew}
         onSwitch={switchThread}
       />
-      <CopilotKit key={threadId} runtimeUrl="/api/agent/chat" showDevConsole={process.env.NODE_ENV === 'development'}>
+      <CopilotKit
+        key={threadId}
+        runtimeUrl="/api/agent/chat"
+        showDevConsole={process.env.NODE_ENV === 'development'}
+        agents__unsafe_dev_only={EMPTY_OBJ}
+        selfManagedAgents={EMPTY_OBJ}
+        headers={EMPTY_OBJ}
+        properties={EMPTY_OBJ}
+      >
         <SessionDetail
           threadId={threadId}
           isActiveSession={isActiveSession}
