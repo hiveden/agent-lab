@@ -46,3 +46,6 @@ Thumbs.db
 .idea/
 *.swp
 .gstack/
+
+# private notes — never commit
+.private/
