@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@copilotkit/runtime':
+    hash: 9d6de293b468ffe48065fc81da42e1090ac64b8a245c7ab849884f196ba765c6
+    path: patches/@copilotkit__runtime.patch
+
 importers:
 
   .: {}
@@ -30,7 +35,7 @@ importers:
         version: 1.56.2(@ag-ui/core@0.0.52)(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.2)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(zod@4.3.6)
       '@copilotkit/runtime':
         specifier: ^1.56.2
-        version: 1.56.2(188a3d64ee9c2f9262692e3182c997c7)
+        version: 1.56.2(patch_hash=9d6de293b468ffe48065fc81da42e1090ac64b8a245c7ab849884f196ba765c6)(188a3d64ee9c2f9262692e3182c997c7)
       '@libsql/client':
         specifier: ^0.17.2
         version: 0.17.2
@@ -7978,7 +7983,7 @@ snapshots:
       - encoding
       - graphql
 
-  '@copilotkit/runtime@1.56.2(188a3d64ee9c2f9262692e3182c997c7)':
+  '@copilotkit/runtime@1.56.2(patch_hash=9d6de293b468ffe48065fc81da42e1090ac64b8a245c7ab849884f196ba765c6)(188a3d64ee9c2f9262692e3182c997c7)':
     dependencies:
       '@ag-ui/a2ui-middleware': 0.0.5(@ag-ui/client@0.0.52)(rxjs@7.8.1)
       '@ag-ui/client': 0.0.52

@@ -1,0 +1,26 @@
+diff --git a/dist/v2/runtime/endpoints/single-route-helpers.cjs b/dist/v2/runtime/endpoints/single-route-helpers.cjs
+index a9db9c2d7a3b28e8afb53ee798e4d3ae12d629aa..15285857606a679598636baa3aee071a339ed553 100644
+--- a/dist/v2/runtime/endpoints/single-route-helpers.cjs
++++ b/dist/v2/runtime/endpoints/single-route-helpers.cjs
+@@ -37,7 +37,7 @@ function createJsonRequest(base, body) {
+ 		method: "POST",
+ 		headers,
+ 		body: serializedBody,
+-		signal: base.signal
++		signal: void 0
+ 	});
+ }
+ function createResponseError(message, status) {
+diff --git a/dist/v2/runtime/endpoints/single-route-helpers.mjs b/dist/v2/runtime/endpoints/single-route-helpers.mjs
+index b609a9ec07d85c8ffcbe5641de9c3de50a4fa827..7425fc509e9a582cc603510d1951b4250f2f5e00 100644
+--- a/dist/v2/runtime/endpoints/single-route-helpers.mjs
++++ b/dist/v2/runtime/endpoints/single-route-helpers.mjs
+@@ -36,7 +36,7 @@ function createJsonRequest(base, body) {
+ 		method: "POST",
+ 		headers,
+ 		body: serializedBody,
+-		signal: base.signal
++		signal: void 0
+ 	});
+ }
+ function createResponseError(message, status) {
