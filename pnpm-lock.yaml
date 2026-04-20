@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@ag-ui/client@0.0.52':
+    hash: 1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8
+    path: patches/@ag-ui__client@0.0.52.patch
   '@copilotkit/runtime':
     hash: 9d6de293b468ffe48065fc81da42e1090ac64b8a245c7ab849884f196ba765c6
     path: patches/@copilotkit__runtime.patch
@@ -17,7 +20,7 @@ importers:
     dependencies:
       '@ag-ui/client':
         specifier: ^0.0.52
-        version: 0.0.52
+        version: 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@ag-ui/core':
         specifier: ^0.0.52
         version: 0.0.52
@@ -7475,13 +7478,13 @@ snapshots:
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
 
-  '@ag-ui/a2ui-middleware@0.0.5(@ag-ui/client@0.0.52)(rxjs@7.8.1)':
+  '@ag-ui/a2ui-middleware@0.0.5(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(rxjs@7.8.1)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       clarinet: 0.12.6
       rxjs: 7.8.1
 
-  '@ag-ui/client@0.0.52':
+  '@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)':
     dependencies:
       '@ag-ui/core': 0.0.52
       '@ag-ui/encoder': 0.0.52
@@ -7503,9 +7506,9 @@ snapshots:
       '@ag-ui/core': 0.0.52
       '@ag-ui/proto': 0.0.52
 
-  '@ag-ui/langgraph@0.0.29(@ag-ui/client@0.0.52)(@ag-ui/core@0.0.52)(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))(ws@8.18.0)(zod-to-json-schema@3.25.2(zod@4.3.6))':
+  '@ag-ui/langgraph@0.0.29(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(@ag-ui/core@0.0.52)(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))(ws@8.18.0)(zod-to-json-schema@3.25.2(zod@4.3.6))':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@ag-ui/core': 0.0.52
       '@langchain/core': 1.1.40(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(ws@8.18.0)
       '@langchain/langgraph-sdk': 1.8.8(@langchain/core@1.1.40(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(ws@8.18.0))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))
@@ -7524,9 +7527,9 @@ snapshots:
       - ws
       - zod-to-json-schema
 
-  '@ag-ui/mcp-apps-middleware@0.0.3(@ag-ui/client@0.0.52)(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
+  '@ag-ui/mcp-apps-middleware@0.0.3(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       rxjs: 7.8.1
     transitivePeerDependencies:
@@ -7893,7 +7896,7 @@ snapshots:
 
   '@copilotkit/core@1.56.2(@ag-ui/core@0.0.52)(zod@4.3.6)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@copilotkit/shared': 1.56.2(@ag-ui/core@0.0.52)
       phoenix: 1.8.5
       rxjs: 7.8.1
@@ -7907,7 +7910,7 @@ snapshots:
 
   '@copilotkit/react-core@1.56.2(@types/mdast@4.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(graphql@16.13.2)(micromark-util-types@2.0.2)(micromark@4.0.2)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(zod@4.3.6)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@ag-ui/core': 0.0.52
       '@copilotkit/a2ui-renderer': 1.56.2(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       '@copilotkit/core': 1.56.2(@ag-ui/core@0.0.52)(zod@4.3.6)
@@ -7985,12 +7988,12 @@ snapshots:
 
   '@copilotkit/runtime@1.56.2(patch_hash=9d6de293b468ffe48065fc81da42e1090ac64b8a245c7ab849884f196ba765c6)(188a3d64ee9c2f9262692e3182c997c7)':
     dependencies:
-      '@ag-ui/a2ui-middleware': 0.0.5(@ag-ui/client@0.0.52)(rxjs@7.8.1)
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/a2ui-middleware': 0.0.5(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(rxjs@7.8.1)
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@ag-ui/core': 0.0.52
       '@ag-ui/encoder': 0.0.52
-      '@ag-ui/langgraph': 0.0.29(@ag-ui/client@0.0.52)(@ag-ui/core@0.0.52)(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))(ws@8.18.0)(zod-to-json-schema@3.25.2(zod@4.3.6))
-      '@ag-ui/mcp-apps-middleware': 0.0.3(@ag-ui/client@0.0.52)(@cfworker/json-schema@4.1.1)(zod@3.25.76)
+      '@ag-ui/langgraph': 0.0.29(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(@ag-ui/core@0.0.52)(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))(ws@8.18.0)(zod-to-json-schema@3.25.2(zod@4.3.6))
+      '@ag-ui/mcp-apps-middleware': 0.0.3(@ag-ui/client@0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8))(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       '@ai-sdk/anthropic': 3.0.69(zod@3.25.76)
       '@ai-sdk/google': 3.0.63(zod@3.25.76)
       '@ai-sdk/google-vertex': 3.0.128(zod@3.25.76)
@@ -8046,7 +8049,7 @@ snapshots:
 
   '@copilotkit/shared@1.56.2(@ag-ui/core@0.0.52)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@ag-ui/core': 0.0.52
       '@copilotkit/license-verifier': 0.0.1-a1
       '@segment/analytics-node': 2.3.0
@@ -8062,7 +8065,7 @@ snapshots:
 
   '@copilotkit/web-inspector@1.56.2(@ag-ui/core@0.0.52)(zod@4.3.6)':
     dependencies:
-      '@ag-ui/client': 0.0.52
+      '@ag-ui/client': 0.0.52(patch_hash=1c61194e3e3b16bcacf8722f07dcb4e8bf719ac767a86d4ef2c4f14298cfb3d8)
       '@copilotkit/core': 1.56.2(@ag-ui/core@0.0.52)(zod@4.3.6)
       lit: 3.3.2
       lucide: 0.525.0

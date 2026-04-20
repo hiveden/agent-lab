@@ -2,4 +2,5 @@ packages:
   - 'apps/*'
   - 'packages/*'
 patchedDependencies:
+  '@ag-ui/client@0.0.52': patches/@ag-ui__client@0.0.52.patch
   '@copilotkit/runtime': patches/@copilotkit__runtime.patch
