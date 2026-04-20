@@ -20,14 +20,6 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'debug-32',
-      testMatch: 'debug-32-inspector.spec.ts',
-      use: {
-        viewport: { width: 1440, height: 900 },
-        deviceScaleFactor: 2,
-      },
-    },
-    {
       name: 'production',
       testMatch: 'production.spec.ts',
       use: {

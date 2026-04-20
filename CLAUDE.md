@@ -199,7 +199,8 @@ uv tool run ruff format agents/
   - ✅ 人工对照实验（setTimeout 1000→5000，消失时刻延迟 5s）锁定 sessionReload 是触发源
   - ✅ **最终根因（源码链实锤）**：`<CopilotKit>` 未传 `agents__unsafe_dev_only` / `selfManagedAgents` / `headers` / `properties`，`CopilotKitProvider.tsx:271-278` 的 destructure 默认 `= {}` 每次 render 产生新 ref → 同步 effect 重跑 → `setAgents__unsafe_dev_only` 无条件 `notifyAgentsChanged` → `web-inspector` 的 `processAgentsChanged` 调 `subscribeToAgent(master)` 先 `unsubscribeFromAgent(agentId)` 覆盖掉 `onAgentRunStarted` 订的 clone → `syncAgentMessages(master)`（master 从未跑 → messages=[]）→ Inspector 清空。修法：在 `AgentView.tsx` 向 `<CopilotKit>` 传模块级稳定 `EMPTY_OBJ` 引用。commit `87d2340`。
   - 完整调研过程 + 日志存档：`docs/checkpoints/issue-32-inspector-debug.log`
-  - debug 埋点暂保留（SessionDetail `[DBG32...]` / `apps/web/e2e/debug-32-inspector.spec.ts`）
+  - debug 埋点已清理（SessionDetail `[DBG32...]` / `debug-32-inspector.spec.ts` / `playwright.config.ts` 的 `debug-32` project 均移除）
+  - **决策（2026-04-20）**：放弃在本项目继续追 CopilotKit Dev Console 的 edge case（Inspector mount 晚于 run 导致空、切会话导致 state 空等）。这些是 Dev Console 架构决定的——它是"mount 后往后看"的内存工具，不持久化、不回溯，不适合作为学习阶段的主力观察工具。后续若要深入研究 CopilotKit 生命周期，单开 demo 项目用官方示例。本项目内观察 agent 行为优先用：①Langfuse（`localhost:3010`，LLM trace + input/output）②SigNoz（`localhost:3301`，全栈 trace_id 贯穿）③`/tmp/radar-dev*.log`（Python 侧原始 structlog）。Dev Console 降级为"前端 SSE 收包验证器"。
   - **教训**:
     - **关键现象要人类验证，再下结论**（E2E 行为 ≠ 人工行为 ≠ 生产行为）
     - **先做最小消除实验**（注释掉可疑代码段看是否修复），比"推断 + 改 framework"快 10 倍
