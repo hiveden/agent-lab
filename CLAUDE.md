@@ -197,7 +197,7 @@ uv tool run ruff format agents/
   2. ❌ 第二次："初始化 race 窗口" — 只凭推测
   3. ❌ 第三次："E2E 数据证伪 sessionReload 假设" — 盲信 E2E 行为 ≠ 人工行为
   - ✅ 人工对照实验（setTimeout 1000→5000，消失时刻延迟 5s）锁定 sessionReload 是触发源
-  - ✅ **最终根因（源码链实锤）**：`<CopilotKit>` 未传 `agents__unsafe_dev_only` / `selfManagedAgents` / `headers` / `properties`，`CopilotKitProvider.tsx:271-278` 的 destructure 默认 `= {}` 每次 render 产生新 ref → 同步 effect 重跑 → `setAgents__unsafe_dev_only` 无条件 `notifyAgentsChanged` → `web-inspector` 的 `processAgentsChanged` 调 `subscribeToAgent(master)` 先 `unsubscribeFromAgent(agentId)` 覆盖掉 `onAgentRunStarted` 订的 clone → `syncAgentMessages(master)`（master 从未跑 → messages=[]）→ Inspector 清空。修法：在 `AgentView.tsx` 向 `<CopilotKit>` 传模块级稳定 `EMPTY_OBJ` 引用。commit `<PLACEHOLDER>`。
+  - ✅ **最终根因（源码链实锤）**：`<CopilotKit>` 未传 `agents__unsafe_dev_only` / `selfManagedAgents` / `headers` / `properties`，`CopilotKitProvider.tsx:271-278` 的 destructure 默认 `= {}` 每次 render 产生新 ref → 同步 effect 重跑 → `setAgents__unsafe_dev_only` 无条件 `notifyAgentsChanged` → `web-inspector` 的 `processAgentsChanged` 调 `subscribeToAgent(master)` 先 `unsubscribeFromAgent(agentId)` 覆盖掉 `onAgentRunStarted` 订的 clone → `syncAgentMessages(master)`（master 从未跑 → messages=[]）→ Inspector 清空。修法：在 `AgentView.tsx` 向 `<CopilotKit>` 传模块级稳定 `EMPTY_OBJ` 引用。commit `87d2340`。
   - 完整调研过程 + 日志存档：`docs/checkpoints/issue-32-inspector-debug.log`
   - debug 埋点暂保留（SessionDetail `[DBG32...]` / `apps/web/e2e/debug-32-inspector.spec.ts`）
   - **教训**:
