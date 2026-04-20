@@ -100,7 +100,7 @@ _tracer_provider.add_span_processor(
     BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{_otlp_endpoint}/v1/traces"))
 )
 trace.set_tracer_provider(_tracer_provider)
-FastAPIInstrumentor.instrument_app(app)
+FastAPIInstrumentor.instrument_app(app, exclude_spans=["send", "receive"])
 HTTPXClientInstrumentor().instrument()  # Python httpx 出站调用 (Platform API / Tavily / Grok 等)
 
 # OpenLLMetry: auto-instrument LangChain / OpenAI / Anthropic 等 (Phase 3)
