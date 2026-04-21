@@ -5,6 +5,7 @@ import type { GradeFilter } from '@/app/agents/radar/components/consumption/Item
 import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { MockTrace } from '@/app/agents/radar/traceMock';
 import type { Message } from 'ai';
+import { queryClient } from '@/lib/providers/query-provider';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -266,6 +267,12 @@ export const useRadarStore = create<RadarStore>()(
             toast: failed ? `Applied (${failed} failed)` : 'Changes applied',
           };
         });
+
+        // TanStack Query cache invalidation（ADR-2 Phase 0.3）：
+        // 上面的 set() 已乐观更新本地 items 快照；再触发 useItems 的 query 重取
+        // 保证 cache 与服务端最终一致（双保险：UI 立刻响应 + 后台校准）。
+        // 'items' 前缀匹配所有 useItems 查询（不同 activeView 对应的 status 值）。
+        queryClient.invalidateQueries({ queryKey: ['items'] });
       },
 
       // ── Sessions actions ─────────────────────────────────────

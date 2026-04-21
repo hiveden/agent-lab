@@ -1,6 +1,6 @@
-import useSWR from 'swr';
+import { useQuery } from '@tanstack/react-query';
 import type { ResultSummary } from '@/lib/types';
-import { swrFetcher, SWR_DEFAULT_OPTIONS } from './swr-utils';
+import { swrFetcher } from './fetch-utils';
 
 export interface SessionSummary {
   id: string;
@@ -12,16 +12,18 @@ export interface SessionSummary {
 }
 
 export function useSessionList(agentId: string) {
-  const { data, error, isLoading, mutate } = useSWR<{ sessions: SessionSummary[] }>(
-    `/api/chat/sessions?agent_id=${encodeURIComponent(agentId)}`,
-    swrFetcher,
-    SWR_DEFAULT_OPTIONS,
-  );
+  const query = useQuery({
+    queryKey: ['chat-sessions', 'list', agentId],
+    queryFn: () =>
+      swrFetcher<{ sessions: SessionSummary[] }>(
+        `/api/chat/sessions?agent_id=${encodeURIComponent(agentId)}`,
+      ),
+  });
 
   return {
-    sessions: data?.sessions ?? [],
-    isLoading,
-    error,
-    reload: mutate,
+    sessions: query.data?.sessions ?? [],
+    isLoading: query.isLoading,
+    error: query.error,
+    reload: () => query.refetch(),
   };
 }

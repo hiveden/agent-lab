@@ -1,7 +1,7 @@
-import useSWR from 'swr';
+import { useQuery } from '@tanstack/react-query';
 import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { ItemWithState } from '@/lib/types';
-import { swrFetcher, SWR_DEFAULT_OPTIONS } from './swr-utils';
+import { swrFetcher } from './fetch-utils';
 
 function viewToStatus(view: ViewType): string {
   if (view === 'watching') return 'watching';
@@ -10,16 +10,23 @@ function viewToStatus(view: ViewType): string {
 }
 
 export function useItems(activeView: ViewType) {
-  const isItemView = activeView === 'inbox' || activeView === 'watching' || activeView === 'archive';
+  const isItemView =
+    activeView === 'inbox' || activeView === 'watching' || activeView === 'archive';
   const status = viewToStatus(activeView);
-  const key = isItemView ? `/api/items?agent_id=radar&limit=400&status=${status}` : null;
 
-  const { data, error, isLoading, mutate } = useSWR<{ items: ItemWithState[] }>(key, swrFetcher, SWR_DEFAULT_OPTIONS);
+  const query = useQuery({
+    queryKey: ['items', 'radar', status],
+    queryFn: () =>
+      swrFetcher<{ items: ItemWithState[] }>(
+        `/api/items?agent_id=radar&limit=400&status=${status}`,
+      ),
+    enabled: isItemView,
+  });
 
   return {
-    items: data?.items ?? [],
-    isLoading,
-    error,
-    mutate,
+    items: query.data?.items ?? [],
+    isLoading: query.isLoading,
+    error: query.error,
+    mutate: () => query.refetch(),
   };
 }

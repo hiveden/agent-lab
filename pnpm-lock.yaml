@@ -96,6 +96,15 @@ importers:
       '@sentry/nextjs':
         specifier: ^10.49.0
         version: 10.49.0(@opentelemetry/core@2.7.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(next@15.1.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)(webpack@5.106.2(esbuild@0.17.19))
+      '@tanstack/query-async-storage-persister':
+        specifier: ^5.99.2
+        version: 5.99.2
+      '@tanstack/react-query':
+        specifier: ^5.99.2
+        version: 5.99.2(react@19.0.0)
+      '@tanstack/react-query-persist-client':
+        specifier: ^5.99.2
+        version: 5.99.2(@tanstack/react-query@5.99.2(react@19.0.0))(react@19.0.0)
       ai:
         specifier: ^3.4.33
         version: 3.4.33(openai@4.104.0(ws@8.18.0)(zod@4.3.6))(react@19.0.0)(sswr@2.2.0(svelte@5.55.2))(svelte@5.55.2)(vue@3.5.32(typescript@5.9.3))(zod@4.3.6)
@@ -114,6 +123,9 @@ importers:
       framer-motion:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      idb-keyval:
+        specifier: ^6.2.2
+        version: 6.2.2
       lucide-react:
         specifier: ^1.8.0
         version: 1.8.0(react@19.0.0)
@@ -144,9 +156,6 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
-      swr:
-        specifier: ^2.4.1
-        version: 2.4.1(react@19.0.0)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -3459,6 +3468,26 @@ packages:
   '@tailwindcss/postcss@4.2.2':
     resolution: {integrity: sha512-n4goKQbW8RVXIbNKRB/45LzyUqN451deQK0nzIeauVEqjlI49slUlgKYJM2QyUzap/PcpnS7kzSUmPb1sCRvYQ==}
 
+  '@tanstack/query-async-storage-persister@5.99.2':
+    resolution: {integrity: sha512-FIr13Zv7GiMZGrdxoxOuzolT4xfyLrKWVBMfTZLMGJTc9IceFu2RT+EfH+j5jcKfvjB4T2no3qWSPGHxYmKKWg==}
+
+  '@tanstack/query-core@5.99.2':
+    resolution: {integrity: sha512-1HunU0bXVsR1ZJMZbcOPE6VtaBJxsW809RE9xPe4Gz7MlB0GWwQvuTPhMoEmQ/hIzFKJ/DWAuttIe7BOaWx0tA==}
+
+  '@tanstack/query-persist-client-core@5.99.2':
+    resolution: {integrity: sha512-YYuLGBDGCsUbfN2LuYrfkRCpg1vOUZnK2bn4j7zAZv+m1B4CnLAv58Z3A43d5Cruxvld5udYFeYXw9F6g/pZcQ==}
+
+  '@tanstack/react-query-persist-client@5.99.2':
+    resolution: {integrity: sha512-7+y5+kpaR26X2gdaEv0yQSFLZjqXz4Kn7wqzuYDQrb203b9MlYS3baML1M9hJTiLgi4QGGF2eJDdW8lHAazUow==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.99.2
+      react: ^18 || ^19
+
+  '@tanstack/react-query@5.99.2':
+    resolution: {integrity: sha512-vM91UEe45QUS9ED6OklsVL15i8qKcRqNwpWzPTVWvRPRSEgDudDgHpvyTjcdlwHcrKNa80T+xXYcchT2noPnZA==}
+    peerDependencies:
+      react: ^18 || ^19
+
   '@tanstack/react-virtual@3.13.23':
     resolution: {integrity: sha512-XnMRnHQ23piOVj2bzJqHrRrLg4r+F86fuBcwteKfbIjJrtGxb4z7tIvPVAe4B+4UVwo9G4Giuz5fmapcrnZ0OQ==}
     peerDependencies:
@@ -5301,6 +5330,9 @@ packages:
   iconv-lite@0.7.2:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
     engines: {node: '>=0.10.0'}
+
+  idb-keyval@6.2.2:
+    resolution: {integrity: sha512-yjD9nARJ/jb1g+CvD0tlhUHOrJ9Sy0P8T9MF3YaLlHnSRpwPfpTX0XIvpmw3gAJUmEu3FiICLBDPXVwyEvrleg==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -10820,6 +10852,28 @@ snapshots:
       postcss: 8.5.9
       tailwindcss: 4.2.2
 
+  '@tanstack/query-async-storage-persister@5.99.2':
+    dependencies:
+      '@tanstack/query-core': 5.99.2
+      '@tanstack/query-persist-client-core': 5.99.2
+
+  '@tanstack/query-core@5.99.2': {}
+
+  '@tanstack/query-persist-client-core@5.99.2':
+    dependencies:
+      '@tanstack/query-core': 5.99.2
+
+  '@tanstack/react-query-persist-client@5.99.2(@tanstack/react-query@5.99.2(react@19.0.0))(react@19.0.0)':
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.99.2
+      '@tanstack/react-query': 5.99.2(react@19.0.0)
+      react: 19.0.0
+
+  '@tanstack/react-query@5.99.2(react@19.0.0)':
+    dependencies:
+      '@tanstack/query-core': 5.99.2
+      react: 19.0.0
+
   '@tanstack/react-virtual@3.13.23(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@tanstack/virtual-core': 3.13.23
@@ -12874,6 +12928,8 @@ snapshots:
   iconv-lite@0.7.2:
     dependencies:
       safer-buffer: 2.1.2
+
+  idb-keyval@6.2.2: {}
 
   ieee754@1.2.1: {}
 

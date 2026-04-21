@@ -1,6 +1,6 @@
-import useSWR from 'swr';
+import { useQuery } from '@tanstack/react-query';
 import type { ResultSummary } from '@/lib/types';
-import { swrFetcher, SWR_DEFAULT_OPTIONS } from './swr-utils';
+import { swrFetcher } from './fetch-utils';
 
 /**
  * Agent 会话元数据（Phase 3 A1 之后）。
@@ -18,18 +18,22 @@ export interface AgentSession {
 }
 
 export function useAgentSession(threadId: string | null) {
-  const key = threadId ? `/api/chat/sessions?thread_id=${encodeURIComponent(threadId)}` : null;
+  const query = useQuery({
+    queryKey: ['chat-sessions', 'thread', threadId],
+    queryFn: () =>
+      swrFetcher<AgentSession>(
+        `/api/chat/sessions?thread_id=${encodeURIComponent(threadId ?? '')}`,
+      ),
+    enabled: !!threadId,
+  });
 
-  const { data, error, isLoading, mutate } = useSWR<AgentSession>(
-    key,
-    swrFetcher,
-    SWR_DEFAULT_OPTIONS,
-  );
+  // 保持原 SWR 版语义：只有拿到 session_id 才返回 session 对象
+  const session = query.data?.session_id ? query.data : null;
 
   return {
-    session: data?.session_id ? data : null,
-    isLoading,
-    error,
-    mutate,
+    session,
+    isLoading: query.isLoading,
+    error: query.error,
+    mutate: () => query.refetch(),
   };
 }
