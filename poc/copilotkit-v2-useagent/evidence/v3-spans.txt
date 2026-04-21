@@ -1,0 +1,52 @@
+    ┌─serviceName───────────┬─name────────────────────────────────────────────────────────────────────────────────────────────────┬─parentSpanID─────┬─spanID───────────┐
+ 1. │ agent-lab-poc-browser │ HTTP POST                                                                                           │                  │ 0c7401bc41e92e97 │
+ 2. │ agent-lab-poc-bff     │ POST /api/agent/chat/route                                                                          │ 0c7401bc41e92e97 │ 73b7f9b8cdf30d92 │
+ 3. │ agent-lab-poc-bff     │ resolve page components                                                                             │ 73b7f9b8cdf30d92 │ 97a61053f382df53 │
+ 4. │ agent-lab-poc-bff     │ executing api route (app) /api/agent/chat/route                                                     │ 73b7f9b8cdf30d92 │ a219f98c11319481 │
+ 5. │ agent-lab-poc-bff     │ fetch POST http://localhost:8001/agent/chat                                                         │ a219f98c11319481 │ 1de33618f575d0e2 │
+ 6. │ agent-lab-poc-bff     │ POST                                                                                                │ 1de33618f575d0e2 │ 71d4a53218b24738 │
+ 7. │ radar                 │ POST /agent/chat                                                                                    │ 71d4a53218b24738 │ 2ff06376b8d2d1bb │
+ 8. │ radar                 │ POST /agent/chat                                                                                    │ 71d4a53218b24738 │ 2ff06376b8d2d1bb │
+ 9. │ radar                 │ invoke_agent radar_agent                                                                            │ 2ff06376b8d2d1bb │ afccb38a27d3ad83 │
+10. │ radar                 │ invoke_agent radar_agent                                                                            │ 2ff06376b8d2d1bb │ afccb38a27d3ad83 │
+11. │ radar                 │ radar_agent.workflow                                                                                │ afccb38a27d3ad83 │ cb234d1befa36ac8 │
+12. │ radar                 │ radar_agent.workflow                                                                                │ afccb38a27d3ad83 │ cb234d1befa36ac8 │
+13. │ radar                 │ radar_agent                                                                                         │ cb234d1befa36ac8 │ 6d6cbef7385e17f7 │
+14. │ radar                 │ radar_agent                                                                                         │ cb234d1befa36ac8 │ 6d6cbef7385e17f7 │
+15. │ agent-lab-poc-bff     │ start response                                                                                      │ a219f98c11319481 │ 34e8b6bba8628908 │
+16. │ radar                 │ execute_task agent                                                                                  │ cb234d1befa36ac8 │ 9be4f05a61e7eaf7 │
+17. │ radar                 │ execute_task agent                                                                                  │ cb234d1befa36ac8 │ 9be4f05a61e7eaf7 │
+18. │ radar                 │ agent                                                                                               │ 6d6cbef7385e17f7 │ 09e04ee019b01471 │
+19. │ radar                 │ agent                                                                                               │ 6d6cbef7385e17f7 │ 09e04ee019b01471 │
+20. │ radar                 │ execute_task call_model                                                                             │ 9be4f05a61e7eaf7 │ 2ed954b66dd52102 │
+21. │ radar                 │ execute_task call_model                                                                             │ 9be4f05a61e7eaf7 │ 2ed954b66dd52102 │
+22. │ radar                 │ call_model                                                                                          │ 09e04ee019b01471 │ a99e8b052e594d36 │
+23. │ radar                 │ call_model                                                                                          │ 09e04ee019b01471 │ a99e8b052e594d36 │
+24. │ radar                 │ execute_task RunnableSequence                                                                       │ 9be4f05a61e7eaf7 │ dda2c5c65f963fc5 │
+25. │ radar                 │ execute_task RunnableSequence                                                                       │ 9be4f05a61e7eaf7 │ dda2c5c65f963fc5 │
+26. │ radar                 │ RunnableSequence                                                                                    │ 09e04ee019b01471 │ 4cb1ee27a49ecebb │
+27. │ radar                 │ RunnableSequence                                                                                    │ 09e04ee019b01471 │ 4cb1ee27a49ecebb │
+28. │ radar                 │ Prompt                                                                                              │ 4cb1ee27a49ecebb │ 797512fe1bbd4ed4 │
+29. │ radar                 │ Prompt                                                                                              │ 4cb1ee27a49ecebb │ 797512fe1bbd4ed4 │
+30. │ radar                 │ execute_task Prompt                                                                                 │ dda2c5c65f963fc5 │ fadfd223ce3448f5 │
+31. │ radar                 │ execute_task Prompt                                                                                 │ dda2c5c65f963fc5 │ fadfd223ce3448f5 │
+32. │ radar                 │ ChatOpenAI.chat                                                                                     │ dda2c5c65f963fc5 │ 1119302facc3140a │
+33. │ radar                 │ ChatOpenAI.chat                                                                                     │ dda2c5c65f963fc5 │ 1119302facc3140a │
+34. │ radar                 │ ChatOpenAI                                                                                          │ 4cb1ee27a49ecebb │ d4653668a497b63a │
+35. │ radar                 │ ChatOpenAI                                                                                          │ 4cb1ee27a49ecebb │ d4653668a497b63a │
+36. │ radar                 │ POST                                                                                                │ dda2c5c65f963fc5 │ e8ea586e863a8582 │
+37. │ radar                 │ POST                                                                                                │ dda2c5c65f963fc5 │ e8ea586e863a8582 │
+38. │ radar                 │ execute_task should_continue                                                                        │ 9be4f05a61e7eaf7 │ 53bf87495947f21e │
+39. │ radar                 │ execute_task should_continue                                                                        │ 9be4f05a61e7eaf7 │ 53bf87495947f21e │
+40. │ radar                 │ should_continue                                                                                     │ 09e04ee019b01471 │ dafed8027bcf02a7 │
+41. │ radar                 │ should_continue                                                                                     │ 09e04ee019b01471 │ dafed8027bcf02a7 │
+42. │ agent-lab-poc-bff     │ GET                                                                                                 │ b8af8d0f705dc797 │ 2f8d35ce32a5d0da │
+43. │ agent-lab-poc-bff     │ fetch GET https://copilotkit.gateway.scarf.sh/1.56.2?event=oss.runtime.agent_execution_stream_ended │ a219f98c11319481 │ b8af8d0f705dc797 │
+44. │ radar                 │ POST                                                                                                │ 2ff06376b8d2d1bb │ 81af7d31b74b574a │
+45. │ radar                 │ POST                                                                                                │ 2ff06376b8d2d1bb │ 81af7d31b74b574a │
+46. │ agent-lab-poc-bff     │ fetch POST https://api.segment.io/v1/batch                                                          │ a219f98c11319481 │ 6673a4f6e4613f61 │
+47. │ agent-lab-poc-bff     │ POST                                                                                                │ 6673a4f6e4613f61 │ f0857ae5a9f3d37a │
+48. │ agent-lab-poc-bff     │ fetch POST https://api.segment.io/v1/batch                                                          │ a219f98c11319481 │ 8208d8f94292072f │
+49. │ agent-lab-poc-bff     │ POST                                                                                                │ 8208d8f94292072f │ de79dc3d8f8fec26 │
+50. │ agent-lab-poc-bff     │ fetch POST https://api.segment.io/v1/batch                                                          │ a219f98c11319481 │ 0f1110ddaa615e96 │
+    └─serviceName───────────┴─name────────────────────────────────────────────────────────────────────────────────────────────────┴─parentSpanID─────┴─spanID───────────┘

@@ -1,0 +1,40 @@
+{
+  "t0": 2157.026084,
+  "runningStart": 2176.838375,
+  "runningEnd": 5125.134167,
+  "startLatency": 19.812290999999732,
+  "endLatency": 2948.2957920000003,
+  "verdict": "PASS",
+  "events": [
+    {
+      "ts": 620.730875,
+      "type": "console",
+      "text": "[otel] poc browser sdk started → http://localhost:4318"
+    },
+    {
+      "ts": 1783.855875,
+      "type": "badge",
+      "text": "idle"
+    },
+    {
+      "ts": 2157.026084,
+      "type": "action",
+      "text": "submit via Enter"
+    },
+    {
+      "ts": 2176.838375,
+      "type": "badge",
+      "text": "running…"
+    },
+    {
+      "ts": 5117.368917,
+      "type": "console",
+      "text": "[poc] chat trace 64b4cd1cba053093eb95f5a0cbf35250"
+    },
+    {
+      "ts": 5125.134167,
+      "type": "badge",
+      "text": "idle"
+    }
+  ]
+}

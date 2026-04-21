@@ -17,6 +17,9 @@ receivers:
           allowed_origins:
             - "http://localhost:8788"
             - "http://127.0.0.1:8788"
+            # PoC: copilotkit-v2-useagent (docs/mobile-playbook/11-poc-copilotkit-v2.md)
+            - "http://localhost:3005"
+            - "http://127.0.0.1:3005"
           allowed_headers:
             - "*"
 

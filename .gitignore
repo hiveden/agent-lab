@@ -49,3 +49,6 @@ Thumbs.db
 
 # private notes — never commit
 .private/
+
+# local PoC archives (二进制快照; 源码另行入 git)
+docs/checkpoints/*.tar.gz

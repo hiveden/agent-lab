@@ -159,7 +159,7 @@ uv tool run ruff format agents/
 - **Collector Protocol**: `agents/radar/src/radar/collectors/base.py`，4 种：hacker-news / http / rss / grok
 - **LLM Gateway**: 所有 Python LLM 调用 → LiteLLM Proxy (`localhost:4000`，`docker/litellm/`) → Ollama / Anthropic / OpenAI / Gemini / GLM。Python `ChatOpenAI` 的 `model` 用 LiteLLM `model_name` 格式（`ollama/qwen3.5:9b` / `anthropic/claude-sonnet-4-6`），`base_url` 固定 LiteLLM。`LITELLM_PROXY_URL=disabled` 降级直连 provider（调试用）。架构见 `docker/litellm/README.md` + #4。
 - **LLM 配置热更**: `get_llm()` 缓存 LLM 实例，BFF `PUT /api/settings` 后 `POST /internal/reload-llm` 清缓存，<50ms 生效。见 `docs/22` ADR-011。
-- **LLM Mock**: `LLM_MOCK=1` 启用 mock 模式（开发默认开启）
+- **LLM Mock**: ⚠️ `LLM_MOCK` 已废弃（当前 `llm.py` 不再读此 env）。调试绕开 LiteLLM 用 `LITELLM_PROXY_URL=disabled`（直连 provider）。历史 `LLM_MOCK=1` 的语义已无实现。
 - **Agent 协议**: AG-UI Protocol，Python 端用 `ag-ui-protocol` + `ag-ui-langgraph`
 - **前端 Chat**: CopilotKit 组件，消费 AG-UI SSE 事件
 - **State**: Zustand store 管理 UI 状态，不在 RadarWorkspace 中添加 useState
@@ -217,7 +217,8 @@ uv tool run ruff format agents/
 ## Environment
 
 需要 `.env` 文件（参考 `.env.example`）。关键变量：
-- `LLM_MOCK` / `LLM_PROVIDER` / `GLM_API_KEY`: LLM 配置
+- `LLM_PROVIDER` / `GLM_API_KEY` / `LLM_MODEL_*`: LLM 配置（`LLM_MOCK` 已废弃，详见 Key Conventions 的 LLM Mock 条目）
+- `LITELLM_PROXY_URL=disabled`: 绕开 LiteLLM 直连 provider，调试用
 - `GROK_API_KEY`: Grok API key（Twitter/X 采集用）
 - `RADAR_WRITE_TOKEN`: Agent 写入认证 token
 - `PLATFORM_API_BASE`: Python Agent 回调 Next.js 的地址（默认 `http://127.0.0.1:8788`）

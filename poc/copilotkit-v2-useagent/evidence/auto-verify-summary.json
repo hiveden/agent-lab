@@ -1,0 +1,13 @@
+{
+  "V5": {
+    "verdict": "PASS",
+    "beforeOffline": 0,
+    "atRecover": 162,
+    "finalLen": 724
+  },
+  "V7": {
+    "verdict": "PASS",
+    "startLatency": 19.812290999999732,
+    "endLatency": 2948.2957920000003
+  }
+}
