@@ -112,16 +112,6 @@ export default function RadarWorkspace() {
     [items, selectedId],
   );
 
-  const handleChatUpdate = useCallback(
-    (msgs: import('ai').Message[]) => {
-      if (!selectedId) return;
-      updateSession(selectedId, msgs);
-    },
-    [selectedId, updateSession],
-  );
-
-  const currentSession = selectedId ? sessions[selectedId] : null;
-
   const itemsForList = useMemo(
     () =>
       filteredItems.map((it) => ({
@@ -315,27 +305,15 @@ export default function RadarWorkspace() {
     [setSelectedId],
   );
 
+  // Step 4: Mobile swipe 不再立即 fetch，走 pending queue。
+  // 底部 PendingChangesSheet 显示待提交数量，用户点 Apply 才真正提交。
+  // 和 Desktop 的 W/D/X 键盘操作语义一致。
+  // 保持 async 签名以兼容 MobileShell props，内部无 await 即立即 resolve。
   const mobileSwipeAction = useCallback(
     async (itemId: string, action: 'watching' | 'dismissed') => {
       markPending(itemId, action);
-      try {
-        await fetch(`/api/items/${itemId}/state`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ status: action }),
-        });
-        setItems(
-          items.map((it) =>
-            it.id === itemId ? { ...it, status: action } : it,
-          ),
-        );
-      } catch {
-        // Revert on failure
-      }
-      // Remove from pending — use store's markPending to toggle off
-      markPending(itemId, action);
     },
-    [markPending, setItems, items],
+    [markPending],
   );
 
   // ─── Shell 选择 ─────────────────────────────────────────────
@@ -351,14 +329,15 @@ export default function RadarWorkspace() {
         filter={filter}
         itemsForList={itemsForList}
         selectedItem={selectedItem}
-        currentSession={currentSession}
         pending={pending}
+        applyBusy={applyBusy}
         setFilter={setFilter}
         setSelectedId={setSelectedId}
         handleViewChange={handleViewChange}
         mobileSelectItem={mobileSelectItem}
         mobileSwipeAction={mobileSwipeAction}
-        handleChatUpdate={handleChatUpdate}
+        applyPending={applyPending}
+        discardPending={discardPending}
       />
     );
   }

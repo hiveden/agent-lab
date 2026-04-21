@@ -13,12 +13,12 @@
  */
 
 import { Toaster } from '@/components/ui/sonner';
-import type { Message } from 'ai';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
 import type { ViewType } from '../components/shared/NavRail';
 import type { GradeFilter } from '../components/consumption/ItemsList';
 import MobileChatView from '../components/consumption/MobileChatView';
 import MobileItemsList from '../components/consumption/MobileItemsList';
+import PendingChangesSheet from '../components/consumption/PendingChangesSheet';
 import RunsView from '../components/production/RunsView';
 import AgentView from '../components/production/AgentView';
 import AttentionView from '../components/consumption/AttentionView';
@@ -30,15 +30,16 @@ export interface MobileShellProps {
   filter: GradeFilter;
   itemsForList: ItemWithState[];
   selectedItem: ItemWithState | null;
-  currentSession: { session_id: string | null; messages: Message[] } | null | undefined;
   pending: Record<string, ItemStatus>;
+  applyBusy: boolean;
 
   setFilter: (f: GradeFilter) => void;
   setSelectedId: (id: string | null) => void;
   handleViewChange: (view: ViewType) => void;
   mobileSelectItem: (item: ItemWithState) => void;
   mobileSwipeAction: (itemId: string, action: 'watching' | 'dismissed') => Promise<void>;
-  handleChatUpdate: (messages: Message[]) => void;
+  applyPending: () => Promise<void>;
+  discardPending: () => void;
 }
 
 export default function MobileShell(props: MobileShellProps) {
@@ -47,26 +48,24 @@ export default function MobileShell(props: MobileShellProps) {
     filter,
     itemsForList,
     selectedItem,
-    currentSession,
     pending,
+    applyBusy,
     setFilter,
     setSelectedId,
     handleViewChange,
     mobileSelectItem,
     mobileSwipeAction,
-    handleChatUpdate,
+    applyPending,
+    discardPending,
   } = props;
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[var(--ag-bg)] text-[var(--ag-text)]">
-      {selectedItem && currentSession !== undefined ? (
+      {selectedItem ? (
         <MobileChatView
           key={selectedItem.id}
           item={selectedItem}
-          initialMessages={currentSession?.messages ?? []}
-          sessionId={currentSession?.session_id ?? null}
           onBack={() => setSelectedId(null)}
-          onChatUpdate={handleChatUpdate}
         />
       ) : (
         <>
@@ -90,6 +89,12 @@ export default function MobileShell(props: MobileShellProps) {
               />
             )}
           </div>
+          <PendingChangesSheet
+            pending={pending}
+            busy={applyBusy}
+            onApply={applyPending}
+            onDiscard={discardPending}
+          />
           <TabBar activeView={activeView} onViewChange={handleViewChange} />
         </>
       )}

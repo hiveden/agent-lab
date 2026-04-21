@@ -864,3 +864,12 @@ kbd.k {
 }
 
 /* Tablet: cards grid handled by auto-fill minmax in Tailwind */
+
+/* ═══════════════════════════════════════════════════════════
+   CopilotKit Web Inspector — mobile 隐藏（compact viewport 不需要调试浮窗）
+   Desktop / Tablet 保留（AgentView 调试用）。
+   enableInspector={false} 作为 prop 方案同时生效，此 CSS 是兜底。
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  cpk-web-inspector { display: none !important; }
+}
