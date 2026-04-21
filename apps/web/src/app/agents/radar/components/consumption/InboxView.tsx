@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { useRadarStore } from '@/lib/stores/radar-store';
+import { useSelectedItem } from '@/lib/hooks/use-selected-item';
 import type { ViewType } from '../shared/NavRail';
 import ChatView from './ChatView';
 import TraceDrawer from './TraceDrawer';
@@ -46,7 +47,8 @@ export default function InboxView() {
   const items = useRadarStore((s) => s.items);
   const activeView = useRadarStore((s) => s.activeView);
   const filter = useRadarStore((s) => s.filter);
-  const selectedId = useRadarStore((s) => s.selectedId);
+  // Step 2: selectedId 从 URL 读（见 lib/hooks/use-selected-item.ts）
+  const { selectedId, setSelectedId } = useSelectedItem();
   const pending = useRadarStore((s) => s.pending);
   const sessions = useRadarStore((s) => s.sessions);
   const traceOpen = useRadarStore((s) => s.traceOpen);
@@ -57,7 +59,7 @@ export default function InboxView() {
 
   // ── Store actions ──────────────────────────────────────────
   const setFilter = useRadarStore((s) => s.setFilter);
-  const setSelectedId = useRadarStore((s) => s.setSelectedId);
+  // setSelectedId 来自 useSelectedItem（上方）
   const setFocusedIndex = useRadarStore((s) => s.setFocusedIndex);
   const handleViewChange = useRadarStore((s) => s.handleViewChange);
   const markPending = useRadarStore((s) => s.markPending);

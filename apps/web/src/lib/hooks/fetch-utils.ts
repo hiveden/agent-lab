@@ -8,6 +8,3 @@ export const fetchJSON = <T = unknown>(url: string): Promise<T> =>
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json() as Promise<T>;
   });
-
-// 向后兼容别名（ADR-2 Step 0.4 过渡期）。使用 TanStack Query 的新代码请用 fetchJSON。
-export const swrFetcher = fetchJSON;

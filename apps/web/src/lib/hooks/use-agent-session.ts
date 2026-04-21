@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ResultSummary } from '@/lib/types';
-import { swrFetcher } from './fetch-utils';
+import { fetchJSON } from './fetch-utils';
 
 /**
  * Agent 会话元数据（Phase 3 A1 之后）。
@@ -21,7 +21,7 @@ export function useAgentSession(threadId: string | null) {
   const query = useQuery({
     queryKey: ['chat-sessions', 'thread', threadId],
     queryFn: () =>
-      swrFetcher<AgentSession>(
+      fetchJSON<AgentSession>(
         `/api/chat/sessions?thread_id=${encodeURIComponent(threadId ?? '')}`,
       ),
     enabled: !!threadId,

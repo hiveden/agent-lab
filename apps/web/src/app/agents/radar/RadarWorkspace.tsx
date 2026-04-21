@@ -4,25 +4,21 @@ import { useCallback, useEffect, useMemo } from 'react';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import { useItems } from '@/lib/hooks/use-items';
-import { useViewport, type Viewport } from '@/lib/hooks/useViewport';
+import { useViewport } from '@/lib/hooks/useViewport';
+import { useSelectedItem } from '@/lib/hooks/use-selected-item';
 import { type PaletteAction } from './components/shared/CommandPalette';
 import MobileShell from './shells/MobileShell';
-import TabletShell from './shells/TabletShell';
 import DesktopShell from './shells/DesktopShell';
 import { toast } from 'sonner';
 
-export interface RadarWorkspaceProps {
-  /** SSR / UA Hint 预判初值，减少首屏闪烁（见 02-breakpoints-and-shells.md §2）。 */
-  initialShell?: Viewport;
-}
-
-export default function RadarWorkspace({ initialShell }: RadarWorkspaceProps = {}) {
-  const viewport = useViewport(initialShell);
+export default function RadarWorkspace() {
+  const viewport = useViewport();
 
   // ── Store selectors (individual to avoid unnecessary re-renders) ──
   const activeView = useRadarStore((s) => s.activeView);
   const filter = useRadarStore((s) => s.filter);
-  const selectedId = useRadarStore((s) => s.selectedId);
+  // Step 2: selectedId 从 Zustand 搬到 URL search param（?item=xxx）
+  const { selectedId, setSelectedId } = useSelectedItem();
   const focusedIndex = useRadarStore((s) => s.focusedIndex);
   const paletteOpen = useRadarStore((s) => s.paletteOpen);
   const chatHeight = useRadarStore((s) => s.chatHeight);
@@ -48,7 +44,7 @@ export default function RadarWorkspace({ initialShell }: RadarWorkspaceProps = {
 
   // ── Store actions ─────────────────────────────────────────────────
   const setFilter = useRadarStore((s) => s.setFilter);
-  const setSelectedId = useRadarStore((s) => s.setSelectedId);
+  // setSelectedId 来自 useSelectedItem（上方），不再从 store 读
   const setFocusedIndex = useRadarStore((s) => s.setFocusedIndex);
   const setPaletteOpen = useRadarStore((s) => s.setPaletteOpen);
   const setChatHeight = useRadarStore((s) => s.setChatHeight);
@@ -367,29 +363,27 @@ export default function RadarWorkspace({ initialShell }: RadarWorkspaceProps = {
     );
   }
 
-  const desktopShellProps = {
-    activeView,
-    items,
-    filteredItems,
-    loading,
-    loadErr,
-    pending,
-    applyBusy,
-    paletteOpen,
-    actions,
-    setPaletteOpen,
-    setFilter,
-    setSelectedId,
-    setFocusedIndex,
-    setActiveTrace,
-    handleViewChange,
-    applyPending,
-    discardPending,
-  };
-
-  if (viewport === 'medium') {
-    return <TabletShell {...desktopShellProps} />;
-  }
-
-  return <DesktopShell {...desktopShellProps} />;
+  // medium（768-1279）目前与 expanded 共用 DesktopShell，
+  // Step 6 独立实现 TabletShell 时再分化。
+  return (
+    <DesktopShell
+      activeView={activeView}
+      items={items}
+      filteredItems={filteredItems}
+      loading={loading}
+      loadErr={loadErr}
+      pending={pending}
+      applyBusy={applyBusy}
+      paletteOpen={paletteOpen}
+      actions={actions}
+      setPaletteOpen={setPaletteOpen}
+      setFilter={setFilter}
+      setSelectedId={setSelectedId}
+      setFocusedIndex={setFocusedIndex}
+      setActiveTrace={setActiveTrace}
+      handleViewChange={handleViewChange}
+      applyPending={applyPending}
+      discardPending={discardPending}
+    />
+  );
 }

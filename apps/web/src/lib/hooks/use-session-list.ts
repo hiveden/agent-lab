@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ResultSummary } from '@/lib/types';
-import { swrFetcher } from './fetch-utils';
+import { fetchJSON } from './fetch-utils';
 
 export interface SessionSummary {
   id: string;
@@ -15,7 +15,7 @@ export function useSessionList(agentId: string) {
   const query = useQuery({
     queryKey: ['chat-sessions', 'list', agentId],
     queryFn: () =>
-      swrFetcher<{ sessions: SessionSummary[] }>(
+      fetchJSON<{ sessions: SessionSummary[] }>(
         `/api/chat/sessions?agent_id=${encodeURIComponent(agentId)}`,
       ),
   });

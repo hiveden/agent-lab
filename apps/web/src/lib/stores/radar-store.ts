@@ -19,7 +19,7 @@ export interface SessionState {
 interface UISlice {
   activeView: ViewType;
   filter: GradeFilter;
-  selectedId: string | null;
+  // selectedId 从 Step 2 起迁到 URL search param（见 lib/hooks/use-selected-item.ts）
   focusedIndex: number;
   paletteOpen: boolean;
   toast: string | null;
@@ -55,7 +55,6 @@ interface TraceSlice {
 interface UIActions {
   setActiveView: (view: ViewType) => void;
   setFilter: (filter: GradeFilter) => void;
-  setSelectedId: (id: string | null) => void;
   setFocusedIndex: (index: number) => void;
   setPaletteOpen: (open: boolean) => void;
   setToast: (msg: string | null) => void;
@@ -113,7 +112,7 @@ export type RadarStore = UISlice &
 
 type PersistedState = Pick<
   RadarStore,
-  'activeView' | 'filter' | 'selectedId' | 'traceWidth' | 'traceOpen' | 'chatHeight'
+  'activeView' | 'filter' | 'traceWidth' | 'traceOpen' | 'chatHeight'
 >;
 
 // ── Store ──────────────────────────────────────────────────────────
@@ -124,7 +123,6 @@ export const useRadarStore = create<RadarStore>()(
       // ── UI slice (defaults) ──────────────────────────────────
       activeView: 'inbox' as ViewType,
       filter: 'all' as GradeFilter,
-      selectedId: null,
       focusedIndex: 0,
       paletteOpen: false,
       toast: null,
@@ -153,7 +151,6 @@ export const useRadarStore = create<RadarStore>()(
       // ── UI actions ───────────────────────────────────────────
       setActiveView: (view) => set({ activeView: view }),
       setFilter: (filter) => set({ filter }),
-      setSelectedId: (id) => set({ selectedId: id }),
       setFocusedIndex: (index) => set({ focusedIndex: index }),
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setToast: (msg) => set({ toast: msg }),
@@ -165,7 +162,9 @@ export const useRadarStore = create<RadarStore>()(
         set({
           activeView: view,
           focusedIndex: 0,
-          selectedId: null,
+          // selectedId 现由 URL 驱动（见 use-selected-item.ts）——切换 view 不主动清，
+          // 若 URL 残留的 item 不在新 view 的 items 里，InboxView 的 .find() 自然
+          // 返回 undefined → 选中态不显示。
           activeTrace: null,
           highlightSpanId: null,
         }),
@@ -352,7 +351,6 @@ export const useRadarStore = create<RadarStore>()(
       partialize: (state): PersistedState => ({
         activeView: state.activeView,
         filter: state.filter,
-        selectedId: state.selectedId,
         traceWidth: state.traceWidth,
         traceOpen: state.traceOpen,
         chatHeight: state.chatHeight,

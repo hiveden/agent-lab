@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { Run } from '@/lib/types';
-import { swrFetcher } from './fetch-utils';
+import { fetchJSON } from './fetch-utils';
 
 export type { Run };
 
@@ -13,7 +13,7 @@ export function useRuns(opts?: { phase?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['runs', 'radar', { phase, limit }],
-    queryFn: () => swrFetcher<{ runs?: Run[] }>(`/api/runs?${params.toString()}`),
+    queryFn: () => fetchJSON<{ runs?: Run[] }>(`/api/runs?${params.toString()}`),
   });
 
   return {

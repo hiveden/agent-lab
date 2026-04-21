@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ViewType } from '@/app/agents/radar/components/shared/NavRail';
 import type { ItemWithState } from '@/lib/types';
-import { swrFetcher } from './fetch-utils';
+import { fetchJSON } from './fetch-utils';
 
 function viewToStatus(view: ViewType): string {
   if (view === 'watching') return 'watching';
@@ -17,7 +17,7 @@ export function useItems(activeView: ViewType) {
   const query = useQuery({
     queryKey: ['items', 'radar', status],
     queryFn: () =>
-      swrFetcher<{ items: ItemWithState[] }>(
+      fetchJSON<{ items: ItemWithState[] }>(
         `/api/items?agent_id=radar&limit=400&status=${status}`,
       ),
     enabled: isItemView,

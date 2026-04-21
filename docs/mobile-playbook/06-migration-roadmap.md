@@ -87,7 +87,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 2 · 路由化 item detail
+## Step 2 · 路由化 item detail（✅ 2026-04-21 完成）
 
 **目标**：item 选中从 zustand 迁到 URL。
 

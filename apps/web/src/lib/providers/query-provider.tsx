@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { persistQueryClient } from '@tanstack/react-query-persist-client';
@@ -35,15 +35,12 @@ export const queryClient = new QueryClient({
 });
 
 export function QueryProvider({ children }: { children: ReactNode }) {
-  const [persistReady, setPersistReady] = useState(false);
-
   useEffect(() => {
-    // 只在浏览器侧挂 persister
+    // 只在浏览器侧挂 persister；cache 未恢复时 queries 仍可正常工作（fresh fetch）
     if (typeof window === 'undefined') return;
     const persister = createAsyncStoragePersister({
       storage: idbQueryStorage,
-      // 默认 JSON.stringify/parse — idb-keyval 存字符串完全 OK，
-      // 性能上略逊于结构化克隆，但 Step 0 不追性能；未来可优化。
+      // 默认 JSON.stringify/parse — idb-keyval 存字符串完全 OK。
     });
     const [unsubscribe] = persistQueryClient({
       queryClient,
@@ -51,15 +48,11 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       maxAge: 1000 * 60 * 60 * 24, // 24h
       buster: 'v1', // cache 结构变更时改这里即可 invalidate 所有持久化
     });
-    setPersistReady(true);
     return () => {
       unsubscribe?.();
     };
   }, []);
 
-  // 注意：persistReady 尚未就绪时，queries 仍可正常工作（只是 cache 未从 IDB 恢复）
-  // 所以不 block 渲染
-  void persistReady;
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );

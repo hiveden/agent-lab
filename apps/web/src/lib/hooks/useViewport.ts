@@ -21,14 +21,11 @@ const QUERIES = {
 /**
  * SSR-safe viewport hook。
  *
- * 首次渲染（SSR / 客户端 hydration 初值）返回 `initialShell`——若未提供则为
- * `undefined`，调用方应渲染骨架。实际值在 `useEffect` 执行后到达。
- *
- * 配合 layout 层读取 `Sec-CH-UA-Mobile` header 传入 `initialShell`（UA Hint），
- * 可大幅降低首屏 CLS——详见 02-breakpoints-and-shells.md §2。
+ * 首次渲染（SSR / 客户端 hydration 初值）返回 `undefined`——调用方应渲染骨架。
+ * 实际值在 `useEffect` 执行后到达，监听 resize 实时响应姿态切换。
  */
-export function useViewport(initialShell?: Viewport): Viewport | undefined {
-  const [viewport, setViewport] = useState<Viewport | undefined>(initialShell);
+export function useViewport(): Viewport | undefined {
+  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
 
   useEffect(() => {
     const entries = (Object.entries(QUERIES) as [Viewport, string][]).map(
