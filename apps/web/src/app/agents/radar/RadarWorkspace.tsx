@@ -4,25 +4,20 @@ import { useCallback, useEffect, useMemo } from 'react';
 import type { ItemStatus, ItemWithState } from '@/lib/types';
 import { useRadarStore } from '@/lib/stores/radar-store';
 import { useItems } from '@/lib/hooks/use-items';
-import NavRail, { type ViewType } from './components/shared/NavRail';
-import InboxView from './components/consumption/InboxView';
-import CommandPalette, {
-  type PaletteAction,
-} from './components/shared/CommandPalette';
-import PendingChangesBanner from './components/consumption/PendingChangesBanner';
-import RunsView from './components/production/RunsView';
-import AgentView from './components/production/AgentView';
-import AttentionView from './components/consumption/AttentionView';
-import SettingsView from './components/shared/SettingsView';
-import TabBar from './components/shared/TabBar';
-import MobileItemsList from './components/consumption/MobileItemsList';
-import MobileChatView from './components/consumption/MobileChatView';
-import { useIsMobile } from '@/lib/hooks/useMediaQuery';
-import { Toaster } from '@/components/ui/sonner';
+import { useViewport, type Viewport } from '@/lib/hooks/useViewport';
+import { type PaletteAction } from './components/shared/CommandPalette';
+import MobileShell from './shells/MobileShell';
+import TabletShell from './shells/TabletShell';
+import DesktopShell from './shells/DesktopShell';
 import { toast } from 'sonner';
 
-export default function RadarWorkspace() {
-  const isMobile = useIsMobile();
+export interface RadarWorkspaceProps {
+  /** SSR / UA Hint 预判初值，减少首屏闪烁（见 02-breakpoints-and-shells.md §2）。 */
+  initialShell?: Viewport;
+}
+
+export default function RadarWorkspace({ initialShell }: RadarWorkspaceProps = {}) {
+  const viewport = useViewport(initialShell);
 
   // ── Store selectors (individual to avoid unnecessary re-renders) ──
   const activeView = useRadarStore((s) => s.activeView);
@@ -318,19 +313,14 @@ export default function RadarWorkspace() {
     setSelectedId,
   ]);
 
-  // ─── Mobile Layout ──────────────────────────────────────────
-  if (isMobile === undefined) {
-    return <div className="grid grid-rows-[40px_1fr] h-screen" />;
-  }
+  // ─── Mobile 专用 actions（传给 MobileShell） ────────────────────
+  const mobileSelectItem = useCallback(
+    (item: ItemWithState) => setSelectedId(item.id),
+    [setSelectedId],
+  );
 
-  if (isMobile) {
-    const mobileSelectItem = (item: ItemWithState) => {
-      setSelectedId(item.id);
-    };
-    const mobileSwipeAction = async (
-      itemId: string,
-      action: 'watching' | 'dismissed',
-    ) => {
+  const mobileSwipeAction = useCallback(
+    async (itemId: string, action: 'watching' | 'dismissed') => {
       markPending(itemId, action);
       try {
         await fetch(`/api/items/${itemId}/state`, {
@@ -348,142 +338,58 @@ export default function RadarWorkspace() {
       }
       // Remove from pending — use store's markPending to toggle off
       markPending(itemId, action);
-    };
+    },
+    [markPending, setItems, items],
+  );
 
+  // ─── Shell 选择 ─────────────────────────────────────────────
+  // viewport 为 undefined 时（SSR / 首帧 hydrate 前，无 initialShell）给骨架
+  if (viewport === undefined) {
+    return <div className="grid grid-rows-[40px_1fr] h-screen" />;
+  }
+
+  if (viewport === 'compact') {
     return (
-      <div className="flex flex-col h-[100dvh] bg-[var(--ag-bg)] text-[var(--ag-text)]">
-        {selectedItem && currentSession !== undefined ? (
-          <MobileChatView
-            key={selectedItem.id}
-            item={selectedItem}
-            initialMessages={currentSession?.messages ?? []}
-            sessionId={currentSession?.session_id ?? null}
-            onBack={() => setSelectedId(null)}
-            onChatUpdate={handleChatUpdate}
-          />
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
-              {activeView === 'sources' || activeView === 'runs' ? (
-                <RunsView />
-              ) : activeView === 'agent' ? (
-                <AgentView />
-              ) : activeView === 'attention' ? (
-                <AttentionView />
-              ) : activeView === 'settings' ? (
-                <SettingsView />
-              ) : (
-                <MobileItemsList
-                  items={itemsForList}
-                  filter={filter}
-                  onFilterChange={(f) => {
-                    setFilter(f);
-                  }}
-                  onSelect={mobileSelectItem}
-                  onSwipeAction={mobileSwipeAction}
-                  pendingMap={pending}
-                />
-              )}
-            </div>
-            <TabBar activeView={activeView} onViewChange={handleViewChange} />
-          </>
-        )}
-        <Toaster position="bottom-center" />
-      </div>
+      <MobileShell
+        activeView={activeView}
+        filter={filter}
+        itemsForList={itemsForList}
+        selectedItem={selectedItem}
+        currentSession={currentSession}
+        pending={pending}
+        setFilter={setFilter}
+        setSelectedId={setSelectedId}
+        handleViewChange={handleViewChange}
+        mobileSelectItem={mobileSelectItem}
+        mobileSwipeAction={mobileSwipeAction}
+        handleChatUpdate={handleChatUpdate}
+      />
     );
   }
 
-  // ─── Desktop Layout ────────────────────────────────────────
-  return (
-    <div className="grid grid-rows-[40px_1fr] h-screen">
-      <div className="flex items-center gap-3 px-[14px] pl-[18px] border-b border-border bg-surface-hi">
-        <div className="font-semibold text-[13px] tracking-[-0.005em] text-text">agent-lab</div>
-        <div className="flex items-center gap-1.5 text-text-3 text-xs">
-          <span className="text-text-faint">/</span>
-          <span>radar</span>
-        </div>
-        <div className="flex-1" />
-        <button
-          type="button"
-          className="cmdk-hint"
-          onClick={() => setPaletteOpen(true)}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-          <span>Search &amp; run</span>
-          <span className="kbd">
-            <kbd className="k">⌘</kbd>
-            <kbd className="k">K</kbd>
-          </span>
-        </button>
-        <span className="py-0.5 px-2 border border-border-hi rounded-full font-[var(--mono)] text-[10.5px] text-text-2 bg-bg">
-          {loading
-            ? 'loading…'
-            : loadErr
-              ? 'load error'
-              : `${items.length} items`}
-        </span>
-        <div className="w-[22px] h-[22px] rounded-full bg-accent-brand text-white inline-flex items-center justify-center text-[10px] font-semibold">A</div>
-      </div>
+  const desktopShellProps = {
+    activeView,
+    items,
+    filteredItems,
+    loading,
+    loadErr,
+    pending,
+    applyBusy,
+    paletteOpen,
+    actions,
+    setPaletteOpen,
+    setFilter,
+    setSelectedId,
+    setFocusedIndex,
+    setActiveTrace,
+    handleViewChange,
+    applyPending,
+    discardPending,
+  };
 
-      <PendingChangesBanner
-        pending={pending}
-        busy={applyBusy}
-        onApply={async () => {
-          await applyPending();
-          const storeToast = useRadarStore.getState().toast;
-          if (storeToast) toast(storeToast);
-        }}
-        onDiscard={discardPending}
-      />
+  if (viewport === 'medium') {
+    return <TabletShell {...desktopShellProps} />;
+  }
 
-      <div className="grid grid-cols-[52px_1fr] overflow-hidden min-h-0 relative">
-        <NavRail activeView={activeView} onViewChange={handleViewChange} />
-        {activeView === 'sources' || activeView === 'runs' ? (
-          <RunsView />
-        ) : activeView === 'agent' ? (
-          <AgentView />
-        ) : activeView === 'attention' ? (
-          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
-            <AttentionView />
-          </div>
-        ) : activeView === 'settings' ? (
-          <div className="overflow-y-auto p-6 px-8 min-w-0 min-h-0 flex-1 relative">
-            <SettingsView />
-          </div>
-        ) : (
-          <InboxView />
-        )}
-      </div>
-
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        items={items}
-        actions={actions}
-        onPickItem={(it) => {
-          const idx = filteredItems.findIndex((x) => x.id === it.id);
-          if (idx >= 0) {
-            setFocusedIndex(idx);
-          } else {
-            setFilter('all');
-            setFocusedIndex(items.findIndex((x) => x.id === it.id));
-          }
-          setSelectedId(it.id);
-          setActiveTrace(null);
-        }}
-      />
-
-      <Toaster position="bottom-center" />
-    </div>
-  );
+  return <DesktopShell {...desktopShellProps} />;
 }
