@@ -240,7 +240,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 9 · Offline + Android Push
+## Step 9 · Offline + Android Push（⚠ 2026-04-21 Step 9a SW+Offline 完成，9b Web Push 留下次）
 
 **目标**：SW 上线，Inbox 离线可读，Android 可推送。
 

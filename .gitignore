@@ -52,3 +52,8 @@ Thumbs.db
 
 # local PoC archives (二进制快照; 源码另行入 git)
 docs/checkpoints/*.tar.gz
+
+# Service Worker build 产物（@serwist/next 每次 build 重新生成，CF Pages 部署时也会生）
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/workbox-*.js

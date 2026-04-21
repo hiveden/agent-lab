@@ -1,0 +1,13 @@
+# Cloudflare Pages HTTP headers
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+# Service Worker 文件：
+# - no-cache：保证浏览器每次加载都校验最新 sw.js（关键，否则 SW 更新卡死）
+# - Service-Worker-Allowed: / 允许 SW scope 覆盖整个站点
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+  Service-Worker-Allowed: /
+
+# Manifest 文件：允许较短缓存（变更频率低，但要能迭代）
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600
