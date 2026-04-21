@@ -105,7 +105,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 3 · Chat 通路统一 AG-UI
+## Step 3 · Chat 通路统一 AG-UI（⚠ 2026-04-21 部分完成：Mobile 已迁 AG-UI；Desktop ChatView 留 Step 3.5 拆 item-explainer agent 一起做）
 
 **目标**：废除 `/api/chat`，Mobile chat 接入 AG-UI。
 
@@ -136,7 +136,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 4 · Pending queue 统一
+## Step 4 · Pending queue 统一（✅ 2026-04-21 Mobile 部分完成）
 
 **目标**：Mobile swipe 不再直接 fetch，走 pending。
 
