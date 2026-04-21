@@ -1,5 +1,8 @@
 # 12 · Step 0 · 数据层迁移执行计划（SWR → TanStack Query v5）
 
+> **执行完成**：2026-04-21，commit `45e5efa`。9a SW cache + 9b-sync Background Sync 在
+> 此基础上叠加，Step 0 作为 offline 能力的数据层底座顺利发挥作用。
+>
 > **前置**：[`10-tech-selection-adr.md`](./10-tech-selection-adr.md) ADR-2 已决定迁移方向。
 > **输入**：现有 4 个 SWR hook + 1 个 utils + Zustand pending slice。
 > **输出**：TanStack Query v5 + IndexedDB persist cache，为后续 Step 9 offline/PWA 打基础。

@@ -48,7 +48,21 @@ const BREAKPOINTS = {
 
 `useIsMobile()` 初次返回 `undefined`（SSR 不知道浏览器宽度）→ `RadarWorkspace.tsx:322` 渲染空骨架 → hydrate 后 swap 整棵树 → **CLS 爆炸**。
 
-### 方案：UA Hint + 骨架屏
+### 方案：UA Hint + 骨架屏 ⚠ 2026-04-21 撤回
+
+> **实际落地**：Step 1 初版实现了 UA Hint SSR 预判（`page.tsx` 读 `Sec-CH-UA-Mobile`
+> + `RadarWorkspace` 接 `initialShell` prop），但 Step 2 清理过度设计时撤回。
+> 理由：把 `/agents/radar` 从 `○ Static` 变 `ƒ Dynamic`，每次 request 过 Edge；
+> **单用户工具对 CLS 优化的边际价值极小**（自己刷次数很少，视觉差一瞬可接受）。
+>
+> 当前实现：`useViewport()` 不接 `initialShell`，首次返回 `undefined` → `page.tsx`
+> 用 `<Suspense fallback={<div className="grid grid-rows-[40px_1fr] h-screen" />}>`
+> 包 `<RadarWorkspace />`。路由保持 `○ Static`。
+>
+> **下一次真考虑再启用的触发条件**：单用户 → 多用户产品化 / 真机测到 CLS > 0.1。
+
+原设计保留如下（作为 Step 7 性能优化或未来多用户时的重启路径）：
+
 
 ```
 1. Edge 侧读 Sec-CH-UA-Mobile header 粗略预判 Shell
@@ -106,7 +120,15 @@ export default async function Layout({ children }) {
 - 所有次级 UI 走底部抽屉（`Sheet` primitive）
 - 手势：横滑 / 长按 / 下拉刷新
 
-### 3.2 TabletShell（medium）
+### 3.2 TabletShell（medium）⚠ 2026-04-21 暂未独立实现
+
+> **实际落地**：Step 1 初版创建了 `TabletShell.tsx` 空 wrapper（只是 `<DesktopShell {...props} />`），Step 2 清理过度设计时**删除了该文件**。`viewport === 'medium'` 当前**直接走 DesktopShell**（见 `RadarWorkspace.tsx` 的 Shell 选择逻辑）。
+>
+> 真正的 TabletShell（NavRail 窄版 + Slide Panel）留待 **Step 6** 做。
+> 原因：避免空 wrapper 带来的无意义间接层。
+
+原设计保留如下：
+
 
 ```
 ┌────┬─────────────────────────────────────┬──────────────┐

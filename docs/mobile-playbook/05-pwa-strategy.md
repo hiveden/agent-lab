@@ -51,7 +51,7 @@ Phase 4  ───── Capacitor 壳 + APNs (下期) ⏸
 
 ---
 
-## 3. Phase 1 · PWA-lite（本期）
+## 3. Phase 1 · PWA-lite（本期）✅ 2026-04-21 完成（commit `fd9677b`）
 
 ### 3.1 产出
 
@@ -104,7 +104,7 @@ iOS Safari 对 manifest 支持不完整，还要：
 
 ---
 
-## 4. Phase 2 · PWA-full（本期）
+## 4. Phase 2 · PWA-full（本期）✅ 2026-04-21 完成（9a commit `766375f` + 9b-sync `e6544cf`）
 
 ### 4.1 产出
 
@@ -169,7 +169,7 @@ const withPWA = require('next-pwa')({
 
 ---
 
-## 5. Phase 3a · Android Web Push（本期，可选）
+## 5. Phase 3a · Android Web Push（本期，可选）📋 待办（Step 9b-push 下次 session）
 
 ### 5.1 产出
 

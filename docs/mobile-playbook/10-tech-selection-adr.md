@@ -15,6 +15,25 @@
 
 ---
 
+## 落地状态总览（2026-04-21）
+
+| ADR | 技术 | 本 session 落地 | 备注 |
+|---|---|---|---|
+| ADR-1 | CopilotKit v2 `useAgent` | ✅ Mobile item chat | Desktop ChatView 留 Step 3.5 |
+| ADR-2 | TanStack Query v5 + persist | ✅ Step 0 | 4 hooks 迁移，`applyPending` 加 invalidate |
+| ADR-3 | idb-keyval | ✅ Step 0 | QUERY_STORE 单 store（清理过预留） |
+| ADR-4 | shadcn Drawer (Vaul) | ⚠ **未装 Vaul** | `PendingChangesSheet` 当前用 `motion.div` 自写 100 行轻量条带；Step 5 再决策是否升级。**本 ADR 执行有债** |
+| ADR-5 | @tanstack/react-virtual | ✅ Step 7 | MobileItemsList |
+| ADR-6 | 原生 Container Query + `@supports` 降级 | ⚠ 未真实写 `@container` 规则 | 当前 Shell 层用 `useViewport`（viewport query），组件层未下沉到 container query；Step 5 Primitives 时落地 |
+| ADR-7 | @serwist/next | ✅ Step 9a | runtime caching 覆盖 SSE/API/static/navigation/assets |
+| ADR-8 | @block65/webcrypto-web-push | 📋 Step 9b-push | 下次 session 实施 |
+| ADR-9 | Provider 稳定引用原则 | ✅ 贯穿 | `<CopilotKit>` 的 `EMPTY_HEADERS/PROPERTIES`；`useChatSession` 的 `AGENT_UPDATES` |
+
+**执行债** 2 处（⚠）：ADR-4（Sheet 没用 Vaul）+ ADR-6（Container Query 没真写）。
+不是"造轮子"（功能不重叠），是"计划中的升级空间"。Step 5 Primitives 抽取时一并决策。
+
+---
+
 ## 整体技术栈速查
 
 ```

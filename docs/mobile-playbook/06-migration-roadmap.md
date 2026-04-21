@@ -221,7 +221,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 8 · PWA-lite
+## Step 8 · PWA-lite（✅ 2026-04-21 完成）
 
 **目标**：可添加到主屏。
 

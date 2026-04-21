@@ -74,22 +74,29 @@ agent-lab 当前移动端实现（`RadarWorkspace.tsx:322-394`）存在三层架
 - **Q7**：**Apple 开发者账号注册有阻塞点 → Phase 4（Capacitor + APNs）整体延后到下期**。本期范围 = PWA Phase 1 + 2 + Android Web Push。iOS 推送与原生壳进入下期 M4 里程碑。→ [`05-pwa-strategy.md`](./05-pwa-strategy.md)
 - **Q8**：**技术选型 9 项 ADR**（8 项并行调研 + 交叉验证）→ [`10-tech-selection-adr.md`](./10-tech-selection-adr.md)
 - **Q9**：**ADR-1 PoC 验证通过**（6/7 PASS + 2 共识跳过 + 0 FAIL）→ CopilotKit v2 `useAgent` 作为 Mobile/Desktop 统一 chat hook 的决策成立。归档：`docs/checkpoints/poc-copilotkit-v2.tar.gz`。详见 [`11-poc-copilotkit-v2.md`](./11-poc-copilotkit-v2.md) + `poc/copilotkit-v2-useagent/VERDICT.md`。
+- **Q10**：**主动清理 Step 0/1 过度设计 5 处**（commit `96b6a38`）：删 TabletShell 空 wrapper / 删 `stores.ts` 预留的 PENDING_STORE+ITEMS_STORE / 删 `query-provider` 无用 persistReady state / 删 `swrFetcher` 向后兼容别名 / 撤回 UA Hint SSR 预判（把路由从 Static 变 Dynamic 的代价不值）。
+- **Q11**：**Step 3 范围收窄 · Mobile item chat 走 CopilotKit，Desktop `/api/chat` 保持不动**。item context 用"首条消息注入"方案 A（不改 Python agent）。Desktop chat 统一 + 拆 `item-explainer` Python agent 合并为 **Step 3.5 下次做**。
+- **Q12**：**Step 9 拆三子步**：9a SW+Offline Cache ✅ / 9b-sync Background Sync pending 重试 ✅ / 9b-push Web Push 待办。6 件事清单已落 `06-migration-roadmap.md` Step 9 章节。
+- **Q13**：**URL as single source of truth 用 search param**（`?item=xxx`）而非 Parallel Routes + path param。不破坏 InboxView 的 `react-resizable-panels` 双栏布局。理由详见 `lib/hooks/use-selected-item.ts` 顶部注释。
 
 ### 本期 / 下期边界
 
-| 里程碑 | 内容 | 阻塞 |
-|---|---|---|
-| **M3.1** 架构修复 | Step 1-5（Shell / URL / AG-UI / Pending / Primitives） | 无 |
-| **M3.2** Tablet 支持 | Step 6 | 依赖用户 iPad 使用反馈 |
-| **M3.3** 性能 | Step 7 | 无 |
-| **M3.4** PWA 离线 | Step 8-9（PWA-lite + SW + Android Push） | 无 |
-| **M4** Mobile Native（**下期**） | Capacitor + APNs + iOS Web Push | ⏸ Apple 开发者账号 |
+| 里程碑 | 内容 | 阻塞 | 状态 |
+|---|---|---|---|
+| **M3.1** 架构修复 | Step 0-4 | 无 | ✅ Mobile 侧完成；3.5 + 5 下次 |
+| **M3.2** Tablet 支持 | Step 6 | 依赖 iPad 使用反馈 | 📋 |
+| **M3.3** 性能 | Step 7 | 无 | ⚠ 虚拟滚动 ✅；骨架屏/bundle 分析 📋 |
+| **M3.4** PWA 离线 | Step 8 + 9a + 9b-sync | 无 | ✅ |
+| **M3.5** Android Push | Step 9b-push | 无 | 📋 **下次 session** |
+| **M4** Mobile Native（**下期**） | Capacitor + APNs + iOS Web Push | ⏸ Apple 开发者账号 | ⏸ |
 
 ### 待决策
 
 - **D1**：Tablet 档位优先级 — 依赖用户 iPad 使用频率反馈。
 - **D2**：Production view 在 mobile 的"引导卡片"文案与交互（是否提供扫码直达桌面）→ [`07-scope-decision.md`](./07-scope-decision.md) §3.2 O3。
 - **D3**（下期）：iOS 推送走 Web Push 还是 APNs — 收集 Phase 1-2 运行数据后定。
+- **D4**（Step 5 时决）：`PendingChangesSheet` 升级到 Vaul（ADR-4 原计划），还是保留为轻量 "Banner-like" 轻组件？当前 100 行自写 `motion.div` 与 ADR-4 "所有 Sheet/Drawer 用 Vaul" 存在争议。
+- **D5**（Step 4/6 时决）：`MobileChatView` 的 auto-watch（进 detail 即 PATCH unread→watching）和 pending queue 语义分裂 —— auto-watch 不走 pending，swipe 走 pending。建议 Step 4/6 打磨时统一：或把 auto-watch 也入 pending，或明确 "观察者 PATCH 立即 / 用户 action 入 pending" 两套语义并行合法化。
 
 ---
 
