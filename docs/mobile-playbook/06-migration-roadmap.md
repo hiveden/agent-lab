@@ -240,18 +240,49 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 9 · Offline + Android Push（⚠ 2026-04-21 Step 9a SW+Offline 完成，9b Web Push 留下次）
+## Step 9 · Offline + Android Push（⚠ 2026-04-21 进度 2/3）
 
-**目标**：SW 上线，Inbox 离线可读，Android 可推送。
+实际拆成 3 个子步：
 
-### 变更
-
-- `next-pwa` 集成 SW
-- IndexedDB pending queue
-- Background Sync flush 逻辑
-- VAPID key 配置 + 订阅 UI（可选）
+| 子步 | 状态 | Commit / 备注 |
+|---|---|---|
+| **9a** · Service Worker + Offline Cache (@serwist/next) | ✅ 完成 | `766375f` |
+| **9b-sync** · Background Sync（pending mutation 离线重试） | ✅ 完成 | `e6544cf` |
+| **9b-push** · Web Push（Android） | 📋 **待办** | 下次 session 做 |
 
 详见 [`05-pwa-strategy.md`](./05-pwa-strategy.md) Phase 2 + 3a。
+
+### 9b-push 待办清单（下次开工参考）
+
+**范围**：让 agent-lab 在新 🔥 fire 内容到达时主动推送通知到手机主屏。
+
+**6 件事**：
+1. **VAPID keypair 生成脚本**（一次性）：`scripts/gen-vapid.mjs` 用 `generateVapidKeys()` 输出到 stdout，手动粘到 `.dev.vars` + CF Pages secrets
+   - env: `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
+   - 前端读 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+2. **D1 表 `push_subscriptions`**：`id / endpoint / keys_auth / keys_p256dh / expiration_time / created_at`
+   - 写 drizzle migration
+3. **BFF `/api/push/subscribe`**（Edge Runtime）：POST 保存；DELETE 解绑
+4. **BFF `/api/push/send`**（Edge Runtime）：触发发送，用 `@block65/webcrypto-web-push`
+   - 状态 410/404 清理失效 subscription
+   - 观测：`push_send_total{browser,status_class}` → SigNoz
+5. **Settings UI**："接收推送" 开关
+   - 首次：`Notification.requestPermission()` + `pushManager.subscribe({ applicationServerKey: VAPID_PUB })`
+   - 关闭：`subscription.unsubscribe()` + DELETE
+6. **SW `push` + `notificationclick` 事件 handler**：
+   - 收到 push → `showNotification(title, { body, data: { url } })`
+   - 点击通知 → `clients.openWindow(url)`
+
+**不在本子步范围**（依赖链后续做）：
+- 采集管道集成（evaluate pipeline 发现 fire item → 调 `/api/push/send`）
+- iOS Web Push（iOS 16.4+ 要求"添加到主屏"才能订阅，覆盖率低；基础设施 Android/iOS 通用，iOS 体验等 Capacitor 下期）
+
+**预估**：~1.5h（基础设施，不含触发源集成）
+
+**技术选型已冻结（ADR-8）**：
+- 后端：`@block65/webcrypto-web-push`（Cloudflare Edge Runtime 兼容）
+- VAPID 存储：CF Pages secrets
+- 触发源位置：BFF（不是 Python Agent Server — CLAUDE.md 原则 "Agent Server 只做 LLM 推理"）
 
 ### 验收
 
