@@ -14,7 +14,7 @@
 
 ---
 
-## Step 0 · 数据层迁移 SWR → TanStack Query（新增）
+## Step 0 · 数据层迁移 SWR → TanStack Query（✅ 2026-04-21 完成）
 
 **目标**：按 [`10-tech-selection-adr.md`](./10-tech-selection-adr.md) ADR-2 迁移数据层，为 Mobile offline / persist / mutation queue 打基础。
 
@@ -39,7 +39,20 @@
 - SSR hydration 配 `HydrationBoundary`
 - SW 还没上，offline 只有 persister 层。Step 9 后才完整（SW 接 `onlineManager`）
 
-### 估时：~1.5 天
+### 估时：~1.5 天 · 实际 ~2 h（Phase 0.1/0.2 并行 + 0.3/0.4 主线）
+
+### 实施产出（2026-04-21）
+
+- 4 hooks 迁移：use-items / use-runs / use-session-list / use-agent-session
+- 基础设施：`lib/providers/query-provider.tsx` + `lib/offline/{stores,query-persister}.ts`
+- **Provider 挂在业务子路由 `app/agents/radar/layout.tsx`**（关注点分离，根 layout 保持纯净）
+- `applyPending` 成功后 `queryClient.invalidateQueries(['items'])`
+- swr 依赖移除，swr-utils.ts 改名 fetch-utils.ts（`swrFetcher` 保留为向后兼容别名）
+- Bundle 增量：`/agents/radar` 837 KB（+4 KB vs 迁移前）
+
+### 途中修复的 bug
+
+- Phase 0.1 pnpm add 误装到仓库根而非 apps/web（package.json 未记录）— 被 `pnpm remove swr` 触发 GC 暴露，已在 apps/web 正确重装
 
 ---
 
