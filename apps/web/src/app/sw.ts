@@ -25,6 +25,7 @@ import {
   StaleWhileRevalidate,
   CacheFirst,
   ExpirationPlugin,
+  BackgroundSyncPlugin,
 } from 'serwist';
 import type { PrecacheEntry, SerwistGlobalConfig } from 'serwist';
 
@@ -36,6 +37,14 @@ declare global {
 }
 
 declare const self: ServiceWorkerGlobalScope;
+
+// Background Sync: pending mutation 离线失败 → 入 IndexedDB queue，
+// 浏览器恢复网络（sync event）后自动重试。
+// - Android Chrome 原生支持；iOS Safari 不支持 → 失败直接 throw（SW 降级到 NetworkOnly 行为）
+// - maxRetentionTime 24h：超时丢弃，避免陈旧数据覆盖新状态
+const pendingFlushSync = new BackgroundSyncPlugin('pending-flush', {
+  maxRetentionTime: 24 * 60, // minutes
+});
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
@@ -49,7 +58,15 @@ const serwist = new Serwist({
       matcher: ({ url }) => url.pathname.startsWith('/api/agent/chat'),
       handler: new NetworkOnly(),
     },
-    // ── API 写请求（PATCH/POST/PUT/DELETE）不走 SW 缓存 ──
+    // ── Pending mutation（/api/items/:id/state PATCH）──
+    // 关键：用户 swipe + Apply 时失败 → Background Sync 后台重试
+    {
+      matcher: ({ url, request }) =>
+        request.method === 'PATCH' &&
+        /^\/api\/items\/[^/]+\/state/.test(url.pathname),
+      handler: new NetworkOnly({ plugins: [pendingFlushSync] }),
+    },
+    // ── 其他 API 写请求（不进 bgsync queue，失败即失败）──
     {
       matcher: ({ url, request }) =>
         url.pathname.startsWith('/api/') && request.method !== 'GET',
