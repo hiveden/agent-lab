@@ -69,16 +69,30 @@ export default function MobileShell(props: MobileShellProps) {
         />
       ) : (
         <>
-          <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
-            {activeView === 'sources' || activeView === 'runs' ? (
+          {/*
+            inbox / watching / archive 由 MobileItemsList 自管滚动（虚拟滚动需要
+            已知的 scroll container）。其他 view 仍由外层 overflow 负责。
+          */}
+          {activeView === 'sources' || activeView === 'runs' ? (
+            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               <RunsView />
-            ) : activeView === 'agent' ? (
+            </div>
+          ) : activeView === 'agent' ? (
+            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               <AgentView />
-            ) : activeView === 'attention' ? (
+            </div>
+          ) : activeView === 'attention' ? (
+            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               <AttentionView />
-            ) : activeView === 'settings' ? (
+            </div>
+          ) : activeView === 'settings' ? (
+            <div className="flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] pb-[env(safe-area-inset-bottom,0)]">
               <SettingsView />
-            ) : (
+            </div>
+          ) : (
+            // Inbox / Watching / Archive：flex-1 给 MobileItemsList，overflow:hidden
+            // 让内部 useVirtualizer 接管（ADR-5）。
+            <div className="flex-1 overflow-hidden">
               <MobileItemsList
                 items={itemsForList}
                 filter={filter}
@@ -87,8 +101,8 @@ export default function MobileShell(props: MobileShellProps) {
                 onSwipeAction={mobileSwipeAction}
                 pendingMap={pending}
               />
-            )}
-          </div>
+            </div>
+          )}
           <PendingChangesSheet
             pending={pending}
             busy={applyBusy}

@@ -1,13 +1,26 @@
 'use client';
 
-import { useCallback } from 'react';
+/**
+ * Mobile Inbox 列表 — Step 7 加入虚拟滚动（@tanstack/react-virtual）。
+ *
+ * 关键决策（ADR-5）：
+ * - Container scroll（非 window scroll）：规避 iOS #884 momentum 中断
+ * - 去掉 AnimatePresence exit：与虚拟滚动 unmount 语义冲突
+ * - 不用 framer-motion `layout` 动画：与 ResizeObserver 冲突
+ * - 保留 SwipeableCard 的 drag（transform 不影响 ResizeObserver 高度测量）
+ * - 视觉反馈：pending 态通过卡片 opacity 0.6 体现（Step 4 已实现）
+ *
+ * Filter chips sticky top，与虚拟滚动容器共用 scroll。
+ */
+
+import { useCallback, useRef } from 'react';
 import {
   motion,
-  AnimatePresence,
   useMotionValue,
   useTransform,
   type PanInfo,
 } from 'framer-motion';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Eye, X, Flame, Zap, Lightbulb } from 'lucide-react';
 import type { ItemWithState } from '@/lib/types';
 import type { GradeFilter } from './ItemsList';
@@ -22,9 +35,9 @@ interface MobileItemsListProps {
   pendingMap: Record<string, string>;
 }
 
-const SWIPE_THRESHOLD = 96; // px
+const SWIPE_THRESHOLD = 96;
+const ESTIMATED_CARD_HEIGHT = 120; // 首屏估算，measureElement 会在挂载后校准
 
-/** Grade → Lucide Icon + 颜色 token（ADR-4 设计代币预演） */
 function GradeIcon({ grade, size = 14 }: { grade: string; size?: number }) {
   const common = { size, strokeWidth: 2 } as const;
   if (grade === 'fire') return <Flame {...common} className="text-[#ea580c]" />;
@@ -55,8 +68,6 @@ function SwipeableCard({
   onSwipeAction?: (action: 'watching' | 'dismissed') => void;
 }) {
   const x = useMotionValue(0);
-
-  // drag → hint opacity/scale 映射（静止时完全隐藏，阈值时饱和）
   const watchOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.3, SWIPE_THRESHOLD], [0, 0.5, 1]);
   const watchScale = useTransform(x, [0, SWIPE_THRESHOLD], [0.85, 1]);
   const dismissOpacity = useTransform(
@@ -65,8 +76,6 @@ function SwipeableCard({
     [1, 0.5, 0],
   );
   const dismissScale = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0.85]);
-
-  // 背景渐变色：左红 中透明 右绿
   const bgColor = useTransform(
     x,
     [-SWIPE_THRESHOLD, 0, SWIPE_THRESHOLD],
@@ -75,52 +84,33 @@ function SwipeableCard({
 
   const handleDragEnd = useCallback(
     (_: unknown, info: PanInfo) => {
-      if (info.offset.x > SWIPE_THRESHOLD) {
-        onSwipeAction?.('watching');
-      } else if (info.offset.x < -SWIPE_THRESHOLD) {
-        onSwipeAction?.('dismissed');
-      }
+      if (info.offset.x > SWIPE_THRESHOLD) onSwipeAction?.('watching');
+      else if (info.offset.x < -SWIPE_THRESHOLD) onSwipeAction?.('dismissed');
     },
     [onSwipeAction],
   );
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
-      transition={{ duration: 0.22 }}
-      className="relative"
-    >
-      {/* 背景渐变层（随 drag 进度显色） */}
+    <div className="relative">
       <motion.div
         className="absolute inset-0 rounded-2xl pointer-events-none"
         style={{ backgroundColor: bgColor }}
       />
-
-      {/* Watch hint（右滑时从左侧浮出） */}
       <motion.div
         className="absolute inset-y-0 left-5 flex items-center gap-1.5 pointer-events-none"
         style={{ opacity: watchOpacity, scale: watchScale }}
       >
         <Eye size={18} strokeWidth={2.2} className="text-[#16a34a]" />
-        <span className="text-[13px] font-semibold text-[#16a34a] tracking-wide">
-          Watch
-        </span>
+        <span className="text-[13px] font-semibold text-[#16a34a] tracking-wide">Watch</span>
       </motion.div>
-
-      {/* Dismiss hint（左滑时从右侧浮出） */}
       <motion.div
         className="absolute inset-y-0 right-5 flex items-center gap-1.5 pointer-events-none"
         style={{ opacity: dismissOpacity, scale: dismissScale }}
       >
-        <span className="text-[13px] font-semibold text-[#dc2626] tracking-wide">
-          Dismiss
-        </span>
+        <span className="text-[13px] font-semibold text-[#dc2626] tracking-wide">Dismiss</span>
         <X size={18} strokeWidth={2.2} className="text-[#dc2626]" />
       </motion.div>
 
-      {/* Draggable card */}
       <motion.div
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
@@ -131,7 +121,7 @@ function SwipeableCard({
         className={cn(
           'relative bg-[var(--surface)] border border-[var(--border)] rounded-2xl',
           'py-3.5 px-4 cursor-pointer [-webkit-tap-highlight-color:transparent]',
-          'active:bg-[var(--surface-hi)] transition-[background] duration-150',
+          'active:bg-[var(--surface-hi)] transition-[background,opacity] duration-150',
           pending && 'opacity-60',
         )}
         data-card-id={item.id}
@@ -160,11 +150,10 @@ function SwipeableCard({
           </div>
         )}
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
-/** Filter chip — 紧凑 pill，无 emoji */
 function FilterChip({
   active,
   onClick,
@@ -208,11 +197,28 @@ export default function MobileItemsList({
   pendingMap,
 }: MobileItemsListProps) {
   const filters: GradeFilter[] = ['all', 'fire', 'bolt', 'bulb'];
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_CARD_HEIGHT,
+    overscan: 5,
+    getItemKey: (index) => items[index]?.id ?? index,
+    // 行间距通过每行 paddingBottom 吸收，measureElement 可测真实高度
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
+  const virtualRows = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
 
   return (
-    <div className="px-3 pt-2">
-      {/* Filter chips */}
-      <div className="flex gap-2 pb-3 overflow-x-auto">
+    <div
+      ref={scrollRef}
+      className="h-full overflow-y-auto [-webkit-overflow-scrolling:touch] overscroll-contain"
+    >
+      {/* Filter chips — sticky top */}
+      <div className="sticky top-0 z-10 flex gap-2 pt-2 pb-3 px-3 bg-[var(--surface)]">
         {filters.map((f) => {
           const meta = FILTER_LABELS[f];
           return (
@@ -224,26 +230,46 @@ export default function MobileItemsList({
         })}
       </div>
 
-      {/* Item cards */}
-      <div className="flex flex-col gap-2.5">
-        {items.length === 0 && (
+      {/* Virtualized item list */}
+      <div className="px-3 pb-[env(safe-area-inset-bottom,0)]">
+        {items.length === 0 ? (
           <div className="py-14 px-4 text-center text-[var(--text-2)] text-[13px]">
             当前视图暂无内容
           </div>
+        ) : (
+          <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
+            {virtualRows.map((vRow) => {
+              const item = items[vRow.index];
+              if (!item) return null;
+              return (
+                <div
+                  key={vRow.key}
+                  ref={virtualizer.measureElement}
+                  data-index={vRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${vRow.start}px)`,
+                  }}
+                  className="pb-2.5"
+                >
+                  <SwipeableCard
+                    item={item}
+                    pending={pendingMap[item.id]}
+                    onSelect={() => onSelect(item)}
+                    onSwipeAction={
+                      onSwipeAction
+                        ? (action) => onSwipeAction(item.id, action)
+                        : undefined
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
-        <AnimatePresence mode="popLayout">
-          {items.map((item) => (
-            <SwipeableCard
-              key={item.id}
-              item={item}
-              pending={pendingMap[item.id]}
-              onSelect={() => onSelect(item)}
-              onSwipeAction={
-                onSwipeAction ? (action) => onSwipeAction(item.id, action) : undefined
-              }
-            />
-          ))}
-        </AnimatePresence>
       </div>
     </div>
   );

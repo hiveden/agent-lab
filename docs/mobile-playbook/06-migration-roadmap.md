@@ -201,7 +201,7 @@ test('rotate does not lose URL state', ...);
 
 ---
 
-## Step 7 · 性能优化
+## Step 7 · 性能优化（⚠ 2026-04-21 Mobile 虚拟滚动完成，骨架屏/bundle 分析留下次）
 
 **目标**：命中性能预算。
 
